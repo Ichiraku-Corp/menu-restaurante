@@ -3,8 +3,8 @@
 // las políticas RLS de supabase/schema.sql.
 // Si dejas SUPABASE_URL vacío, el menú usa data/menu.json (modo demo).
 window.MENU_CONFIG = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
+  SUPABASE_URL: "https://krjryvtnzgwwhanmbdrn.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_uj5tuhHYTNmJNYaLzQjGjQ_fVJzcHq3",
   RESTAURANT_NAME: "Ichiraku Ramen",
   TAGLINE: "Ramen · Sushi · Postres japoneses",
   // Los precios se muestran como "Ref 2.5". Para usar una moneda normal,
