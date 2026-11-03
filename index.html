@@ -191,17 +191,19 @@
   <button class="close" type="button" data-close aria-label="Cerrar">×</button>
   <div class="body">
     <h2 id="osTitle">Mi pedido</h2>
-    <p class="fine">Revisa tu pedido y enséñaselo al mesonero o pídelo en caja.</p>
+    <p class="fine">Revisa tu pedido y díselo al mesonero o pídelo en caja.</p>
     <div id="osLines"></div>
     <div class="sub-row" id="osSubRow"><span>Subtotal</span><span id="osSub"></span></div>
     <div class="sub-row" id="osSvcRow"><span id="osSvcLabel">Servicio</span><span id="osSvc"></span></div>
     <div class="sum"><span>Total</span><span id="osTotal"></span></div>
   </div>
   <div class="foot">
+    <div id="osActions">
     <label class="mesa">Mesa nº <input id="mesa" inputmode="numeric" maxlength="4" placeholder="—" autocomplete="off"></label>
     <div class="actions">
       <button class="cta" type="button" id="osShow" style="justify-content:center">Mostrar al mesonero</button>
       <button class="cta wa" type="button" id="osWa" hidden>Enviar por WhatsApp</button>
+    </div>
     </div>
     <button class="link" type="button" id="osClear">Vaciar pedido</button>
   </div>
@@ -437,6 +439,9 @@
   $("mesa").addEventListener("input", function () { try { sessionStorage.setItem(MESA_KEY, this.value.trim()); } catch (e) {} });
 
   var WA = String(C.WHATSAPP_NUMBER || "").replace(/\D/g, "");
+  // ORDER_ACTIONS (config.js): mesa, «Mostrar al mesonero» y WhatsApp en el carrito. Desactivado por ahora.
+  var ACTIONS = !!C.ORDER_ACTIONS;
+  $("osActions").hidden = !ACTIONS;
   $("osWa").hidden = !WA;
   function orderText() {
     var m = $("mesa").value.trim();

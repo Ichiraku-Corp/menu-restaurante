@@ -20,4 +20,6 @@ window.MENU_CONFIG = {
   BIG_PHOTOS: false,
   // Cargo por servicio que se suma al total del pedido (en %). 0 = sin cargo.
   SERVICE_PERCENT: 10,
+  // En el carrito: nº de mesa, «Mostrar al mesonero» y «Enviar por WhatsApp». false = ocultos.
+  ORDER_ACTIONS: false,
 };
