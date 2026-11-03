@@ -11,6 +11,20 @@ para cambiar precios, platos, fotos y disponibilidad.
   subida de fotos (se comprimen en el navegador antes de subirlas) y generador del QR en PNG/SVG.
 - **Supabase** como backend gratuito: base de datos, almacenamiento de fotos y login.
 
+## Para el cliente
+
+- **Ficha del plato**: al tocar un plato se ve la foto en grande, la descripción y se elige
+  tamaño, sabor, cantidad y una nota («sin cebolla»).
+- **Mi pedido**: botón «+» en cada plato y barra abajo con el número de productos y el total.
+  El pedido se guarda en el móvil del cliente y se recalcula con los precios actuales.
+- **Mostrar al mesonero**: pantalla grande con el número de mesa, los productos y el total.
+- **Número de mesa**: el cliente lo escribe, o viene en el QR si la URL lleva `?mesa=7`.
+- **Buscador** por nombre, descripción, sabor o etiqueta.
+- **Etiquetas** con icono: ⭐ Recomendado, 🌶️ Picante, 🆕 Nuevo, 🌱 Vegetariano (botones rápidos
+  en el panel). Cualquier otra etiqueta se muestra tal cual.
+- **WhatsApp** (opcional): rellena `WHATSAPP_NUMBER` en `config.js` y aparece el botón
+  «Enviar por WhatsApp» con el pedido ya escrito.
+
 ## Contenido actual
 
 `data/menu.json` tiene la carta completa: 6 categorías y 34 productos, con las fotos recortadas

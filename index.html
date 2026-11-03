@@ -14,7 +14,8 @@
     --off: #b7a4ac;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 62px; }
+  [hidden] { display: none !important; }
+  html { scroll-behavior: smooth; scroll-padding-top: 118px; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased; }
@@ -49,12 +50,107 @@
   .price b { font-weight: 500; opacity: .9; margin-right: 4px; }
   .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
   .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #e8f5fd; color: var(--blue); font-weight: 600; }
-  .chip.tag { background: #fff1d6; color: #9a5a00; }
   .dish.off h3, .dish.off p { color: var(--off); }
   .dish.off .price { background: var(--off); }
   .dish.off .photo { filter: grayscale(1); opacity: .55; }
   .soldout { font-size: 12px; font-weight: 800; color: var(--off); text-transform: uppercase; letter-spacing: .05em; align-self: center; }
   .state { padding: 48px 0; text-align: center; color: var(--muted); }
+  /* Buscador */
+  .search { max-width: 720px; margin: 0 auto; padding: 0 16px 10px; }
+  .search input { width: 100%; font: inherit; font-size: 16px; padding: 9px 14px 9px 38px; border-radius: 999px;
+    border: 2px solid var(--pink-soft); background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e5206b' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 13px center / 18px;
+    color: var(--text); outline: none; -webkit-appearance: none; }
+  .search input:focus { border-color: var(--pink); }
+  .noresults { text-align: center; color: var(--muted); padding: 40px 0; }
+  /* Tarjeta clicable + botón añadir */
+  .dish { cursor: pointer; position: relative; }
+  .dish:focus-visible { outline: 3px solid var(--sky); outline-offset: -3px; }
+  .dish .prices { align-items: center; }
+  .add { margin-left: auto; flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--sky);
+    color: #fff; font-size: 26px; font-weight: 700; line-height: 1; cursor: pointer; display: grid; place-items: center;
+    box-shadow: 0 2px 6px rgba(29,111,192,.3); }
+  .add:active { transform: scale(.92); }
+  .dish.off .add { display: none; }
+  .qty-badge { position: absolute; top: 8px; left: 8px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 999px;
+    background: var(--sky); color: #fff; font-weight: 800; font-size: 14px; display: grid; place-items: center;
+    box-shadow: 0 0 0 2px #fff; }
+  .chip.tag { background: #fff1d6; color: #9a5a00; }
+  /* Barra del pedido */
+  body.has-order main { padding-bottom: 96px; }
+  .orderbar { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 10;
+    max-width: 696px; margin: 0 auto; display: none; align-items: center; gap: 10px; border: 0; width: auto;
+    background: var(--pink); color: #fff; border-radius: 16px; padding: 14px 18px; font: inherit; font-weight: 800;
+    font-size: 17px; cursor: pointer; box-shadow: 0 6px 20px rgba(229,32,107,.4); text-align: left; }
+  body.has-order .orderbar { display: flex; }
+  .orderbar .count { background: #fff; color: var(--pink); border-radius: 999px; min-width: 28px; height: 28px; padding: 0 8px;
+    display: grid; place-items: center; font-size: 15px; }
+  .orderbar .total { margin-left: auto; font-variant-numeric: tabular-nums; }
+  /* Hojas (ficha y pedido) */
+  dialog.sheet { border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 560px; max-height: 92vh;
+    border-radius: 22px 22px 0 0; background: var(--card); color: var(--text); overflow: hidden; }
+  dialog.sheet[open] { display: flex; flex-direction: column; animation: up .22s ease-out; }
+  dialog.sheet::backdrop { background: rgba(42,26,34,.55); }
+  @keyframes up { from { transform: translateY(40px); opacity: .4; } to { transform: none; opacity: 1; } }
+  @media (min-width: 600px) { dialog.sheet { margin: auto; border-radius: 22px; } }
+  .sheet .body { overflow-y: auto; padding: 0 18px 8px; -webkit-overflow-scrolling: touch; }
+  .sheet .foot { padding: 12px 18px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card); }
+  .sheet .close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 38px; height: 38px; border-radius: 50%; border: 0;
+    background: rgba(255,255,255,.92); color: var(--text); font-size: 22px; cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
+  .hero { width: calc(100% + 36px); margin: 0 -18px; aspect-ratio: 16 / 10; max-height: 36vh; object-fit: cover; display: block; background: var(--pink-soft); }
+  .sheet h2 { margin: 16px 0 0; font-size: 24px; font-weight: 900; color: var(--pink); line-height: 1.15; padding-right: 40px; }
+  .sheet .desc { margin: 8px 0 0; font-size: 15px; }
+  .sheet h4 { margin: 18px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pills label { position: relative; }
+  .pills input { position: absolute; opacity: 0; pointer-events: none; }
+  .pills span { display: block; padding: 9px 16px; border-radius: 12px; border: 2px solid var(--line); font-weight: 700; cursor: pointer; }
+  .pills span small { font-weight: 600; color: var(--muted); margin-left: 6px; }
+  .pills input:checked + span { border-color: var(--pink); background: var(--pink-soft); color: var(--pink); }
+  .pills input:checked + span small { color: var(--pink); }
+  .pills input:focus-visible + span { outline: 3px solid var(--sky); }
+  .note { width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); color: var(--text); background: #fff; }
+  .note:focus { border-color: var(--pink); outline: none; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .stepper { display: flex; align-items: center; border: 2px solid var(--line); border-radius: 12px; flex: none; }
+  .stepper button { width: 42px; height: 44px; border: 0; background: none; font-size: 22px; font-weight: 700; color: var(--pink); cursor: pointer; }
+  .stepper span { min-width: 28px; text-align: center; font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .cta { flex: 1; border: 0; border-radius: 14px; padding: 14px 16px; background: var(--pink); color: #fff; font: inherit;
+    font-weight: 800; font-size: 17px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+  .cta:disabled { background: var(--off); cursor: not-allowed; }
+  .cta.alt { background: #fff; color: var(--pink); border: 2px solid var(--pink); justify-content: center; }
+  .cta.wa { background: #25a35a; justify-content: center; }
+  .warn { color: #b3261e; font-size: 14px; font-weight: 600; margin: 8px 0 0; min-height: 1em; }
+  /* Pedido */
+  .line { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+  .line:first-child { border-top: 0; }
+  .line .what { flex: 1; min-width: 0; }
+  .line .what b { display: block; color: var(--pink); font-weight: 900; }
+  .line .what small { display: block; color: var(--muted); font-size: 13px; }
+  .line .amt { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .line .stepper button { width: 34px; height: 36px; }
+  .sum { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; padding: 14px 0 4px; border-top: 2px solid var(--pink); margin-top: 4px; }
+  .fine { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .mesa { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; font-weight: 700; }
+  .mesa input { width: 90px; font: inherit; font-size: 18px; font-weight: 800; text-align: center; padding: 8px; border-radius: 12px;
+    border: 2px solid var(--line); color: var(--text); }
+  .mesa input:focus { border-color: var(--pink); outline: none; }
+  .actions { display: grid; gap: 10px; }
+  .link { background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; text-decoration: underline; cursor: pointer; padding: 8px; margin: 2px auto 0; display: block; }
+  /* Vista para el mesonero */
+  .waiter { position: fixed; inset: 0; z-index: 30; background: #fff; overflow-y: auto; padding: 22px 20px 40px; display: none; }
+  .waiter.show { display: block; }
+  .waiter .head { background: var(--pink); color: #fff; border-radius: 18px; padding: 16px 18px; text-align: center; }
+  .waiter .head .m { font-size: 46px; font-weight: 900; line-height: 1; }
+  .waiter .head .t { font-size: 15px; opacity: .9; margin-top: 4px; }
+  .waiter ol { list-style: none; padding: 0; margin: 18px 0; }
+  .waiter li { display: flex; gap: 14px; padding: 12px 0; border-bottom: 2px dashed var(--line); font-size: 21px; line-height: 1.25; }
+  .waiter li .q { font-weight: 900; color: var(--pink); min-width: 46px; }
+  .waiter li small { display: block; font-size: 16px; color: var(--muted); }
+  .waiter .tot { font-size: 26px; font-weight: 900; text-align: right; }
+  .toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40;
+    background: var(--text); color: #fff; padding: 10px 18px; border-radius: 999px; font-weight: 700; font-size: 15px;
+    opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; }
 </style>
 <script src="config.js"></script>
 </head>
@@ -63,17 +159,63 @@
   <h1 id="name">Menú</h1>
   <p id="tagline"></p>
 </header>
-<nav aria-label="Categorías"><ul id="nav"></ul></nav>
+<nav aria-label="Categorías"><ul id="nav"></ul>
+  <div class="search"><input id="q" type="search" placeholder="Buscar plato, sabor…" aria-label="Buscar en el menú" autocomplete="off" enterkeyhint="search"></div>
+</nav>
 <main id="menu"><div class="state">Cargando menú…</div></main>
+
+<button class="orderbar" id="orderbar" type="button" aria-haspopup="dialog">
+  <span class="count" id="obCount">0</span><span>Ver mi pedido</span><span class="total" id="obTotal"></span>
+</button>
+
+<dialog class="sheet" id="dishSheet" aria-labelledby="dsTitle">
+  <button class="close" type="button" data-close aria-label="Cerrar">×</button>
+  <div class="body" id="dsBody"></div>
+  <div class="foot">
+    <p class="warn" id="dsWarn" aria-live="polite"></p>
+    <div class="row">
+      <div class="stepper" aria-label="Cantidad"><button type="button" id="dsMinus" aria-label="Quitar uno">−</button><span id="dsQty">1</span><button type="button" id="dsPlus" aria-label="Añadir uno">+</button></div>
+      <button class="cta" type="button" id="dsAdd"><span>Añadir</span><span id="dsPrice"></span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="orderSheet" aria-labelledby="osTitle">
+  <button class="close" type="button" data-close aria-label="Cerrar">×</button>
+  <div class="body">
+    <h2 id="osTitle">Mi pedido</h2>
+    <p class="fine">Revisa tu pedido y enséñaselo al mesonero o pídelo en caja.</p>
+    <div id="osLines"></div>
+    <div class="sum"><span>Total</span><span id="osTotal"></span></div>
+  </div>
+  <div class="foot">
+    <label class="mesa">Mesa nº <input id="mesa" inputmode="numeric" maxlength="4" placeholder="—" autocomplete="off"></label>
+    <div class="actions">
+      <button class="cta" type="button" id="osShow" style="justify-content:center">Mostrar al mesonero</button>
+      <button class="cta wa" type="button" id="osWa" hidden>Enviar por WhatsApp</button>
+    </div>
+    <button class="link" type="button" id="osClear">Vaciar pedido</button>
+  </div>
+</dialog>
+
+<div class="waiter" id="waiter" role="dialog" aria-modal="true" aria-label="Pedido para el mesonero">
+  <div class="head"><div class="m" id="wMesa"></div><div class="t" id="wTime"></div></div>
+  <ol id="wLines"></ol>
+  <div class="tot" id="wTotal"></div>
+  <p class="fine" style="text-align:center;margin-top:18px">Toca el botón de abajo para volver a la carta.</p>
+  <button class="cta alt" type="button" id="wBack" style="width:100%">Volver a la carta</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
 (function () {
   "use strict";
   var C = window.MENU_CONFIG || {};
-  var CACHE_KEY = "menu-cache-v2";
+  var CACHE_KEY = "menu-cache-v2", ORDER_KEY = "menu-order-v1", MESA_KEY = "menu-mesa";
+  var $ = function (id) { return document.getElementById(id); };
 
-  document.getElementById("name").textContent = C.RESTAURANT_NAME || "Menú";
-  document.getElementById("tagline").textContent = C.TAGLINE || "";
+  $("name").textContent = C.RESTAURANT_NAME || "Menú";
+  $("tagline").textContent = C.TAGLINE || "";
   document.title = (C.RESTAURANT_NAME || "Menú") + " · Menú";
 
   var fmt = C.PRICE_PREFIX
@@ -92,19 +234,42 @@
     u = u || "";
     return /^https?:\/\//i.test(u) || (/^[\w.\-\/]+$/.test(u) && u.slice(0, 2) !== "//") ? u : "";
   }
+  function norm(t) { return String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+  function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function recall(k) { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } }
 
+  // Etiquetas conocidas: se muestran con icono. Cualquier otra se muestra tal cual.
+  var TAG_ICONS = { recomendado: "⭐", picante: "🌶️", nuevo: "🆕", vegetariano: "🌱", vegano: "🌱", popular: "🔥" };
+  function tagHtml(t) {
+    var ic = TAG_ICONS[norm(t)];
+    return '<span class="chip tag">' + (ic ? ic + " " : "") + esc(t) + "</span>";
+  }
+
+  function variants(d) { return Array.isArray(d.variants) ? d.variants : []; }
   function priceHtml(d) {
-    var v = Array.isArray(d.variants) ? d.variants : [];
+    var v = variants(d);
     if (!v.length) return '<span class="price">' + esc(fmt(Number(d.price) || 0)) + "</span>";
     return v.map(function (x) {
       return '<span class="price"><b>' + esc(x.label) + "</b>" + esc(fmt(Number(x.price) || 0)) + "</span>";
     }).join("");
   }
+  function unitPrice(d, label) {
+    var v = variants(d);
+    if (!v.length) return Number(d.price) || 0;
+    for (var k = 0; k < v.length; k++) if (v[k].label === label) return Number(v[k].price) || 0;
+    return null;
+  }
 
+  // ---------------------------------------------------------------- Carta
+  var DISHES = {};
   function render(data) {
+    DISHES = {};
     var cats = (data.categories || []).slice().sort(function (a, b) { return a.position - b.position; });
     var byCat = {};
-    (data.dishes || []).forEach(function (d) { (byCat[d.category_id] = byCat[d.category_id] || []).push(d); });
+    (data.dishes || []).forEach(function (d) {
+      DISHES[d.id] = d;
+      (byCat[d.category_id] = byCat[d.category_id] || []).push(d);
+    });
     var navHtml = "", html = "";
     cats.forEach(function (c) {
       var items = (byCat[c.id] || []).sort(function (a, b) {
@@ -118,22 +283,29 @@
       items.forEach(function (d) {
         var photo = safeUrl(d.photo_url);
         var opts = (d.options || []), tags = (d.tags || []);
-        html += '<article class="dish' + (d.available ? "" : " off") + '">' +
+        var hay = norm([d.name, d.subtitle, d.description, c.name, opts.join(" "), tags.join(" ")].join(" "));
+        html += '<article class="dish' + (d.available ? "" : " off") + '" data-id="' + esc(d.id) + '" data-q="' + esc(hay) +
+          '" tabindex="0" aria-label="' + esc(d.name) + ', ver detalles">' +
           (photo ? '<img class="photo" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async" width="100" height="100">' : "") +
           '<div class="info"><h3>' + esc(d.name) +
           (d.subtitle ? '<span class="jp" lang="ja">' + esc(d.subtitle) + "</span>" : "") + "</h3>" +
           (d.description ? "<p>" + esc(d.description) + "</p>" : "") +
           ((opts.length || tags.length) ? '<div class="chips">' +
-            tags.map(function (t) { return '<span class="chip tag">' + esc(t) + "</span>"; }).join("") +
+            tags.map(tagHtml).join("") +
             opts.map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
-          '<div class="prices">' + priceHtml(d) + (d.available ? "" : '<span class="soldout">Agotado</span>') + "</div>" +
-          "</div></article>";
+          '<div class="prices">' + priceHtml(d) + (d.available ? "" : '<span class="soldout">Agotado</span>') +
+          (d.available ? '<button class="add" type="button" data-add aria-label="Añadir ' + esc(d.name) + ' al pedido">+</button>' : "") +
+          "</div></div></article>";
       });
       html += "</section>";
     });
-    document.getElementById("nav").innerHTML = navHtml;
-    document.getElementById("menu").innerHTML = html || '<div class="state">El menú aún está vacío.</div>';
+    $("nav").innerHTML = navHtml;
+    $("menu").innerHTML = (html || '<div class="state">El menú aún está vacío.</div>') +
+      '<div class="noresults" id="noresults" hidden>No encontramos nada con esa búsqueda.</div>';
     watchSections();
+    applySearch();
+    cleanOrder();
+    refreshOrder();
   }
 
   var observer;
@@ -149,10 +321,215 @@
         var a = links[e.target.id];
         if (a) a.parentNode.parentNode.scrollTo({ left: a.offsetLeft - 16, behavior: "smooth" });
       });
-    }, { rootMargin: "-60px 0px -70% 0px" });
+    }, { rootMargin: "-120px 0px -70% 0px" });
     document.querySelectorAll("main section").forEach(function (s) { observer.observe(s); });
   }
 
+  // ---------------------------------------------------------------- Buscador
+  function applySearch() {
+    var words = norm($("q").value).trim().split(/\s+/).filter(Boolean), any = false;
+    document.querySelectorAll("main section").forEach(function (sec) {
+      var shown = 0;
+      sec.querySelectorAll(".dish").forEach(function (el) {
+        var q = el.getAttribute("data-q"), ok = words.every(function (w) { return q.indexOf(w) >= 0; });
+        el.hidden = !ok; if (ok) shown++;
+      });
+      sec.hidden = !shown; if (shown) any = true;
+    });
+    var nr = $("noresults"); if (nr) nr.hidden = any || !words.length;
+  }
+  $("q").addEventListener("input", function () {
+    applySearch();
+    if (this.value) window.scrollTo({ top: $("menu").offsetTop - 120, behavior: "smooth" });
+  });
+
+  // ---------------------------------------------------------------- Pedido
+  // Cada línea: {id, v (tamaño), o (sabor), n (nota), q (cantidad)}. El precio
+  // siempre se recalcula con la carta actual, nunca se guarda.
+  var order = recall(ORDER_KEY) || [];
+  function lineKey(l) { return [l.id, l.v, l.o, l.n].join("|"); }
+  function saveOrder() { store(ORDER_KEY, order.length ? order : null); refreshOrder(); }
+  function cleanOrder() {
+    if (!Object.keys(DISHES).length) return;
+    var before = order.length;
+    order = order.filter(function (l) {
+      var d = DISHES[l.id];
+      return d && d.available && unitPrice(d, l.v) != null && l.q > 0;
+    });
+    if (order.length !== before) store(ORDER_KEY, order.length ? order : null);
+  }
+  function lineTotal(l) { var d = DISHES[l.id]; return d ? (unitPrice(d, l.v) || 0) * l.q : 0; }
+  function orderTotal() { return order.reduce(function (s, l) { return s + lineTotal(l); }, 0); }
+  function orderCount() { return order.reduce(function (s, l) { return s + l.q; }, 0); }
+  function addLine(l) {
+    var k = lineKey(l);
+    for (var i = 0; i < order.length; i++) if (lineKey(order[i]) === k) { order[i].q += l.q; saveOrder(); return; }
+    order.push(l); saveOrder();
+  }
+  function lineDesc(l) {
+    return [l.v, l.o].filter(Boolean).join(" · ") + (l.n ? (l.v || l.o ? " · " : "") + "«" + l.n + "»" : "");
+  }
+
+  function refreshOrder() {
+    var n = orderCount();
+    document.body.classList.toggle("has-order", n > 0);
+    $("obCount").textContent = n;
+    $("obTotal").textContent = fmt(orderTotal());
+    // Cantidad en cada plato de la carta
+    var per = {};
+    order.forEach(function (l) { per[l.id] = (per[l.id] || 0) + l.q; });
+    document.querySelectorAll(".dish").forEach(function (el) {
+      var q = per[el.getAttribute("data-id")], b = el.querySelector(".qty-badge");
+      if (q && !b) { b = document.createElement("span"); b.className = "qty-badge"; el.appendChild(b); }
+      if (b) { if (q) b.textContent = "×" + q; else b.remove(); }
+    });
+    if ($("orderSheet").open) renderOrderSheet();
+  }
+
+  function renderOrderSheet() {
+    if (!order.length) { closeSheet($("orderSheet")); return; }
+    $("osLines").innerHTML = order.map(function (l, i) {
+      var d = DISHES[l.id] || { name: "?" };
+      return '<div class="line"><div class="what"><b>' + esc(d.name) + "</b>" +
+        (lineDesc(l) ? "<small>" + esc(lineDesc(l)) + "</small>" : "") + "</div>" +
+        '<div class="stepper"><button type="button" data-dec="' + i + '" aria-label="Quitar uno">−</button><span>' + l.q +
+        '</span><button type="button" data-inc="' + i + '" aria-label="Añadir uno">+</button></div>' +
+        '<div class="amt">' + esc(fmt(lineTotal(l))) + "</div></div>";
+    }).join("");
+    $("osTotal").textContent = fmt(orderTotal());
+  }
+  $("osLines").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var i = Number(b.getAttribute("data-inc") || b.getAttribute("data-dec"));
+    if (!order[i]) return;
+    order[i].q += b.hasAttribute("data-inc") ? 1 : -1;
+    if (order[i].q <= 0) order.splice(i, 1);
+    saveOrder();
+  });
+  $("osClear").addEventListener("click", function () {
+    if (!confirm("¿Vaciar todo el pedido?")) return;
+    order = []; saveOrder();
+  });
+
+  // Mesa: viene en el QR (?mesa=7) o la escribe el cliente.
+  var mesaParam = new URLSearchParams(location.search).get("mesa");
+  if (mesaParam) { mesaParam = mesaParam.replace(/[^\w-]/g, "").slice(0, 4); try { sessionStorage.setItem(MESA_KEY, mesaParam); } catch (e) {} }
+  try { $("mesa").value = mesaParam || sessionStorage.getItem(MESA_KEY) || ""; } catch (e) {}
+  $("mesa").addEventListener("input", function () { try { sessionStorage.setItem(MESA_KEY, this.value.trim()); } catch (e) {} });
+
+  var WA = String(C.WHATSAPP_NUMBER || "").replace(/\D/g, "");
+  $("osWa").hidden = !WA;
+  function orderText() {
+    var m = $("mesa").value.trim();
+    return "Pedido" + (m ? " · Mesa " + m : "") + "\n\n" + order.map(function (l) {
+      var d = DISHES[l.id] || { name: "?" };
+      return l.q + " × " + d.name + (lineDesc(l) ? " (" + lineDesc(l) + ")" : "") + " — " + fmt(lineTotal(l));
+    }).join("\n") + "\n\nTotal: " + fmt(orderTotal());
+  }
+  $("osWa").addEventListener("click", function () {
+    window.open("https://wa.me/" + WA + "?text=" + encodeURIComponent(orderText()), "_blank", "noopener");
+  });
+
+  $("orderbar").addEventListener("click", function () { renderOrderSheet(); openSheet($("orderSheet")); });
+
+  // Vista grande para enseñar al mesonero
+  $("osShow").addEventListener("click", function () {
+    var m = $("mesa").value.trim();
+    $("wMesa").textContent = m ? "Mesa " + m : "Pedido";
+    $("wTime").textContent = new Date().toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" }) + " · " + orderCount() + " productos";
+    $("wLines").innerHTML = order.map(function (l) {
+      var d = DISHES[l.id] || { name: "?" };
+      return '<li><span class="q">' + l.q + '×</span><span>' + esc(d.name) +
+        (lineDesc(l) ? "<small>" + esc(lineDesc(l)) + "</small>" : "") + "</span></li>";
+    }).join("");
+    $("wTotal").textContent = "Total " + fmt(orderTotal());
+    closeSheet($("orderSheet"));
+    $("waiter").classList.add("show"); $("waiter").scrollTop = 0;
+    document.body.style.overflow = "hidden";
+  });
+  $("wBack").addEventListener("click", function () {
+    $("waiter").classList.remove("show"); document.body.style.overflow = "";
+  });
+
+  // ---------------------------------------------------------------- Ficha del plato
+  var current = null, qty = 1;
+  function openSheet(dlg) { if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute("open", ""); }
+  function closeSheet(dlg) { if (dlg.close) { if (dlg.open) dlg.close(); } else dlg.removeAttribute("open"); }
+  document.querySelectorAll("dialog.sheet").forEach(function (dlg) {
+    dlg.addEventListener("click", function (e) { if (e.target === dlg || e.target.closest("[data-close]")) closeSheet(dlg); });
+  });
+
+  function chosen(name) { var el = document.querySelector('#dsBody input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+  function updateDishPrice() {
+    var d = current; if (!d) return;
+    var v = chosen("v"), p = unitPrice(d, v);
+    $("dsQty").textContent = qty;
+    $("dsPrice").textContent = p == null ? "" : fmt(p * qty);
+    $("dsWarn").textContent = "";
+  }
+  function openDish(d) {
+    current = d; qty = 1;
+    var photo = safeUrl(d.photo_url), v = variants(d), opts = d.options || [], tags = d.tags || [];
+    $("dsBody").innerHTML =
+      (photo ? '<img class="hero" src="' + esc(photo) + '" alt="' + esc(d.name) + '">' : '<div style="height:44px"></div>') +
+      '<h2 id="dsTitle">' + esc(d.name) + "</h2>" +
+      (d.subtitle ? '<span class="jp" lang="ja" style="font-size:14px">' + esc(d.subtitle) + "</span>" : "") +
+      (tags.length ? '<div class="chips">' + tags.map(tagHtml).join("") + "</div>" : "") +
+      (d.description ? '<p class="desc">' + esc(d.description) + "</p>" : "") +
+      (v.length > 1 ? "<h4>Tamaño</h4><div class=\"pills\">" + v.map(function (x, i) {
+        return '<label><input type="radio" name="v" value="' + esc(x.label) + '"' + (i === 0 ? " checked" : "") + "><span>" +
+          esc(x.label) + "<small>" + esc(fmt(Number(x.price) || 0)) + "</small></span></label>";
+      }).join("") + "</div>" : (v.length === 1 ? '<input type="radio" name="v" value="' + esc(v[0].label) + '" checked hidden>' : "")) +
+      (opts.length ? "<h4>" + (opts.length > 1 ? "Elige sabor" : "Sabor") + "</h4><div class=\"pills\">" + opts.map(function (o) {
+        return '<label><input type="radio" name="o" value="' + esc(o) + '"' + (opts.length === 1 ? " checked" : "") + "><span>" + esc(o) + "</span></label>";
+      }).join("") + "</div>" : "") +
+      (d.available ? '<h4>Nota (opcional)</h4><input class="note" id="dsNote" maxlength="80" placeholder="Ej.: sin cebolla, poco hielo…">' : "") +
+      '<div style="height:8px"></div>';
+    $("dsAdd").disabled = !d.available;
+    $("dsAdd").firstChild.textContent = d.available ? "Añadir" : "Agotado";
+    document.querySelector("#dishSheet .stepper").style.visibility = d.available ? "" : "hidden";
+    updateDishPrice();
+    openSheet($("dishSheet"));
+    $("dsBody").scrollTop = 0;
+  }
+  $("dsBody").addEventListener("change", updateDishPrice);
+  $("dsMinus").addEventListener("click", function () { if (qty > 1) { qty--; updateDishPrice(); } });
+  $("dsPlus").addEventListener("click", function () { if (qty < 50) { qty++; updateDishPrice(); } });
+  $("dsAdd").addEventListener("click", function () {
+    var d = current; if (!d || !d.available) return;
+    var o = chosen("o");
+    if ((d.options || []).length && !o) { $("dsWarn").textContent = "Elige un sabor para continuar."; return; }
+    var note = ($("dsNote") && $("dsNote").value.trim()) || "";
+    addLine({ id: d.id, v: chosen("v"), o: o, n: note, q: qty });
+    closeSheet($("dishSheet"));
+    toast("Añadido: " + qty + " × " + d.name);
+  });
+
+  // Clic en la carta: «+» añade directo si no hay nada que elegir; si no, abre la ficha.
+  $("menu").addEventListener("click", function (e) {
+    var card = e.target.closest(".dish"); if (!card) return;
+    var d = DISHES[card.getAttribute("data-id")]; if (!d) return;
+    if (e.target.closest("[data-add]") && variants(d).length <= 1 && !(d.options || []).length) {
+      var v = variants(d)[0];
+      addLine({ id: d.id, v: v ? v.label : "", o: "", n: "", q: 1 });
+      toast("Añadido: " + d.name);
+      return;
+    }
+    openDish(d);
+  });
+  $("menu").addEventListener("keydown", function (e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("dish")) {
+      e.preventDefault(); var d = DISHES[e.target.getAttribute("data-id")]; if (d) openDish(d);
+    }
+  });
+
+  var toastTimer;
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 1800);
+  }
+
+  // ---------------------------------------------------------------- Carga
   function fetchJson(url, headers) {
     return fetch(url, { headers: headers || {}, cache: "no-cache" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -171,8 +548,7 @@
   }
 
   // 1) Pinta al instante lo último que vio este móvil; 2) actualiza en segundo plano.
-  var cached = null;
-  try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch (e) {}
+  var cached = recall(CACHE_KEY);
   if (cached) render(cached);
 
   load().then(function (data) {
@@ -180,7 +556,7 @@
     if (!cached || JSON.stringify(cached) !== fresh) render(data);
     try { localStorage.setItem(CACHE_KEY, fresh); } catch (e) {}
   }).catch(function () {
-    if (!cached) document.getElementById("menu").innerHTML =
+    if (!cached) $("menu").innerHTML =
       '<div class="state">No se pudo cargar el menú. Revisa tu conexión e inténtalo de nuevo.</div>';
   });
 })();

@@ -29,6 +29,8 @@
     border-radius:8px; padding:7px 12px; cursor:pointer; text-decoration:none; display:inline-block; }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button.danger { color:var(--danger); }
+  #tagQuick button { font-size:13px; padding:5px 10px; border-radius:999px; }
+  #tagQuick button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
   button:disabled { opacity:.6; cursor:wait; }
   .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .grow { flex:1; min-width:0; }
@@ -158,6 +160,12 @@
       <button type="button" id="addPG">Usar Peq / Gr</button></p>
     <label for="fOpts">Sabores u opciones (separados por comas)</label><input id="fOpts" placeholder="Fresa, Mora, Taro">
     <label for="fTags">Etiquetas (separadas por comas)</label><input id="fTags" placeholder="Picante, Nuevo">
+    <div class="row" id="tagQuick" style="margin-top:6px">
+      <button type="button" data-tag="Recomendado">⭐ Recomendado</button>
+      <button type="button" data-tag="Picante">🌶️ Picante</button>
+      <button type="button" data-tag="Nuevo">🆕 Nuevo</button>
+      <button type="button" data-tag="Vegetariano">🌱 Vegetariano</button>
+    </div>
     <label class="switch" style="margin-top:12px"><input id="fAvail" type="checkbox" checked> Disponible</label>
     <div class="row" style="justify-content:space-between; margin-top:18px">
       <button type="button" id="deleteDish" class="danger">Eliminar</button>
@@ -308,6 +316,7 @@
     syncVars();
     $("fPos").value = d ? d.position : state.dishes.length + 1;
     $("fTags").value = d ? (d.tags || []).join(", ") : "";
+    syncTagQuick();
     $("fAvail").checked = d ? d.available : true;
     $("photo").value = "";
     setPreview(d && d.photo_url);
@@ -426,6 +435,23 @@
       $("dlg").close(); toast("Eliminado"); return refresh();
     }).catch(fail);
   });
+
+  // Botones rápidos de etiquetas: añaden o quitan la etiqueta del campo de texto.
+  function tagList() { return $("fTags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean); }
+  function syncTagQuick() {
+    var have = tagList().map(function (t) { return t.toLowerCase(); });
+    document.querySelectorAll("#tagQuick button").forEach(function (b) {
+      b.classList.toggle("on", have.indexOf(b.getAttribute("data-tag").toLowerCase()) >= 0);
+    });
+  }
+  $("tagQuick").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var t = b.getAttribute("data-tag"), list = tagList();
+    var i = list.map(function (x) { return x.toLowerCase(); }).indexOf(t.toLowerCase());
+    if (i >= 0) list.splice(i, 1); else list.push(t);
+    $("fTags").value = list.join(", "); syncTagQuick();
+  });
+  $("fTags").addEventListener("input", syncTagQuick);
 
   // --- QR -----------------------------------------------------------------
   // El QR se dibuja como SVG propio: módulos en color oscuro sobre blanco

@@ -13,4 +13,7 @@ window.MENU_CONFIG = {
   CURRENCY: "USD",
   LOCALE: "es-VE",
   PHOTO_BUCKET: "dishes",
+  // Número de WhatsApp que recibe los pedidos, con código de país (p. ej. "+58 412 1234567").
+  // Vacío = el botón "Enviar por WhatsApp" no aparece.
+  WHATSAPP_NUMBER: "",
 };
