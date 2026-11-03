@@ -98,6 +98,9 @@
     background: rgba(255,255,255,.92); color: var(--text); font-size: 22px; cursor: pointer; box-shadow: 0 1px 6px rgba(0,0,0,.2); }
   .hero { width: calc(100% + 36px); margin: 0 -18px; aspect-ratio: 16 / 10; max-height: 36vh; object-fit: cover; display: block; background: var(--pink-soft); }
   .sheet h2 { margin: 16px 0 0; font-size: 24px; font-weight: 900; color: var(--pink); line-height: 1.15; padding-right: 40px; }
+  .sheet-head { display: flex; gap: 14px; align-items: center; }
+  .sheet-head .photo { width: 80px; height: 80px; }
+  .sheet-head h2 { margin-top: 0; }
   .sheet .desc { margin: 8px 0 0; font-size: 15px; }
   .sheet h4 { margin: 18px 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
   .pills { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -471,9 +474,11 @@
     current = d; qty = 1;
     var photo = safeUrl(d.photo_url), v = variants(d), opts = d.options || [], tags = d.tags || [];
     $("dsBody").innerHTML =
-      (photo ? '<img class="hero" src="' + esc(photo) + '" alt="' + esc(d.name) + '">' : '<div style="height:44px"></div>') +
-      '<h2 id="dsTitle">' + esc(d.name) + "</h2>" +
-      (d.subtitle ? '<span class="jp" lang="ja" style="font-size:14px">' + esc(d.subtitle) + "</span>" : "") +
+      (photo && C.BIG_PHOTOS ? '<img class="hero" src="' + esc(photo) + '" alt="' + esc(d.name) + '">' : '<div style="height:22px"></div>') +
+      '<div class="sheet-head">' +
+      (photo && !C.BIG_PHOTOS ? '<img class="photo" src="' + esc(photo) + '" alt="" width="100" height="100">' : "") +
+      '<div><h2 id="dsTitle">' + esc(d.name) + "</h2>" +
+      (d.subtitle ? '<span class="jp" lang="ja" style="font-size:14px">' + esc(d.subtitle) + "</span>" : "") + "</div></div>" +
       (tags.length ? '<div class="chips">' + tags.map(tagHtml).join("") + "</div>" : "") +
       (d.description ? '<p class="desc">' + esc(d.description) + "</p>" : "") +
       (v.length > 1 ? "<h4>Tamaño</h4><div class=\"pills\">" + v.map(function (x, i) {

@@ -16,4 +16,6 @@ window.MENU_CONFIG = {
   // Número de WhatsApp que recibe los pedidos, con código de país (p. ej. "+58 412 1234567").
   // Vacío = el botón "Enviar por WhatsApp" no aparece.
   WHATSAPP_NUMBER: "",
+  // Foto grande en la ficha del plato. Actívalo (true) cuando las fotos sean de buena calidad.
+  BIG_PHOTOS: false,
 };
