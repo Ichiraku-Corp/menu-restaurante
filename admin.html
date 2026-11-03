@@ -8,10 +8,10 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   :root { --bg:#f6f4f1; --surface:#fff; --text:#1f1a17; --muted:#6b625b; --line:#e5ded4;
-    --accent:#b5462b; --ok:#2f7d4f; --danger:#b3261e; --chip:#f0ebe3; }
+    --accent:#e5206b; --ok:#2f7d4f; --danger:#b3261e; --chip:#f0ebe3; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#151210; --surface:#1f1a17; --text:#f4eee7; --muted:#b0a69c; --line:#332b26;
-      --accent:#e9805f; --ok:#5fbf86; --danger:#ef7a72; --chip:#2a2420; } }
+      --accent:#f0588f; --ok:#5fbf86; --danger:#ef7a72; --chip:#2a2420; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text);
     font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
@@ -42,6 +42,11 @@
   .dish-row .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .dish-row input.price { width:84px; text-align:right; padding:8px 6px; }
   .dish-row .switch { white-space:nowrap; }
+  .prices { display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .prices label { display:flex; align-items:center; gap:4px; margin:0; font-size:12px; }
+  .var-row { display:flex; gap:8px; margin-top:6px; }
+  .var-row input.vl { width:110px; }
+  .cat-row input.sub { width:130px; }
   @media (max-width: 480px) {
     .dish-row { gap:8px; }
     .dish-row .thumb { width:40px; height:40px; }
@@ -134,12 +139,18 @@
     </div>
     <label for="fCat">Categoría</label><select id="fCat" required></select>
     <label for="fName">Nombre</label><input id="fName" required maxlength="120">
-    <label for="fDesc">Descripción</label><textarea id="fDesc" maxlength="500"></textarea>
+    <label for="fSub">Subtítulo (p. ej. en japonés)</label><input id="fSub" maxlength="120" lang="ja">
+    <label for="fDesc">Descripción</label><textarea id="fDesc" maxlength="600"></textarea>
     <div class="row">
-      <div class="grow"><label for="fPrice">Precio</label><input id="fPrice" type="number" step="0.01" min="0" required></div>
+      <div class="grow" id="singlePrice"><label for="fPrice">Precio</label><input id="fPrice" type="number" step="0.01" min="0"></div>
       <div class="grow"><label for="fPos">Orden</label><input id="fPos" type="number" step="1" value="0"></div>
     </div>
-    <label for="fTags">Etiquetas (separadas por comas)</label><input id="fTags" placeholder="Vegetariano, Picante">
+    <label>Tamaños con precio propio (opcional)</label>
+    <div id="vars"></div>
+    <p style="margin:6px 0 0"><button type="button" id="addVar">+ Añadir tamaño</button>
+      <button type="button" id="addPG">Usar Peq / Gr</button></p>
+    <label for="fOpts">Sabores u opciones (separados por comas)</label><input id="fOpts" placeholder="Fresa, Mora, Taro">
+    <label for="fTags">Etiquetas (separadas por comas)</label><input id="fTags" placeholder="Picante, Nuevo">
     <label class="switch" style="margin-top:12px"><input id="fAvail" type="checkbox" checked> Disponible</label>
     <div class="row" style="justify-content:space-between; margin-top:18px">
       <button type="button" id="deleteDish" class="danger">Eliminar</button>
@@ -198,14 +209,17 @@
       return '<div class="cat-row" data-id="' + c.id + '">' +
         '<input class="pos" type="number" value="' + c.position + '" aria-label="Orden">' +
         '<input class="grow name" value="' + esc(c.name) + '" aria-label="Nombre">' +
+        '<input class="sub" value="' + esc(c.subtitle || "") + '" aria-label="Subtítulo" placeholder="Subtítulo">' +
         '<button class="danger del" type="button">Eliminar</button></div>';
     }).join("") || '<p class="muted">Aún no hay categorías.</p>';
   }
 
   $("cats").addEventListener("change", function (e) {
     var row = e.target.closest(".cat-row"); if (!row) return;
-    var patch = e.target.classList.contains("pos") ? { position: parseInt(e.target.value, 10) || 0 }
-                                                    : { name: e.target.value.trim() };
+    var cl = e.target.classList;
+    var patch = cl.contains("pos") ? { position: parseInt(e.target.value, 10) || 0 }
+              : cl.contains("sub") ? { subtitle: e.target.value.trim() }
+              : { name: e.target.value.trim() };
     if (patch.name === "") return toast("El nombre no puede estar vacío");
     q(sb.from("categories").update(patch).eq("id", row.dataset.id)).then(function () { toast("Guardado"); return refresh(); }).catch(fail);
   });
@@ -234,7 +248,10 @@
           (d.photo_url ? '<img class="thumb" src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<div class="thumb"></div>') +
           '<div class="grow"><div class="name">' + esc(d.name) + "</div>" +
           '<label class="switch"><input type="checkbox" class="avail"' + (d.available ? " checked" : "") + "> Disponible</label></div>" +
-          '<input class="price" type="number" step="0.01" min="0" value="' + Number(d.price).toFixed(2) + '" aria-label="Precio">' +
+          '<div class="prices">' + ((d.variants && d.variants.length) ? d.variants.map(function (v, i) {
+            return '<label>' + esc(v.label) + ' <input class="price vprice" data-i="' + i + '" type="number" step="0.01" min="0" value="' +
+              Number(v.price) + '" aria-label="Precio ' + esc(v.label) + '"></label>';
+          }).join("") : '<input class="price" type="number" step="0.01" min="0" value="' + Number(d.price) + '" aria-label="Precio">') + "</div>" +
           '<button type="button" class="edit">Editar</button></div>';
       });
     });
@@ -249,7 +266,11 @@
     if (e.target.classList.contains("price")) {
       var p = Math.round(parseFloat(e.target.value) * 100) / 100;
       if (!(p >= 0)) return toast("Precio no válido");
-      patch = { price: p };
+      if (e.target.classList.contains("vprice")) {
+        var vars = d.variants.map(function (v) { return { label: v.label, price: v.price }; });
+        vars[Number(e.target.dataset.i)].price = p;
+        patch = { variants: vars, price: minPrice(vars) };
+      } else patch = { price: p };
     } else if (e.target.classList.contains("avail")) {
       patch = { available: e.target.checked };
     } else return;
@@ -271,8 +292,13 @@
     $("fCat").innerHTML = state.cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("");
     $("fCat").value = d ? d.category_id : state.cats[0].id;
     $("fName").value = d ? d.name : "";
+    $("fSub").value = d ? (d.subtitle || "") : "";
     $("fDesc").value = d ? d.description : "";
-    $("fPrice").value = d ? Number(d.price).toFixed(2) : "";
+    $("fPrice").value = d ? Number(d.price) : "";
+    $("fOpts").value = d ? (d.options || []).join(", ") : "";
+    $("vars").innerHTML = "";
+    ((d && d.variants) || []).forEach(function (v) { addVar(v.label, v.price); });
+    syncVars();
     $("fPos").value = d ? d.position : state.dishes.length + 1;
     $("fTags").value = d ? (d.tags || []).join(", ") : "";
     $("fAvail").checked = d ? d.available : true;
@@ -281,6 +307,30 @@
     show("deleteDish", !!d);
     $("dlg").showModal();
   }
+  function minPrice(vars) { return Math.min.apply(null, vars.map(function (v) { return v.price; })); }
+  function addVar(label, price) {
+    var div = document.createElement("div"); div.className = "var-row";
+    div.innerHTML = '<input class="vl" placeholder="Tamaño (Peq)" aria-label="Tamaño" maxlength="20">' +
+      '<input class="vp grow" type="number" step="0.01" min="0" placeholder="Precio" aria-label="Precio del tamaño">' +
+      '<button type="button" class="danger" aria-label="Quitar tamaño">✕</button>';
+    div.querySelector(".vl").value = label || ""; div.querySelector(".vp").value = price == null ? "" : price;
+    div.querySelector("button").addEventListener("click", function () { div.remove(); syncVars(); });
+    $("vars").appendChild(div); syncVars();
+  }
+  // Con tamaños, el precio único no aplica.
+  function syncVars() { show("singlePrice", !$("vars").children.length); }
+  function readVars() {
+    var out = [], bad = false;
+    $("vars").querySelectorAll(".var-row").forEach(function (r) {
+      var l = r.querySelector(".vl").value.trim(), p = Math.round(parseFloat(r.querySelector(".vp").value) * 100) / 100;
+      if (!l && isNaN(p)) return;
+      if (!l || !(p >= 0)) bad = true; else out.push({ label: l, price: p });
+    });
+    return bad ? null : out;
+  }
+  $("addVar").addEventListener("click", function () { addVar(); });
+  $("addPG").addEventListener("click", function () { $("vars").innerHTML = ""; addVar("Peq"); addVar("Gr"); });
+
   function setPreview(src) { $("photoPreview").src = src || "data:image/gif;base64,R0lGODlhAQABAAAAACw="; }
 
   $("cancel").addEventListener("click", function () { $("dlg").close(); });
@@ -331,15 +381,21 @@
   $("dishForm").addEventListener("submit", function (e) {
     e.preventDefault();
     var d = state.editing, oldUrl = d && d.photo_url;
-    var price = Math.round(parseFloat($("fPrice").value) * 100) / 100;
+    var list = function (id) { return $(id).value.split(",").map(function (t) { return t.trim(); }).filter(Boolean); };
+    var vars = readVars();
+    if (!vars) return toast("Cada tamaño necesita nombre y precio");
+    var price = vars.length ? minPrice(vars) : Math.round(parseFloat($("fPrice").value) * 100) / 100;
     if (!(price >= 0)) return toast("Precio no válido");
     var row = {
       category_id: Number($("fCat").value),
       name: $("fName").value.trim(),
+      subtitle: $("fSub").value.trim(),
       description: $("fDesc").value.trim(),
       price: price,
+      variants: vars,
+      options: list("fOpts"),
       position: parseInt($("fPos").value, 10) || 0,
-      tags: $("fTags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean),
+      tags: list("fTags"),
       available: $("fAvail").checked
     };
     $("save").disabled = true;

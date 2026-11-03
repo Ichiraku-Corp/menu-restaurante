@@ -1,16 +1,656 @@
 {
-  "categories": [
-    { "id": 1, "name": "Entrantes", "position": 1 },
-    { "id": 2, "name": "Principales", "position": 2 },
-    { "id": 3, "name": "Postres", "position": 3 },
-    { "id": 4, "name": "Bebidas", "position": 4 }
-  ],
-  "dishes": [
-    { "id": 1, "category_id": 1, "name": "Croquetas caseras", "description": "De jamón ibérico, 6 unidades.", "price": 8.5, "photo_url": null, "tags": ["Casero"], "available": true, "position": 1 },
-    { "id": 2, "category_id": 1, "name": "Ensalada de temporada", "description": "Hojas verdes, tomate, aguacate y vinagreta de cítricos.", "price": 9, "photo_url": null, "tags": ["Vegetariano"], "available": true, "position": 2 },
-    { "id": 3, "category_id": 2, "name": "Arroz del día", "description": "Pregunta al personal por la receta de hoy. Mínimo 2 personas.", "price": 16, "photo_url": null, "tags": [], "available": true, "position": 1 },
-    { "id": 4, "category_id": 2, "name": "Tacos de cochinita", "description": "Tres tacos con cebolla morada y salsa habanera.", "price": 12.5, "photo_url": null, "tags": ["Picante"], "available": true, "position": 2 },
-    { "id": 5, "category_id": 3, "name": "Tarta de queso", "description": "Horneada, cremosa por dentro.", "price": 6, "photo_url": null, "tags": ["Casero"], "available": true, "position": 1 },
-    { "id": 6, "category_id": 4, "name": "Limonada de la casa", "description": "Con hierbabuena.", "price": 3.5, "photo_url": null, "tags": ["Sin alcohol"], "available": false, "position": 1 }
-  ]
+ "categories": [
+  {
+   "id": 1,
+   "name": "Entradas",
+   "subtitle": "アペタイザー",
+   "position": 1
+  },
+  {
+   "id": 2,
+   "name": "Especiales",
+   "subtitle": "スペシャル",
+   "position": 2
+  },
+  {
+   "id": 3,
+   "name": "Ramen",
+   "subtitle": "ラーメン",
+   "position": 3
+  },
+  {
+   "id": 4,
+   "name": "Sushi",
+   "subtitle": "寿司",
+   "position": 4
+  },
+  {
+   "id": 5,
+   "name": "Postres",
+   "subtitle": "デザート",
+   "position": 5
+  },
+  {
+   "id": 6,
+   "name": "Bebidas",
+   "subtitle": "ドリンク",
+   "position": 6
+  }
+ ],
+ "dishes": [
+  {
+   "id": 1,
+   "category_id": 1,
+   "name": "Pollo Saiyan",
+   "subtitle": "サイヤ人じん",
+   "description": "Milanesa tempurizada, acompañada con salsa agridulce. ¡Su nivel de sabrosura es más de 9.000!",
+   "price": 8,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 8
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 2,
+   "category_id": 1,
+   "name": "Pollo Kobayashi",
+   "subtitle": "小林チキン",
+   "description": "Receta coreana crujiente. La tempura de este pollo proviene de otra dimensión. También tiene limón.",
+   "price": 8,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 8
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 3,
+   "category_id": 1,
+   "name": "Pollo Kyojuro",
+   "subtitle": "ポッロ・キョウジュロ",
+   "description": "Pollo tempurizado picante. Está picante.",
+   "price": 8,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 8
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [
+    "Picante"
+   ],
+   "photo_url": null,
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 4,
+   "category_id": 1,
+   "name": "Gyozas",
+   "subtitle": "ギョーザ",
+   "description": "Pastelitos de trigo al vapor rellenos de cerdo y acompañados con salsa blanca o teriyaki.",
+   "price": 5,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 4
+  },
+  {
+   "id": 5,
+   "category_id": 1,
+   "name": "Imo mochi",
+   "subtitle": "いももち",
+   "description": "Banderilla de papa rellena de queso mozzarella pankeada y frita.",
+   "price": 4,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 5
+  },
+  {
+   "id": 6,
+   "category_id": 1,
+   "name": "Asuka Corn Dog",
+   "subtitle": "コリアンホットドッグ",
+   "description": "Deliciosa banderilla frita en masa crujiente, cubierta con una capa de papas, ramen o panko, para una textura irresistible.",
+   "price": 4,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 6
+  },
+  {
+   "id": 7,
+   "category_id": 2,
+   "name": "Amaterasu",
+   "subtitle": "アマテラス",
+   "description": "Fideos salteados, huevo, maíz, pollo pankeado, tocineta y crema de queso.",
+   "price": 10,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 10
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/amaterasu.webp",
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 8,
+   "category_id": 2,
+   "name": "Kyubi",
+   "subtitle": "キュウビ",
+   "description": "Arroz salteado con maíz, cebollín, zanahoria, jamón ahumado, gyosas y pollo agridulce.",
+   "price": 8,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 8
+    },
+    {
+     "label": "Gr",
+     "price": 12
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/kyubi.webp",
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 9,
+   "category_id": 2,
+   "name": "Tteokbokki",
+   "subtitle": "トッポギ",
+   "description": "Pasta de arroz glutinoso en salsa de chile, tocineta y queso mozzarella.",
+   "price": 7,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 7
+    },
+    {
+     "label": "Gr",
+     "price": 10
+    }
+   ],
+   "options": [],
+   "tags": [
+    "Picante"
+   ],
+   "photo_url": "assets/dishes/tteokbokki.webp",
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 10,
+   "category_id": 3,
+   "name": "Hokage",
+   "subtitle": "火影",
+   "description": "Caldo mixto, fideos, naruto maki, maíz, lechuga, pollo, tocineta, camarones, langostinos y lomo de cerdo. Un gran ramen, para un gran apetito.",
+   "price": 25,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 11,
+   "category_id": 3,
+   "name": "Tonkotsu",
+   "subtitle": "とんこつ",
+   "description": "Caldo miso o vegetariano, fideos, narutomaki, maíz, cebollín, alga nori, zanahoria y panceta de cerdo.",
+   "price": 10,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 10
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 12,
+   "category_id": 3,
+   "name": "Kakashi",
+   "subtitle": "カカシ",
+   "description": "Caldo shiro, fideos, alga nori, huevo y pollo, con un toque marino y picante.",
+   "price": 10,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 10
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [
+    "Picante"
+   ],
+   "photo_url": null,
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 13,
+   "category_id": 3,
+   "name": "Kisame",
+   "subtitle": "キサメ",
+   "description": "Caldo miso o vegetariano, fideos, maíz, cebollín, huevo, alga nori, narutomaki, sésamo y camarones pankeados.",
+   "price": 10,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 10
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": null,
+   "available": true,
+   "position": 4
+  },
+  {
+   "id": 14,
+   "category_id": 3,
+   "name": "Chilly D Ace",
+   "subtitle": "チリー・D・エース",
+   "description": "Caldo miso o vegetariano picante, fideos, cebollín, vegetales, pollo salteado, champiñones salteados dulces, camarones salteados y lomo de cerdo salteado.",
+   "price": 10,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 10
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [
+    "Picante"
+   ],
+   "photo_url": "assets/dishes/chilly-d-ace.webp",
+   "available": true,
+   "position": 5
+  },
+  {
+   "id": 15,
+   "category_id": 3,
+   "name": "Teuchi",
+   "subtitle": "テウチ",
+   "description": "Caldo miso o vegetariano, narutomaki, maíz, vegetales salteados, huevo, cebollín, lomito de res y tocineta ahumada en salsa de ostras dulce.",
+   "price": 8,
+   "variants": [
+    {
+     "label": "Peq",
+     "price": 8
+    },
+    {
+     "label": "Gr",
+     "price": 15
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/teuchi.webp",
+   "available": true,
+   "position": 6
+  },
+  {
+   "id": 16,
+   "category_id": 3,
+   "name": "Sanji",
+   "subtitle": "さん治",
+   "description": "Caldo miso o vegetariano, fideos, vegetales salteados y milanesa de pollo salteada.",
+   "price": 6,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/sanji.webp",
+   "available": true,
+   "position": 7
+  },
+  {
+   "id": 17,
+   "category_id": 3,
+   "name": "Luffy",
+   "subtitle": "ルフ",
+   "description": "Caldo miso o vegetariano, fideos, huevo, maíz, cebollín y lomo de cerdo salteado.",
+   "price": 6,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/luffy.webp",
+   "available": true,
+   "position": 8
+  },
+  {
+   "id": 18,
+   "category_id": 3,
+   "name": "Rengoku",
+   "subtitle": "連合",
+   "description": "Caldo miso o vegetariano, cebollín, fideos y topping de pollo o cerdo. ¡UMAI!",
+   "price": 3,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/rengoku.webp",
+   "available": true,
+   "position": 9
+  },
+  {
+   "id": 19,
+   "category_id": 4,
+   "name": "Gompachiroll",
+   "subtitle": "権八郎",
+   "description": "10 rolls rellenos de aguacate, queso crema, salteado de vegetales tempurizados, pepino, topping de tortilla de huevo con mozzarella, champiñones y salsa blanca.",
+   "price": 8,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/gompachiroll.webp",
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 20,
+   "category_id": 4,
+   "name": "All Blue Roll",
+   "subtitle": "ブルー",
+   "description": "10 rolls rellenos de tocineta, salteado de lomito, plátano, queso crema, queso mozzarella con topping de masago y salsa blanca.",
+   "price": 8,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/all-blue-roll.webp",
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 21,
+   "category_id": 4,
+   "name": "Roll Agatsuma",
+   "subtitle": "ロールアガツマ",
+   "description": "Roll tempurizado de plátano, tocineta, queso crema y salsa secreta. Resistencia a los rayos +1.",
+   "price": 10,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/roll-agatsuma.webp",
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 22,
+   "category_id": 5,
+   "name": "Tokyo Tiramisú",
+   "subtitle": "東京ティラミス",
+   "description": "Tiramisú clásico: bizcocho en café, crema de mascarpone. Textura suave, sabor equilibrado. El final perfecto. Elimina pesadillas.",
+   "price": 7,
+   "variants": [],
+   "options": [
+    "Fresa",
+    "Chocolate",
+    "Melocotón",
+    "Taro"
+   ],
+   "tags": [],
+   "photo_url": "assets/dishes/tokyo-tiramisu.webp",
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 23,
+   "category_id": 5,
+   "name": "Fruit Sandu",
+   "subtitle": "フルーツサンドゥ",
+   "description": "Sándwich de crema relleno de frutas.",
+   "price": 4,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/fruit-sandu.webp",
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 24,
+   "category_id": 5,
+   "name": "Taiyaki",
+   "subtitle": "たいやき",
+   "description": "Waffles en forma de pescado. Cubierto de chocolate.",
+   "price": 2.5,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/taiyaki.webp",
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 25,
+   "category_id": 5,
+   "name": "Dorayaki",
+   "subtitle": "どら焼き",
+   "description": "Bizcocho japonés relleno de chocolate.",
+   "price": 3,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/dorayaki.webp",
+   "available": true,
+   "position": 4
+  },
+  {
+   "id": 26,
+   "category_id": 5,
+   "name": "Dangos",
+   "subtitle": "団子",
+   "description": "5 bolitas de arroz glutinoso acompañadas de chocolate.",
+   "price": 3,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/dangos.webp",
+   "available": true,
+   "position": 5
+  },
+  {
+   "id": 27,
+   "category_id": 6,
+   "name": "Limonada rosa",
+   "subtitle": "",
+   "description": "Perfecta para un día caluroso (en serio).",
+   "price": 2,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/limonada-rosa.webp",
+   "available": true,
+   "position": 1
+  },
+  {
+   "id": 28,
+   "category_id": 6,
+   "name": "Agua",
+   "subtitle": "",
+   "description": "Fuente vital de toda vida, deberías tomarla.",
+   "price": 1.5,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/agua.webp",
+   "available": true,
+   "position": 2
+  },
+  {
+   "id": 29,
+   "category_id": 6,
+   "name": "Refresco",
+   "subtitle": "",
+   "description": "Refresco de lata.",
+   "price": 2.5,
+   "variants": [
+    {
+     "label": "Lata",
+     "price": 2.5
+    }
+   ],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/refresco.webp",
+   "available": true,
+   "position": 3
+  },
+  {
+   "id": 30,
+   "category_id": 6,
+   "name": "Jugo Natural",
+   "subtitle": "",
+   "description": "Perfecta para un día caluroso.",
+   "price": 3,
+   "variants": [],
+   "options": [
+    "Fresa",
+    "Parchita",
+    "Mora",
+    "Melocotón"
+   ],
+   "tags": [],
+   "photo_url": "assets/dishes/jugo-natural.webp",
+   "available": true,
+   "position": 4
+  },
+  {
+   "id": 31,
+   "category_id": 6,
+   "name": "Bubble Tea",
+   "subtitle": "",
+   "description": "Refrescante bebida dulce con tapioca.",
+   "price": 4,
+   "variants": [],
+   "options": [
+    "Fresa",
+    "Parchita",
+    "Mora",
+    "Melocotón",
+    "Taro",
+    "Matcha"
+   ],
+   "tags": [],
+   "photo_url": "assets/dishes/bubble-tea.webp",
+   "available": true,
+   "position": 5
+  },
+  {
+   "id": 32,
+   "category_id": 6,
+   "name": "Milk Tea",
+   "subtitle": "",
+   "description": "Refrescante bebida a base de leche con tapioca y crema.",
+   "price": 5,
+   "variants": [],
+   "options": [
+    "Fresa",
+    "Matcha",
+    "Nutella",
+    "Choco café",
+    "Mora",
+    "Taro"
+   ],
+   "tags": [],
+   "photo_url": "assets/dishes/milk-tea.webp",
+   "available": true,
+   "position": 6
+  },
+  {
+   "id": 33,
+   "category_id": 6,
+   "name": "Té Verde",
+   "subtitle": "",
+   "description": "Refrescante bebida natural de té verde.",
+   "price": 1,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/te-verde.webp",
+   "available": true,
+   "position": 7
+  },
+  {
+   "id": 34,
+   "category_id": 6,
+   "name": "Jugo Sakura",
+   "subtitle": "",
+   "description": "La bebida estelar de Ichiraku a base de flor de Jamaica y frutos tropicales.",
+   "price": 2,
+   "variants": [],
+   "options": [],
+   "tags": [
+    "Estrella"
+   ],
+   "photo_url": "assets/dishes/jugo-sakura.webp",
+   "available": true,
+   "position": 8
+  }
+ ]
 }

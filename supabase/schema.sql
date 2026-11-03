@@ -5,6 +5,7 @@
 create table if not exists public.categories (
   id         bigint generated always as identity primary key,
   name       text not null,
+  subtitle   text not null default '',   -- p. ej. nombre en japonés
   position   int  not null default 0,
   created_at timestamptz not null default now()
 );
@@ -13,8 +14,14 @@ create table if not exists public.dishes (
   id          bigint generated always as identity primary key,
   category_id bigint not null references public.categories(id) on delete cascade,
   name        text not null,
+  subtitle    text not null default '',   -- p. ej. nombre en japonés
   description text not null default '',
+  -- Precio base (el menor si hay tamaños). Se usa si "variants" está vacío.
   price       numeric(10,2) not null default 0 check (price >= 0),
+  -- Tamaños con precio propio: [{"label":"Peq","price":10},{"label":"Gr","price":15}]
+  variants    jsonb not null default '[]'::jsonb,
+  -- Sabores / opciones a elegir: {Fresa, Mora, Taro}
+  options     text[] not null default '{}',
   photo_url   text,
   tags        text[] not null default '{}',
   available   boolean not null default true,
@@ -74,7 +81,10 @@ create policy "dish photos admin delete" on storage.objects for delete
 -- "Allow new users to sign up" y crea tu usuario admin a mano en
 -- Authentication → Users. Así nadie más puede registrarse y editar.
 
--- Categorías de ejemplo (opcional; edítalas desde el panel)
-insert into public.categories (name, position)
-select * from (values ('Entrantes',1),('Principales',2),('Postres',3),('Bebidas',4)) v(name, position)
-where not exists (select 1 from public.categories);
+-- Si creaste las tablas con una versión anterior de este archivo:
+alter table public.categories add column if not exists subtitle text not null default '';
+alter table public.dishes add column if not exists subtitle text not null default '';
+alter table public.dishes add column if not exists variants jsonb not null default '[]'::jsonb;
+alter table public.dishes add column if not exists options text[] not null default '{}';
+
+-- Para cargar el menú completo, ejecuta después supabase/seed.sql.

@@ -5,9 +5,12 @@
 window.MENU_CONFIG = {
   SUPABASE_URL: "",
   SUPABASE_ANON_KEY: "",
-  RESTAURANT_NAME: "Mi Restaurante",
-  TAGLINE: "Cocina de casa, hecha con cariño",
-  CURRENCY: "EUR",
-  LOCALE: "es-ES",
+  RESTAURANT_NAME: "Ichiraku Ramen",
+  TAGLINE: "Ramen · Sushi · Postres japoneses",
+  // Los precios se muestran como "Ref 2.5". Para usar una moneda normal,
+  // deja PRICE_PREFIX en "" y ajusta CURRENCY/LOCALE (p. ej. "USD", "es-VE").
+  PRICE_PREFIX: "Ref",
+  CURRENCY: "USD",
+  LOCALE: "es-VE",
   PHOTO_BUCKET: "dishes",
 };

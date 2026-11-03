@@ -5,48 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Menú</title>
 <meta name="description" content="Menú digital">
-<meta name="theme-color" content="#1f1a17">
+<meta name="theme-color" content="#e5206b">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   :root {
-    --bg: #faf7f2; --surface: #ffffff; --text: #1f1a17; --muted: #6b625b;
-    --accent: #b5462b; --line: #ebe4da; --chip: #f3ece2; --off: #a39a92;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #151210; --surface: #1f1a17; --text: #f4eee7; --muted: #b0a69c;
-      --accent: #e9805f; --line: #2e2723; --chip: #2a2420; --off: #776d65; }
+    --pink: #e5206b; --pink-soft: #fde7ef; --blue: #1d6fc0; --sky: #3bb8ea;
+    --bg: #fff5f8; --card: #ffffff; --text: #2a1a22; --muted: #8a5b6e; --line: #f6cfdd;
+    --off: #b7a4ac;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  html { scroll-behavior: smooth; scroll-padding-top: 62px; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased; }
-  header { padding: 28px 16px 12px; max-width: 720px; margin: 0 auto; }
-  h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
-  .tagline { margin: 4px 0 0; color: var(--muted); }
-  nav { position: sticky; top: 0; z-index: 5; background: var(--bg);
-    border-bottom: 1px solid var(--line); }
+  header { background: var(--pink); color: #fff; text-align: center;
+    padding: 26px 16px 22px; border-bottom: 6px solid var(--sky); }
+  header h1 { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; opacity: .92; font-size: 15px; }
+  nav { position: sticky; top: 0; z-index: 5; background: #fff;
+    box-shadow: 0 2px 10px rgba(229,32,107,.12); }
   nav ul { display: flex; gap: 8px; overflow-x: auto; list-style: none;
     margin: 0 auto; padding: 10px 16px; max-width: 720px; scrollbar-width: none; }
   nav ul::-webkit-scrollbar { display: none; }
   nav a { display: block; white-space: nowrap; padding: 6px 14px; border-radius: 999px;
-    background: var(--chip); color: var(--text); text-decoration: none; font-size: 14px; }
-  nav a.active { background: var(--accent); color: #fff; }
-  main { max-width: 720px; margin: 0 auto; padding: 0 16px 48px; }
-  section h2 { font-size: 20px; margin: 28px 0 8px; }
-  .dish { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
-  .dish:last-child { border-bottom: 0; }
-  .dish .info { flex: 1; min-width: 0; }
-  .dish h3 { margin: 0; font-size: 17px; font-weight: 600; }
-  .dish p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
-  .price { font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
-  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
-  .photo { width: 96px; height: 96px; flex: none; border-radius: 12px; object-fit: cover;
-    background: var(--chip); }
-  .dish.off h3, .dish.off .price { color: var(--off); }
-  .dish.off .photo { filter: grayscale(1); opacity: .6; }
-  .soldout { font-size: 12px; font-weight: 600; color: var(--off); text-transform: uppercase; letter-spacing: .04em; }
+    background: var(--pink-soft); color: var(--pink); text-decoration: none; font-size: 14px; font-weight: 700; }
+  nav a.active { background: var(--pink); color: #fff; }
+  main { max-width: 720px; margin: 0 auto; padding: 4px 12px 40px; }
+  section { background: var(--card); border: 2px solid var(--pink); border-radius: 18px;
+    margin: 20px 0; overflow: hidden; }
+  section > h2 { margin: 0; background: var(--pink); color: #fff; padding: 12px 16px;
+    font-size: 22px; font-weight: 900; display: flex; align-items: baseline; gap: 10px; }
+  section > h2 small { font-size: 14px; font-weight: 600; opacity: .9; }
+  .dish { display: flex; gap: 14px; padding: 14px 16px; border-top: 1px solid var(--line); }
+  .dish:first-of-type { border-top: 0; }
+  .photo { width: 100px; height: 100px; flex: none; border-radius: 14px; object-fit: cover; background: var(--pink-soft); }
+  .info { flex: 1; min-width: 0; }
+  .dish h3 { margin: 0; font-size: 19px; font-weight: 900; color: var(--pink); line-height: 1.15; }
+  .jp { display: block; font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 2px; }
+  .dish p { margin: 6px 0 0; font-size: 14px; color: var(--text); }
+  .prices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .price { background: var(--pink); color: #fff; font-weight: 700; font-size: 14px; padding: 3px 10px;
+    border-radius: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .price b { font-weight: 500; opacity: .9; margin-right: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #e8f5fd; color: var(--blue); font-weight: 600; }
+  .chip.tag { background: #fff1d6; color: #9a5a00; }
+  .dish.off h3, .dish.off p { color: var(--off); }
+  .dish.off .price { background: var(--off); }
+  .dish.off .photo { filter: grayscale(1); opacity: .55; }
+  .soldout { font-size: 12px; font-weight: 800; color: var(--off); text-transform: uppercase; letter-spacing: .05em; align-self: center; }
   .state { padding: 48px 0; text-align: center; color: var(--muted); }
 </style>
 <script src="config.js"></script>
@@ -54,7 +61,7 @@
 <body>
 <header>
   <h1 id="name">Menú</h1>
-  <p class="tagline" id="tagline"></p>
+  <p id="tagline"></p>
 </header>
 <nav aria-label="Categorías"><ul id="nav"></ul></nav>
 <main id="menu"><div class="state">Cargando menú…</div></main>
@@ -63,19 +70,36 @@
 (function () {
   "use strict";
   var C = window.MENU_CONFIG || {};
-  var CACHE_KEY = "menu-cache-v1";
-  var money = new Intl.NumberFormat(C.LOCALE || "es-ES", { style: "currency", currency: C.CURRENCY || "EUR" });
+  var CACHE_KEY = "menu-cache-v2";
 
   document.getElementById("name").textContent = C.RESTAURANT_NAME || "Menú";
   document.getElementById("tagline").textContent = C.TAGLINE || "";
   document.title = (C.RESTAURANT_NAME || "Menú") + " · Menú";
+
+  var fmt = C.PRICE_PREFIX
+    ? (function (nf) { return function (n) { return C.PRICE_PREFIX + " " + nf.format(n); }; })(
+        new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }))
+    : (function (nf) { return function (n) { return nf.format(n); }; })(
+        new Intl.NumberFormat(C.LOCALE || "es-ES", { style: "currency", currency: C.CURRENCY || "EUR" }));
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+  // URLs absolutas http(s) o rutas relativas del propio sitio (assets/...).
+  function safeUrl(u) {
+    u = u || "";
+    return /^https?:\/\//i.test(u) || (/^[\w.\-\/]+$/.test(u) && u.slice(0, 2) !== "//") ? u : "";
+  }
+
+  function priceHtml(d) {
+    var v = Array.isArray(d.variants) ? d.variants : [];
+    if (!v.length) return '<span class="price">' + esc(fmt(Number(d.price) || 0)) + "</span>";
+    return v.map(function (x) {
+      return '<span class="price"><b>' + esc(x.label) + "</b>" + esc(fmt(Number(x.price) || 0)) + "</span>";
+    }).join("");
+  }
 
   function render(data) {
     var cats = (data.categories || []).slice().sort(function (a, b) { return a.position - b.position; });
@@ -89,19 +113,21 @@
       if (!items.length) return;
       var sid = "cat-" + c.id;
       navHtml += '<li><a href="#' + sid + '">' + esc(c.name) + "</a></li>";
-      html += '<section id="' + sid + '"><h2>' + esc(c.name) + "</h2>";
+      html += '<section id="' + sid + '"><h2>' + esc(c.name) +
+        (c.subtitle ? " <small lang=\"ja\">" + esc(c.subtitle) + "</small>" : "") + "</h2>";
       items.forEach(function (d) {
         var photo = safeUrl(d.photo_url);
-        html += '<article class="dish' + (d.available ? "" : " off") + '"><div class="info">' +
-          "<h3>" + esc(d.name) + "</h3>" +
+        var opts = (d.options || []), tags = (d.tags || []);
+        html += '<article class="dish' + (d.available ? "" : " off") + '">' +
+          (photo ? '<img class="photo" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async" width="100" height="100">' : "") +
+          '<div class="info"><h3>' + esc(d.name) +
+          (d.subtitle ? '<span class="jp" lang="ja">' + esc(d.subtitle) + "</span>" : "") + "</h3>" +
           (d.description ? "<p>" + esc(d.description) + "</p>" : "") +
-          ((d.tags && d.tags.length) ? '<div class="tags">' + d.tags.map(function (t) {
-            return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
-          '<div class="price">' + money.format(Number(d.price) || 0) +
-          (d.available ? "" : ' <span class="soldout">· Agotado</span>') + "</div>" +
-          "</div>" +
-          (photo ? '<img class="photo" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async" width="96" height="96">' : "") +
-          "</article>";
+          ((opts.length || tags.length) ? '<div class="chips">' +
+            tags.map(function (t) { return '<span class="chip tag">' + esc(t) + "</span>"; }).join("") +
+            opts.map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
+          '<div class="prices">' + priceHtml(d) + (d.available ? "" : '<span class="soldout">Agotado</span>') + "</div>" +
+          "</div></article>";
       });
       html += "</section>";
     });
@@ -139,8 +165,8 @@
     var base = C.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/";
     var h = { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY };
     return Promise.all([
-      fetchJson(base + "categories?select=id,name,position&order=position", h),
-      fetchJson(base + "dishes?select=id,category_id,name,description,price,photo_url,tags,available,position&order=position", h)
+      fetchJson(base + "categories?select=id,name,subtitle,position&order=position", h),
+      fetchJson(base + "dishes?select=id,category_id,name,subtitle,description,price,variants,options,photo_url,tags,available,position&order=position", h)
     ]).then(function (r) { return { categories: r[0], dishes: r[1] }; });
   }
 
