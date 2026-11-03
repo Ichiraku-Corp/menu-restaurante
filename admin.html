@@ -61,7 +61,7 @@
   #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--text); color:var(--bg);
     padding:10px 16px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
   #toast.show { opacity:1; }
-  #qr svg { width: 220px; height: 220px; background:#fff; padding:8px; border-radius:8px; }
+  #qr svg { width: 240px; height: auto; display:block; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.15); }
 </style>
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -115,10 +115,17 @@
       <h2>Código QR</h2>
       <label for="qrUrl">URL del menú</label>
       <input id="qrUrl">
+      <label for="qrStyle">Diseño</label>
+      <select id="qrStyle">
+        <option value="card">Tarjeta de mesa (con logo y nombre)</option>
+        <option value="logo">Solo QR con logo</option>
+        <option value="plain">Solo QR simple</option>
+      </select>
       <div class="row" style="margin-top:12px; align-items:flex-start">
         <div id="qr"></div>
         <div>
-          <p><button id="qrPng">Descargar PNG</button></p>
+          <p class="muted" style="max-width:260px">Prueba siempre el QR con la cámara del móvil antes de imprimir.</p>
+          <p><button id="qrPng" class="primary">Descargar PNG</button></p>
           <p><button id="qrSvg">Descargar SVG (para imprenta)</button></p>
         </div>
       </div>
@@ -421,28 +428,76 @@
   });
 
   // --- QR -----------------------------------------------------------------
+  // El QR se dibuja como SVG propio: módulos en color oscuro sobre blanco
+  // (máximo contraste para que lo lea cualquier cámara), corrección de
+  // errores alta (H) para que el logo del centro no impida la lectura.
+  var LOGO = '<rect width="64" height="64" rx="14" fill="#e5206b"/><path d="M22 14v14a6 6 0 0 0 4 5.6V50h4V33.6A6 6 0 0 0 34 28V14h-3v12h-2V14h-2v12h-2V14zm22 0c-4 0-7 6-7 14 0 4 2 6 4 6.5V50h4V14z" fill="#fff"/>';
+  var LOGO_INV = LOGO.replace('rx="14" fill="#e5206b"', 'rx="14" fill="#fff"').replace('z" fill="#fff"', 'z" fill="#e5206b"');
+  function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  // Devuelve {svg (sin etiqueta exterior), size} con el QR en (x, y) y lado `side`.
+  function qrBlock(url, x, y, side, withLogo) {
+    var qr = window.qrcode(0, withLogo ? "H" : "M"); qr.addData(url); qr.make();
+    var n = qr.getModuleCount(), quiet = 2, cell = side / (n + quiet * 2), d = "";
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) {
+      d += "M" + (x + (c + quiet) * cell).toFixed(2) + " " + (y + (r + quiet) * cell).toFixed(2) + "h" + cell.toFixed(2) + "v" + cell.toFixed(2) + "h-" + cell.toFixed(2) + "z";
+    }
+    var out = '<rect x="' + x + '" y="' + y + '" width="' + side + '" height="' + side + '" fill="#fff"/>' +
+      '<path d="' + d + '" fill="#1f1a17" shape-rendering="crispEdges"/>';
+    if (withLogo) {
+      var ls = side * 0.2, lx = x + (side - ls) / 2, ly = y + (side - ls) / 2, pad = ls * 0.12;
+      out += '<rect x="' + (lx - pad) + '" y="' + (ly - pad) + '" width="' + (ls + pad * 2) + '" height="' + (ls + pad * 2) + '" rx="' + (ls * 0.28) + '" fill="#fff"/>' +
+        '<g transform="translate(' + lx + ' ' + ly + ') scale(' + (ls / 64) + ')">' + LOGO + '</g>';
+    }
+    return out;
+  }
+
+  function buildSvg(url, style) {
+    var font = "font-family=\"'Trebuchet MS','Segoe UI',Arial,sans-serif\"";
+    if (style !== "card") {
+      return { w: 1000, h: 1000, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">' +
+        qrBlock(url, 0, 0, 1000, style === "logo") + "</svg>" };
+    }
+    var cfg = window.MENU_CONFIG || {}, name = cfg.RESTAURANT_NAME || "Menú", tag = cfg.TAGLINE || "";
+    var W = 1000, H = 1400;
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '">' +
+      '<rect width="' + W + '" height="' + H + '" rx="60" fill="#e5206b"/>' +
+      '<g transform="translate(440 70) scale(1.875)">' + LOGO_INV + "</g>" +
+      '<text x="500" y="275" text-anchor="middle" ' + font + ' font-size="78" font-weight="900" fill="#fff">' + esc(name) + "</text>" +
+      (tag ? '<text x="500" y="335" text-anchor="middle" ' + font + ' font-size="34" fill="#fde7ef">' + esc(tag) + "</text>" : "") +
+      '<rect x="130" y="390" width="740" height="740" rx="44" fill="#fff"/>' +
+      qrBlock(url, 160, 420, 680, true) +
+      '<text x="500" y="1225" text-anchor="middle" ' + font + ' font-size="58" font-weight="900" fill="#fff">Escanea para ver el menú</text>' +
+      '<text x="500" y="1295" text-anchor="middle" ' + font + ' font-size="32" fill="#fde7ef">Apunta la cámara de tu móvil al código</text>' +
+      "</svg>";
+    return { w: W, h: H, svg: s };
+  }
+
   function setupQr() {
-    var input = $("qrUrl");
+    var input = $("qrUrl"), style = $("qrStyle"), current = null;
     input.value = new URL("./", location.href).href;
     function draw() {
       if (!window.qrcode) { $("qr").textContent = "No se pudo cargar el generador de QR."; return; }
-      var qr = window.qrcode(0, "M"); qr.addData(input.value.trim() || location.origin); qr.make();
-      $("qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+      current = buildSvg(input.value.trim() || location.origin, style.value);
+      $("qr").innerHTML = current.svg;
     }
-    input.addEventListener("input", draw); draw();
-    function download(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; a.click(); }
+    input.addEventListener("input", draw); style.addEventListener("change", draw); draw();
+    function download(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+    var base = function () { return style.value === "card" ? "menu-qr-tarjeta" : "menu-qr"; };
     $("qrSvg").addEventListener("click", function () {
-      var svg = $("qr").innerHTML;
-      download(URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })), "menu-qr.svg");
+      if (!current) return;
+      download(URL.createObjectURL(new Blob([current.svg], { type: "image/svg+xml" })), base() + ".svg");
     });
     $("qrPng").addEventListener("click", function () {
-      var img = new Image(), size = 1024;
+      if (!current) return;
+      var img = new Image(), k = 2, w = current.w * k, h = current.h * k;
       img.onload = function () {
-        var cv = document.createElement("canvas"); cv.width = cv.height = size;
-        var ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size);
-        ctx.drawImage(img, 0, 0, size, size); download(cv.toDataURL("image/png"), "menu-qr.png");
+        var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        var ctx = cv.getContext("2d");
+        if (style.value !== "card") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); }
+        ctx.drawImage(img, 0, 0, w, h); download(cv.toDataURL("image/png"), base() + ".png");
       };
-      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent($("qr").innerHTML);
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(current.svg);
     });
   }
 })();
