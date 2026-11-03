@@ -1,0 +1,16 @@
+{
+  "categories": [
+    { "id": 1, "name": "Entrantes", "position": 1 },
+    { "id": 2, "name": "Principales", "position": 2 },
+    { "id": 3, "name": "Postres", "position": 3 },
+    { "id": 4, "name": "Bebidas", "position": 4 }
+  ],
+  "dishes": [
+    { "id": 1, "category_id": 1, "name": "Croquetas caseras", "description": "De jamón ibérico, 6 unidades.", "price": 8.5, "photo_url": null, "tags": ["Casero"], "available": true, "position": 1 },
+    { "id": 2, "category_id": 1, "name": "Ensalada de temporada", "description": "Hojas verdes, tomate, aguacate y vinagreta de cítricos.", "price": 9, "photo_url": null, "tags": ["Vegetariano"], "available": true, "position": 2 },
+    { "id": 3, "category_id": 2, "name": "Arroz del día", "description": "Pregunta al personal por la receta de hoy. Mínimo 2 personas.", "price": 16, "photo_url": null, "tags": [], "available": true, "position": 1 },
+    { "id": 4, "category_id": 2, "name": "Tacos de cochinita", "description": "Tres tacos con cebolla morada y salsa habanera.", "price": 12.5, "photo_url": null, "tags": ["Picante"], "available": true, "position": 2 },
+    { "id": 5, "category_id": 3, "name": "Tarta de queso", "description": "Horneada, cremosa por dentro.", "price": 6, "photo_url": null, "tags": ["Casero"], "available": true, "position": 1 },
+    { "id": 6, "category_id": 4, "name": "Limonada de la casa", "description": "Con hierbabuena.", "price": 3.5, "photo_url": null, "tags": ["Sin alcohol"], "available": false, "position": 1 }
+  ]
+}

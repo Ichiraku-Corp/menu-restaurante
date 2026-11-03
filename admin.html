@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Panel del menú</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg:#f6f4f1; --surface:#fff; --text:#1f1a17; --muted:#6b625b; --line:#e5ded4;
+    --accent:#b5462b; --ok:#2f7d4f; --danger:#b3261e; --chip:#f0ebe3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151210; --surface:#1f1a17; --text:#f4eee7; --muted:#b0a69c; --line:#332b26;
+      --accent:#e9805f; --ok:#5fbf86; --danger:#ef7a72; --chip:#2a2420; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 16px; }
+  header.top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size: 22px; margin: 8px 0; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; margin:16px 0; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input, select, textarea { width:100%; font:inherit; color:var(--text); background:var(--bg);
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  textarea { min-height: 70px; resize: vertical; }
+  input[type=checkbox] { width:auto; }
+  button, .btn { font:inherit; border:1px solid var(--line); background:var(--chip); color:var(--text);
+    border-radius:8px; padding:7px 12px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--danger); }
+  button:disabled { opacity:.6; cursor:wait; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grow { flex:1; min-width:0; }
+  .muted { color:var(--muted); font-size:13px; }
+  .hidden { display:none !important; }
+  .cat-row { display:flex; gap:8px; align-items:center; padding:6px 0; }
+  .cat-row input.pos { width:64px; }
+  .dish-row { display:flex; gap:12px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
+  .dish-row:first-of-type { border-top:0; }
+  .thumb { width:52px; height:52px; border-radius:8px; object-fit:cover; background:var(--chip); flex:none; }
+  .dish-row .name { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dish-row input.price { width:84px; text-align:right; padding:8px 6px; }
+  .dish-row .switch { white-space:nowrap; }
+  @media (max-width: 480px) {
+    .dish-row { gap:8px; }
+    .dish-row .thumb { width:40px; height:40px; }
+    .dish-row button.edit { padding:7px 9px; }
+  }
+  .switch { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); margin:0; }
+  .cat-title { margin:20px 0 4px; font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  dialog { border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--text);
+    width:min(560px, calc(100vw - 32px)); padding:20px; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .preview { width:120px; height:120px; border-radius:12px; object-fit:cover; background:var(--chip); }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--text); color:var(--bg);
+    padding:10px 16px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+  #qr svg { width: 220px; height: 220px; background:#fff; padding:8px; border-radius:8px; }
+</style>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Panel del menú</h1>
+    <div class="row">
+      <a class="btn" href="./" target="_blank" rel="noopener">Ver menú ↗</a>
+      <button id="logout" class="hidden">Salir</button>
+    </div>
+  </header>
+
+  <div id="noconfig" class="card hidden">
+    <h2>Falta conectar Supabase</h2>
+    <p>Edita <code>config.js</code> con la URL y la <em>anon key</em> de tu proyecto Supabase y ejecuta
+    <code>supabase/schema.sql</code>. Mientras tanto el menú público muestra los datos de demo de <code>data/menu.json</code>.</p>
+  </div>
+
+  <form id="login" class="card hidden" style="max-width:380px">
+    <h2>Entrar</h2>
+    <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+    <label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required>
+    <p><button class="primary" type="submit">Entrar</button></p>
+    <p id="loginErr" class="muted"></p>
+  </form>
+
+  <div id="app" class="hidden">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">Platos</h2>
+        <button class="primary" id="newDish">+ Nuevo plato</button>
+      </div>
+      <p class="muted">Cambia el precio directamente en la lista. Desmarca “Disponible” para mostrarlo como agotado.</p>
+      <div id="dishes"></div>
+    </div>
+
+    <div class="card">
+      <h2>Categorías</h2>
+      <p class="muted">El número define el orden en el menú.</p>
+      <div id="cats"></div>
+      <form id="newCat" class="row" style="margin-top:10px">
+        <input class="grow" id="newCatName" placeholder="Nueva categoría (p. ej. Vinos)" required>
+        <button type="submit">Añadir</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Código QR</h2>
+      <label for="qrUrl">URL del menú</label>
+      <input id="qrUrl">
+      <div class="row" style="margin-top:12px; align-items:flex-start">
+        <div id="qr"></div>
+        <div>
+          <p><button id="qrPng">Descargar PNG</button></p>
+          <p><button id="qrSvg">Descargar SVG (para imprenta)</button></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form id="dishForm" method="dialog">
+    <h2 id="dlgTitle">Plato</h2>
+    <div class="row" style="align-items:flex-start">
+      <img id="photoPreview" class="preview" alt="">
+      <div class="grow">
+        <label for="photo">Foto (se comprime automáticamente)</label>
+        <input id="photo" type="file" accept="image/*">
+        <p><button type="button" id="removePhoto" class="danger">Quitar foto</button></p>
+      </div>
+    </div>
+    <label for="fCat">Categoría</label><select id="fCat" required></select>
+    <label for="fName">Nombre</label><input id="fName" required maxlength="120">
+    <label for="fDesc">Descripción</label><textarea id="fDesc" maxlength="500"></textarea>
+    <div class="row">
+      <div class="grow"><label for="fPrice">Precio</label><input id="fPrice" type="number" step="0.01" min="0" required></div>
+      <div class="grow"><label for="fPos">Orden</label><input id="fPos" type="number" step="1" value="0"></div>
+    </div>
+    <label for="fTags">Etiquetas (separadas por comas)</label><input id="fTags" placeholder="Vegetariano, Picante">
+    <label class="switch" style="margin-top:12px"><input id="fAvail" type="checkbox" checked> Disponible</label>
+    <div class="row" style="justify-content:space-between; margin-top:18px">
+      <button type="button" id="deleteDish" class="danger">Eliminar</button>
+      <div class="row">
+        <button type="button" id="cancel">Cancelar</button>
+        <button type="submit" class="primary" id="save">Guardar</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var C = window.MENU_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var BUCKET = C.PHOTO_BUCKET || "dishes";
+  var state = { cats: [], dishes: [], editing: null, photoBlob: null, removePhoto: false };
+
+  function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
+  function fail(err) { console.error(err); toast("Error: " + (err && err.message || err)); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+  function show(id, on) { $(id).classList.toggle("hidden", !on); }
+
+  setupQr();
+  if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) { show("noconfig", true); return; }
+  var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+
+  // --- Auth ---------------------------------------------------------------
+  sb.auth.onAuthStateChange(function (_e, session) {
+    show("login", !session); show("app", !!session); show("logout", !!session);
+    if (session) refresh();
+  });
+  $("login").addEventListener("submit", function (e) {
+    e.preventDefault(); $("loginErr").textContent = "";
+    sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value })
+      .then(function (r) { if (r.error) $("loginErr").textContent = "No se pudo entrar: " + r.error.message; });
+  });
+  $("logout").addEventListener("click", function () { sb.auth.signOut(); });
+
+  // --- Data ---------------------------------------------------------------
+  function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
+
+  function refresh() {
+    return Promise.all([
+      q(sb.from("categories").select("*").order("position")),
+      q(sb.from("dishes").select("*").order("position"))
+    ]).then(function (r) { state.cats = r[0]; state.dishes = r[1]; renderCats(); renderDishes(); }).catch(fail);
+  }
+
+  function renderCats() {
+    $("cats").innerHTML = state.cats.map(function (c) {
+      return '<div class="cat-row" data-id="' + c.id + '">' +
+        '<input class="pos" type="number" value="' + c.position + '" aria-label="Orden">' +
+        '<input class="grow name" value="' + esc(c.name) + '" aria-label="Nombre">' +
+        '<button class="danger del" type="button">Eliminar</button></div>';
+    }).join("") || '<p class="muted">Aún no hay categorías.</p>';
+  }
+
+  $("cats").addEventListener("change", function (e) {
+    var row = e.target.closest(".cat-row"); if (!row) return;
+    var patch = e.target.classList.contains("pos") ? { position: parseInt(e.target.value, 10) || 0 }
+                                                    : { name: e.target.value.trim() };
+    if (patch.name === "") return toast("El nombre no puede estar vacío");
+    q(sb.from("categories").update(patch).eq("id", row.dataset.id)).then(function () { toast("Guardado"); return refresh(); }).catch(fail);
+  });
+  $("cats").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("del")) return;
+    var id = Number(e.target.closest(".cat-row").dataset.id);
+    var n = state.dishes.filter(function (d) { return d.category_id === id; }).length;
+    if (!confirm(n ? "Se eliminará la categoría y sus " + n + " platos. ¿Seguro?" : "¿Eliminar categoría?")) return;
+    q(sb.from("categories").delete().eq("id", id)).then(refresh).catch(fail);
+  });
+  $("newCat").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var max = state.cats.reduce(function (m, c) { return Math.max(m, c.position); }, 0);
+    q(sb.from("categories").insert({ name: $("newCatName").value.trim(), position: max + 1 }))
+      .then(function () { $("newCatName").value = ""; return refresh(); }).catch(fail);
+  });
+
+  function renderDishes() {
+    var html = "";
+    state.cats.forEach(function (c) {
+      var items = state.dishes.filter(function (d) { return d.category_id === c.id; });
+      html += '<div class="cat-title">' + esc(c.name) + "</div>";
+      if (!items.length) html += '<p class="muted">Sin platos.</p>';
+      items.forEach(function (d) {
+        html += '<div class="dish-row" data-id="' + d.id + '">' +
+          (d.photo_url ? '<img class="thumb" src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<div class="thumb"></div>') +
+          '<div class="grow"><div class="name">' + esc(d.name) + "</div>" +
+          '<label class="switch"><input type="checkbox" class="avail"' + (d.available ? " checked" : "") + "> Disponible</label></div>" +
+          '<input class="price" type="number" step="0.01" min="0" value="' + Number(d.price).toFixed(2) + '" aria-label="Precio">' +
+          '<button type="button" class="edit">Editar</button></div>';
+      });
+    });
+    $("dishes").innerHTML = html || '<p class="muted">Crea primero una categoría.</p>';
+  }
+
+  function dishById(id) { return state.dishes.find(function (d) { return d.id === Number(id); }); }
+
+  $("dishes").addEventListener("change", function (e) {
+    var row = e.target.closest(".dish-row"); if (!row) return;
+    var d = dishById(row.dataset.id), patch;
+    if (e.target.classList.contains("price")) {
+      var p = Math.round(parseFloat(e.target.value) * 100) / 100;
+      if (!(p >= 0)) return toast("Precio no válido");
+      patch = { price: p };
+    } else if (e.target.classList.contains("avail")) {
+      patch = { available: e.target.checked };
+    } else return;
+    q(sb.from("dishes").update(patch).eq("id", d.id)).then(function () { Object.assign(d, patch); toast("Guardado"); }).catch(fail);
+  });
+  $("dishes").addEventListener("click", function (e) {
+    if (e.target.classList.contains("edit")) openDish(dishById(e.target.closest(".dish-row").dataset.id));
+  });
+
+  // --- Dish dialog --------------------------------------------------------
+  $("newDish").addEventListener("click", function () {
+    if (!state.cats.length) return toast("Crea primero una categoría");
+    openDish(null);
+  });
+
+  function openDish(d) {
+    state.editing = d; state.photoBlob = null; state.removePhoto = false;
+    $("dlgTitle").textContent = d ? "Editar plato" : "Nuevo plato";
+    $("fCat").innerHTML = state.cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("");
+    $("fCat").value = d ? d.category_id : state.cats[0].id;
+    $("fName").value = d ? d.name : "";
+    $("fDesc").value = d ? d.description : "";
+    $("fPrice").value = d ? Number(d.price).toFixed(2) : "";
+    $("fPos").value = d ? d.position : state.dishes.length + 1;
+    $("fTags").value = d ? (d.tags || []).join(", ") : "";
+    $("fAvail").checked = d ? d.available : true;
+    $("photo").value = "";
+    setPreview(d && d.photo_url);
+    show("deleteDish", !!d);
+    $("dlg").showModal();
+  }
+  function setPreview(src) { $("photoPreview").src = src || "data:image/gif;base64,R0lGODlhAQABAAAAACw="; }
+
+  $("cancel").addEventListener("click", function () { $("dlg").close(); });
+  $("photo").addEventListener("change", function () {
+    var f = $("photo").files[0]; if (!f) return;
+    compress(f).then(function (blob) {
+      state.photoBlob = blob; state.removePhoto = false; setPreview(URL.createObjectURL(blob));
+      toast("Foto lista (" + Math.round(blob.size / 1024) + " KB)");
+    }).catch(fail);
+  });
+  $("removePhoto").addEventListener("click", function () {
+    state.photoBlob = null; state.removePhoto = true; $("photo").value = ""; setPreview(null);
+  });
+
+  // Reduce la foto a máx. 900 px y WebP/JPEG ~80 % para que el menú vuele en datos móviles.
+  function compress(file) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var max = 900, s = Math.min(1, max / Math.max(img.width, img.height));
+        var cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (b) {
+          if (b && b.type === "image/webp") return resolve(b);
+          cv.toBlob(function (j) { j ? resolve(j) : reject(new Error("No se pudo procesar la imagen")); }, "image/jpeg", 0.8);
+        }, "image/webp", 0.8);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("Imagen no válida")); };
+      img.src = url;
+    });
+  }
+
+  function storagePath(publicUrl) {
+    var marker = "/storage/v1/object/public/" + BUCKET + "/";
+    var i = (publicUrl || "").indexOf(marker);
+    return i === -1 ? null : decodeURIComponent(publicUrl.slice(i + marker.length));
+  }
+
+  function uploadPhoto(blob) {
+    var ext = blob.type === "image/webp" ? "webp" : "jpg";
+    var path = Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
+    return sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: "31536000", upsert: false })
+      .then(function (r) { if (r.error) throw r.error; return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; });
+  }
+
+  $("dishForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var d = state.editing, oldUrl = d && d.photo_url;
+    var price = Math.round(parseFloat($("fPrice").value) * 100) / 100;
+    if (!(price >= 0)) return toast("Precio no válido");
+    var row = {
+      category_id: Number($("fCat").value),
+      name: $("fName").value.trim(),
+      description: $("fDesc").value.trim(),
+      price: price,
+      position: parseInt($("fPos").value, 10) || 0,
+      tags: $("fTags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean),
+      available: $("fAvail").checked
+    };
+    $("save").disabled = true;
+    var photoStep = state.photoBlob ? uploadPhoto(state.photoBlob).then(function (u) { row.photo_url = u; })
+                  : Promise.resolve(state.removePhoto ? (row.photo_url = null) : null);
+    photoStep.then(function () {
+      return q(d ? sb.from("dishes").update(row).eq("id", d.id) : sb.from("dishes").insert(row));
+    }).then(function () {
+      // Borra la foto anterior del almacenamiento si se reemplazó o se quitó.
+      if (oldUrl && "photo_url" in row && row.photo_url !== oldUrl) {
+        var p = storagePath(oldUrl); if (p) sb.storage.from(BUCKET).remove([p]);
+      }
+      $("dlg").close(); toast("Guardado"); return refresh();
+    }).catch(fail).then(function () { $("save").disabled = false; });
+  });
+
+  $("deleteDish").addEventListener("click", function () {
+    var d = state.editing; if (!d || !confirm("¿Eliminar “" + d.name + "”?")) return;
+    q(sb.from("dishes").delete().eq("id", d.id)).then(function () {
+      var p = storagePath(d.photo_url); if (p) sb.storage.from(BUCKET).remove([p]);
+      $("dlg").close(); toast("Eliminado"); return refresh();
+    }).catch(fail);
+  });
+
+  // --- QR -----------------------------------------------------------------
+  function setupQr() {
+    var input = $("qrUrl");
+    input.value = new URL("./", location.href).href;
+    function draw() {
+      if (!window.qrcode) { $("qr").textContent = "No se pudo cargar el generador de QR."; return; }
+      var qr = window.qrcode(0, "M"); qr.addData(input.value.trim() || location.origin); qr.make();
+      $("qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+    }
+    input.addEventListener("input", draw); draw();
+    function download(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; a.click(); }
+    $("qrSvg").addEventListener("click", function () {
+      var svg = $("qr").innerHTML;
+      download(URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })), "menu-qr.svg");
+    });
+    $("qrPng").addEventListener("click", function () {
+      var img = new Image(), size = 1024;
+      img.onload = function () {
+        var cv = document.createElement("canvas"); cv.width = cv.height = size;
+        var ctx = cv.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size); download(cv.toDataURL("image/png"), "menu-qr.png");
+      };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent($("qr").innerHTML);
+    });
+  }
+})();
+</script>
+</body>
+</html>

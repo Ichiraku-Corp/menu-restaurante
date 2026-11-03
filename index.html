@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Menú</title>
+<meta name="description" content="Menú digital">
+<meta name="theme-color" content="#1f1a17">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #faf7f2; --surface: #ffffff; --text: #1f1a17; --muted: #6b625b;
+    --accent: #b5462b; --line: #ebe4da; --chip: #f3ece2; --off: #a39a92;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151210; --surface: #1f1a17; --text: #f4eee7; --muted: #b0a69c;
+      --accent: #e9805f; --line: #2e2723; --chip: #2a2420; --off: #776d65; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  header { padding: 28px 16px 12px; max-width: 720px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: -0.01em; }
+  .tagline { margin: 4px 0 0; color: var(--muted); }
+  nav { position: sticky; top: 0; z-index: 5; background: var(--bg);
+    border-bottom: 1px solid var(--line); }
+  nav ul { display: flex; gap: 8px; overflow-x: auto; list-style: none;
+    margin: 0 auto; padding: 10px 16px; max-width: 720px; scrollbar-width: none; }
+  nav ul::-webkit-scrollbar { display: none; }
+  nav a { display: block; white-space: nowrap; padding: 6px 14px; border-radius: 999px;
+    background: var(--chip); color: var(--text); text-decoration: none; font-size: 14px; }
+  nav a.active { background: var(--accent); color: #fff; }
+  main { max-width: 720px; margin: 0 auto; padding: 0 16px 48px; }
+  section h2 { font-size: 20px; margin: 28px 0 8px; }
+  .dish { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .dish:last-child { border-bottom: 0; }
+  .dish .info { flex: 1; min-width: 0; }
+  .dish h3 { margin: 0; font-size: 17px; font-weight: 600; }
+  .dish p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .price { font-weight: 600; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .photo { width: 96px; height: 96px; flex: none; border-radius: 12px; object-fit: cover;
+    background: var(--chip); }
+  .dish.off h3, .dish.off .price { color: var(--off); }
+  .dish.off .photo { filter: grayscale(1); opacity: .6; }
+  .soldout { font-size: 12px; font-weight: 600; color: var(--off); text-transform: uppercase; letter-spacing: .04em; }
+  .state { padding: 48px 0; text-align: center; color: var(--muted); }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<header>
+  <h1 id="name">Menú</h1>
+  <p class="tagline" id="tagline"></p>
+</header>
+<nav aria-label="Categorías"><ul id="nav"></ul></nav>
+<main id="menu"><div class="state">Cargando menú…</div></main>
+
+<script>
+(function () {
+  "use strict";
+  var C = window.MENU_CONFIG || {};
+  var CACHE_KEY = "menu-cache-v1";
+  var money = new Intl.NumberFormat(C.LOCALE || "es-ES", { style: "currency", currency: C.CURRENCY || "EUR" });
+
+  document.getElementById("name").textContent = C.RESTAURANT_NAME || "Menú";
+  document.getElementById("tagline").textContent = C.TAGLINE || "";
+  document.title = (C.RESTAURANT_NAME || "Menú") + " · Menú";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+
+  function render(data) {
+    var cats = (data.categories || []).slice().sort(function (a, b) { return a.position - b.position; });
+    var byCat = {};
+    (data.dishes || []).forEach(function (d) { (byCat[d.category_id] = byCat[d.category_id] || []).push(d); });
+    var navHtml = "", html = "";
+    cats.forEach(function (c) {
+      var items = (byCat[c.id] || []).sort(function (a, b) {
+        return (b.available - a.available) || (a.position - b.position);
+      });
+      if (!items.length) return;
+      var sid = "cat-" + c.id;
+      navHtml += '<li><a href="#' + sid + '">' + esc(c.name) + "</a></li>";
+      html += '<section id="' + sid + '"><h2>' + esc(c.name) + "</h2>";
+      items.forEach(function (d) {
+        var photo = safeUrl(d.photo_url);
+        html += '<article class="dish' + (d.available ? "" : " off") + '"><div class="info">' +
+          "<h3>" + esc(d.name) + "</h3>" +
+          (d.description ? "<p>" + esc(d.description) + "</p>" : "") +
+          ((d.tags && d.tags.length) ? '<div class="tags">' + d.tags.map(function (t) {
+            return '<span class="tag">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
+          '<div class="price">' + money.format(Number(d.price) || 0) +
+          (d.available ? "" : ' <span class="soldout">· Agotado</span>') + "</div>" +
+          "</div>" +
+          (photo ? '<img class="photo" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async" width="96" height="96">' : "") +
+          "</article>";
+      });
+      html += "</section>";
+    });
+    document.getElementById("nav").innerHTML = navHtml;
+    document.getElementById("menu").innerHTML = html || '<div class="state">El menú aún está vacío.</div>';
+    watchSections();
+  }
+
+  var observer;
+  function watchSections() {
+    if (!("IntersectionObserver" in window)) return;
+    if (observer) observer.disconnect();
+    var links = {};
+    document.querySelectorAll("nav a").forEach(function (a) { links[a.getAttribute("href").slice(1)] = a; });
+    observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.toggle("active", k === e.target.id); });
+        var a = links[e.target.id];
+        if (a) a.parentNode.parentNode.scrollTo({ left: a.offsetLeft - 16, behavior: "smooth" });
+      });
+    }, { rootMargin: "-60px 0px -70% 0px" });
+    document.querySelectorAll("main section").forEach(function (s) { observer.observe(s); });
+  }
+
+  function fetchJson(url, headers) {
+    return fetch(url, { headers: headers || {}, cache: "no-cache" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  function load() {
+    if (!C.SUPABASE_URL) return fetchJson("data/menu.json");
+    var base = C.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/";
+    var h = { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY };
+    return Promise.all([
+      fetchJson(base + "categories?select=id,name,position&order=position", h),
+      fetchJson(base + "dishes?select=id,category_id,name,description,price,photo_url,tags,available,position&order=position", h)
+    ]).then(function (r) { return { categories: r[0], dishes: r[1] }; });
+  }
+
+  // 1) Pinta al instante lo último que vio este móvil; 2) actualiza en segundo plano.
+  var cached = null;
+  try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch (e) {}
+  if (cached) render(cached);
+
+  load().then(function (data) {
+    var fresh = JSON.stringify(data);
+    if (!cached || JSON.stringify(cached) !== fresh) render(data);
+    try { localStorage.setItem(CACHE_KEY, fresh); } catch (e) {}
+  }).catch(function () {
+    if (!cached) document.getElementById("menu").innerHTML =
+      '<div class="state">No se pudo cargar el menú. Revisa tu conexión e inténtalo de nuevo.</div>';
+  });
+})();
+</script>
+</body>
+</html>
