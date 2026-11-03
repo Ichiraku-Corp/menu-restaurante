@@ -133,6 +133,10 @@
   .line .stepper button { width: 34px; height: 36px; }
   .sum { display: flex; justify-content: space-between; font-size: 20px; font-weight: 900; padding: 14px 0 4px; border-top: 2px solid var(--pink); margin-top: 4px; }
   .fine { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .sub-row { display: flex; justify-content: space-between; font-size: 15px; color: var(--muted); font-weight: 600; padding: 4px 0;
+    font-variant-numeric: tabular-nums; }
+  #osSubRow { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+  .waiter .w-sub { font-size: 17px; font-weight: 600; color: var(--muted); }
   .mesa { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; font-weight: 700; }
   .mesa input { width: 90px; font: inherit; font-size: 18px; font-weight: 800; text-align: center; padding: 8px; border-radius: 12px;
     border: 2px solid var(--line); color: var(--text); }
@@ -189,6 +193,8 @@
     <h2 id="osTitle">Mi pedido</h2>
     <p class="fine">Revisa tu pedido y enséñaselo al mesonero o pídelo en caja.</p>
     <div id="osLines"></div>
+    <div class="sub-row" id="osSubRow"><span>Subtotal</span><span id="osSub"></span></div>
+    <div class="sub-row" id="osSvcRow"><span id="osSvcLabel">Servicio</span><span id="osSvc"></span></div>
     <div class="sum"><span>Total</span><span id="osTotal"></span></div>
   </div>
   <div class="foot">
@@ -362,7 +368,13 @@
     if (order.length !== before) store(ORDER_KEY, order.length ? order : null);
   }
   function lineTotal(l) { var d = DISHES[l.id]; return d ? (unitPrice(d, l.v) || 0) * l.q : 0; }
-  function orderTotal() { return order.reduce(function (s, l) { return s + lineTotal(l); }, 0); }
+  function orderSubtotal() { return order.reduce(function (s, l) { return s + lineTotal(l); }, 0); }
+  // Cargo por servicio del local (SERVICE_PERCENT en config.js; 0 = sin cargo).
+  var SVC = Math.max(0, Number(C.SERVICE_PERCENT) || 0);
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function orderService() { return round2(orderSubtotal() * SVC / 100); }
+  function orderTotal() { return round2(orderSubtotal() + orderService()); }
+  var svcLabel = "Servicio (" + SVC + "%)";
   function orderCount() { return order.reduce(function (s, l) { return s + l.q; }, 0); }
   function addLine(l) {
     var k = lineKey(l);
@@ -399,6 +411,10 @@
         '</span><button type="button" data-inc="' + i + '" aria-label="Añadir uno">+</button></div>' +
         '<div class="amt">' + esc(fmt(lineTotal(l))) + "</div></div>";
     }).join("");
+    $("osSubRow").hidden = $("osSvcRow").hidden = !SVC;
+    $("osSub").textContent = fmt(orderSubtotal());
+    $("osSvcLabel").textContent = svcLabel;
+    $("osSvc").textContent = fmt(orderService());
     $("osTotal").textContent = fmt(orderTotal());
   }
   $("osLines").addEventListener("click", function (e) {
@@ -427,7 +443,8 @@
     return "Pedido" + (m ? " · Mesa " + m : "") + "\n\n" + order.map(function (l) {
       var d = DISHES[l.id] || { name: "?" };
       return l.q + " × " + d.name + (lineDesc(l) ? " (" + lineDesc(l) + ")" : "") + " — " + fmt(lineTotal(l));
-    }).join("\n") + "\n\nTotal: " + fmt(orderTotal());
+    }).join("\n") + "\n\n" + (SVC ? "Subtotal: " + fmt(orderSubtotal()) + "\n" + svcLabel + ": " + fmt(orderService()) + "\n" : "") +
+      "Total: " + fmt(orderTotal());
   }
   $("osWa").addEventListener("click", function () {
     window.open("https://wa.me/" + WA + "?text=" + encodeURIComponent(orderText()), "_blank", "noopener");
@@ -445,7 +462,8 @@
       return '<li><span class="q">' + l.q + '×</span><span>' + esc(d.name) +
         (lineDesc(l) ? "<small>" + esc(lineDesc(l)) + "</small>" : "") + "</span></li>";
     }).join("");
-    $("wTotal").textContent = "Total " + fmt(orderTotal());
+    $("wTotal").innerHTML = (SVC ? '<div class="w-sub">Subtotal ' + esc(fmt(orderSubtotal())) + "</div>" +
+      '<div class="w-sub">' + esc(svcLabel) + " " + esc(fmt(orderService())) + "</div>" : "") + "Total " + esc(fmt(orderTotal()));
     closeSheet($("orderSheet"));
     $("waiter").classList.add("show"); $("waiter").scrollTop = 0;
     document.body.style.overflow = "hidden";

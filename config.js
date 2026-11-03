@@ -18,4 +18,6 @@ window.MENU_CONFIG = {
   WHATSAPP_NUMBER: "",
   // Foto grande en la ficha del plato. Actívalo (true) cuando las fotos sean de buena calidad.
   BIG_PHOTOS: false,
+  // Cargo por servicio que se suma al total del pedido (en %). 0 = sin cargo.
+  SERVICE_PERCENT: 10,
 };
