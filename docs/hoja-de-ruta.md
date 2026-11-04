@@ -47,7 +47,23 @@ personal y la aprobación del dueño en lo que toca dinero.
   falta saber su sistema operativo. Puente entre el sistema en internet y los aparatos de
   la red local: envía trabajos ESC/POS a las 3 impresoras (puerto 9100) y recibe las marcaciones del
   Hikvision.
-- **Sistema de facturación propio:** sustituirá al sistema de ventas actual, con facturación digital
-  a través del proveedor autorizado y **impresión automática por red**: comandas en cocina, precuentas en el salón de arriba y
-  facturas o recibos en caja.
+- **Sistema de punto de venta y facturación propio** (sustituye al sistema de ventas actual):
+  - **Usuarios:** meseras (teléfono o tablet), caja (vinculada a las impresoras), cocina (Nex) y
+    dueño/admin.
+  - **Seguridad:** solo dispositivos aprobados por el dueño (bloqueables), PIN personal por mesera,
+    horario y, si es posible, solo desde la red del local; PIN de encargado para anular, descontar o
+    dar cortesías; registro de auditoría; las impresoras solo reciben trabajos del puente del local.
+  - **Salón:** áreas (planta baja, salón de arriba…), mapa de mesas con estados, mover y unir mesas.
+  - **Comandas:** tamaños, sabores, notas, tiempos; impresión automática en cocina; agotados en tiempo
+    real.
+  - **Cuentas:** dividir por platos, a partes iguales o por persona; mover platos; precuenta impresa
+    arriba.
+  - **Cobro:** métodos y pagos mixtos ($ y Bs con tasa del día), vuelto, 10 % de servicio, IGTF si
+    aplica; registro y validación de pagos (referencias; verificación bancaria automática si el banco
+    lo permite).
+  - **Factura digital** con el proveedor autorizado; recibos en caja.
+  - **Cierre diario:** arqueo por método, diferencias, fondo de caja, reporte; alimenta ventas,
+    inventario y utilidades.
+  - **Clientes:** registro con consentimiento, historial, fidelidad y captación desde el QR de la carta.
+  - **Reportes:** por mesera, hora, plato y tiempos de cocina.
 - **Al final:** juego de cartas con los platos (borrador en `docs/borrador-cartas.html`).
