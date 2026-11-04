@@ -45,6 +45,11 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
 - **Ventas**: ventas diarias por método de pago y por plato (vía n8n o a mano), comisiones del
   banco, reparto del 10 % de servicio (85 % local / 15 % personal) y resultado del mes.
   Ver [`docs/n8n-asistencia-ventas.md`](docs/n8n-asistencia-ventas.md).
+- **Inventario**: stock y mínimo de cada insumo, compras, mermas (con quién las reporta), conteos
+  físicos (detectan faltantes no registrados), lista de compras y valor del inventario. **Las ventas
+  descuentan solas** del stock los insumos de las recetas de lo vendido (con su merma).
+- **Estado de resultados**: ventas − costo de lo vendido = **utilidad bruta**; − nómina, gastos,
+  comisiones, mermas y faltantes + servicio del local = **utilidad neta**. Por mes y por día.
 
 **Activarla:** en Supabase → SQL Editor ejecuta `supabase/gestion.sql` (y de nuevo cada vez que se actualice; no borra datos). Crea las
 tablas y añade como autorizadas las cuentas que ya existen en Authentication → Users.

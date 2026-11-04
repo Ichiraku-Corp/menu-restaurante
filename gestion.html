@@ -121,6 +121,7 @@
       <button data-tab="asistencia">Asistencia</button>
       <button data-tab="ventas">Ventas</button>
       <button data-tab="gastos">Gastos</button>
+      <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
       <button data-tab="recetas">Recetas</button>
       <button data-tab="areas">Áreas</button>
@@ -167,7 +168,7 @@
         <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button class="primary" id="addSale">+ Día</button></div>
       </div>
       <div class="kpis" style="margin-top:12px" id="salesKpis"></div>
-      <div class="card"><h2>Resultado del mes</h2><div id="salesResult"></div></div>
+      <div class="card"><h2>Estado de resultados del mes</h2><div id="salesResult"></div></div>
       <div class="card"><h2>Platos más vendidos</h2><div class="scroll" id="salesTop"></div></div>
       <div class="card"><h2>Ventas por día</h2><div class="scroll" id="salesDays"></div></div>
       <div class="card">
@@ -193,6 +194,21 @@
         <h3>Fijos mensuales</h3><div class="scroll" id="expFixed"></div>
         <h3>Variables del mes</h3><div class="scroll" id="expVar"></div>
       </div>
+    </section>
+
+    <!-- Inventario -->
+    <section data-panel="inventario" hidden>
+      <div class="card hidden" id="invSetup"><p class="muted" style="margin:0">Para activar el <b>inventario</b>, vuelve a ejecutar <code>supabase/gestion.sql</code> en Supabase → SQL Editor.</p></div>
+      <div class="row between">
+        <p class="muted" style="margin:0">Stock de cada insumo. Las ventas descuentan solas lo que usan las recetas.</p>
+        <div class="row"><input type="month" id="invMonth" style="width:auto" aria-label="Mes"><button class="primary" id="addMov">+ Movimiento</button></div>
+      </div>
+      <div class="kpis" style="margin-top:12px" id="invKpis"></div>
+      <div class="card"><h2>Lista de compras</h2><p class="muted">Insumos por debajo de su mínimo. Se sugiere comprar hasta el doble del mínimo.</p><div class="scroll" id="invBuy"></div></div>
+      <div class="card"><h2>Stock</h2><input id="invSearch" type="search" placeholder="Buscar insumo…" style="margin:0 0 6px"><div class="scroll" id="invStock"></div>
+        <p class="help">Toca un insumo para registrar una compra, merma o conteo. El mínimo se edita en Insumos.</p></div>
+      <div class="card"><h2>Mermas y faltantes del mes</h2><div class="scroll" id="invLoss"></div></div>
+      <div class="card"><h2>Movimientos del mes</h2><div class="scroll" id="invMovs"></div></div>
     </section>
 
     <!-- Insumos -->
@@ -309,7 +325,7 @@
 
   var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [],
             pricing: false, suppliers: [], settings: { auto_apply_pct: 5 }, updates: [], history: [],
-            attendance: false, events: [], salesByMonth: {}, itemsByMonth: {} };
+            attendance: false, events: [], salesByMonth: {}, itemsByMonth: {}, inventory: false, movsByMonth: {} };
   function supName(i) {
     var x = i.supplier_id && S.suppliers.find(function (y) { return y.id === i.supplier_id; });
     return x ? x.name : (i.supplier || "");
@@ -353,18 +369,19 @@
       opt(sb.from("gestion_settings").select("*")),
       opt(sb.from("price_updates").select("*").order("created_at", { ascending: false }).limit(60)),
       opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15)),
-      opt(sb.from("attendance_events").select("id").limit(1))
+      opt(sb.from("attendance_events").select("id").limit(1)),
+      opt(sb.from("inventory_movements").select("id").limit(1))
     ]).then(function (r) {
       S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
-      S.attendance = r[11] !== null;
+      S.attendance = r[11] !== null; S.inventory = r[12] !== null;
       return loadPeriods();
     }).then(renderAll).catch(fail);
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
   function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); }
 
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
@@ -425,8 +442,8 @@
       '<div class="kpi"><span>Nómina</span><b>' + money(T.nom) + "</b></div>" +
       '<div class="kpi"><span>Gastos fijos</span><b>' + money(T.fix) + "</b></div>" +
       '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>" +
-      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), res = V.total + V.serviceLocal - V.fees - V.foodCost - total;
-        return '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + '</b></div><div class="kpi"><span>Resultado estimado</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>ver pestaña Ventas</span></div>"; })() : "");
+      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), LL = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 }, res = V.total + V.serviceLocal - V.fees - V.foodCost - total - LL.merma - LL.faltante;
+        return '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + '</b></div><div class="kpi"><span>Utilidad neta estimada</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>ver pestaña Ventas</span></div>"; })() : "");
     $("byArea").innerHTML = '<table class="tbl"><thead><tr><th>Área</th><th class="n hide-sm">Nómina</th><th class="n hide-sm">Fijos</th><th class="n hide-sm">Variables</th><th class="n">Total</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
       rows.map(function (r) {
         var t = r.nom + r.fix + r.vari, p = total ? t / total * 100 : 0;
@@ -601,9 +618,10 @@
         { k: "buy_qty", label: "Cantidad comprada", type: "number", step: "0.001", req: true },
         { k: "buy_unit", label: "Unidad", type: "select", options: [["kg", "kg"], ["g", "g"], ["l", "litros"], ["ml", "ml"], ["unidad", "unidades"]] },
         { k: "waste_pct", label: "Merma (%)", type: "number", step: "0.1", hint: "Ej.: 20 si de 1 kg se aprovechan 800 g." },
+        S.inventory ? { k: "min_qty", label: "Stock mínimo (en la unidad de compra)", type: "number", step: "0.001", hint: "Por debajo de esto entra en la lista de compras." } : null,
         S.pricing ? { k: "supplier_id", label: "Proveedor", type: "select", full: true, options: [["", "—"]].concat(S.suppliers.map(function (x) { return [String(x.id), x.name]; })) }
                   : { k: "supplier", label: "Proveedor", full: true }
-      ],
+      ].filter(Boolean),
       extra: '<p class="help" id="ingPreview"></p>',
       onInput: function () {
         var v = formValues(); if (!U[v.buy_unit]) return;
@@ -704,7 +722,7 @@
     var ap = attPeriod();
     // margen de un día a cada lado por la zona horaria
     var fromTs = new Date(ap.from + "T00:00:00-04:00").getTime() - 864e5, toTs = new Date(ap.to + "T23:59:59-04:00").getTime() + 864e5;
-    var months = [$("month").value || ymNow(), $("salesMonth").value || ymNow()].filter(function (m, i, a) { return a.indexOf(m) === i; });
+    var months = [$("month").value || ymNow(), $("salesMonth").value || ymNow(), $("invMonth").value || ymNow()].filter(function (m, i, a) { return a.indexOf(m) === i; });
     return Promise.all([
       pageAll(function () { return sb.from("attendance_events").select("*").gte("event_time", new Date(fromTs).toISOString()).lte("event_time", new Date(toTs).toISOString()).order("event_time"); })
     ].concat(months.map(function (m) {
@@ -712,7 +730,9 @@
       return Promise.all([
         pageAll(function () { return sb.from("daily_sales").select("*").gte("sale_date", b.from).lte("sale_date", b.to).order("sale_date", { ascending: false }); }),
         pageAll(function () { return sb.from("sales_items").select("*").gte("sale_date", b.from).lte("sale_date", b.to).order("id"); })
-      ]).then(function (r) { S.salesByMonth[m] = r[0]; S.itemsByMonth[m] = r[1]; });
+      ].concat(S.inventory ? [pageAll(function () {
+        return sb.from("inventory_movements").select("*").gte("created_at", new Date(b.from + "T00:00:00-04:00").toISOString()).lte("created_at", new Date(b.to + "T23:59:59-04:00").toISOString()).order("created_at", { ascending: false });
+      })] : [])).then(function (r) { S.salesByMonth[m] = r[0]; S.itemsByMonth[m] = r[1]; S.movsByMonth[m] = r[2] || []; });
     }))).then(function (r) { S.events = r[0]; });
   }
   function reloadPeriods() { loadPeriods().then(renderAll).catch(fail); }
@@ -823,7 +843,8 @@
   });
   $("attMonth").value = $("salesMonth").value = ymNow();
   $("attHalf").value = new Date().getDate() <= 15 ? "1" : "2";
-  ["attMonth", "attHalf", "salesMonth"].forEach(function (id) { $(id).addEventListener("change", reloadPeriods); });
+  $("invMonth").value = ymNow();
+  ["attMonth", "attHalf", "salesMonth", "invMonth"].forEach(function (id) { $(id).addEventListener("change", reloadPeriods); });
   $("month").removeEventListener("change", renderResumen); $("month").addEventListener("change", reloadPeriods);
 
   // ---------------------------------------------------------------- Ventas
@@ -843,13 +864,18 @@
       x.qty += num(it.qty); x.amount += num(it.amount);
     });
     Object.keys(dishes).forEach(function (k) {
-      var x = dishes[k], rc = x.dish_id ? (recipeCost(x.dish_id, x.variant) || (x.variant ? null : (function () {
-        var d = S.dishes.find(function (y) { return y.id === x.dish_id; }); return d ? recipeCost(d.id, variants(d)[0].label) : null; })())) : null;
-      if (rc && !rc.broken) { x.cost = rc.cost * x.qty; foodCost += x.cost; covered += x.amount; }
+      var x = dishes[k], uc = itemUnitCost(x.dish_id, x.variant);
+      if (uc != null) { x.cost = uc * x.qty; foodCost += x.cost; covered += x.amount; }
     });
     T.foodCost = foodCost; T.coverage = T.total ? covered / T.total * 100 : 0;
     T.top = Object.keys(dishes).map(function (k) { return dishes[k]; }).sort(function (a, b) { return b.qty - a.qty; });
     return T;
+  }
+  function itemUnitCost(dishId, variant) { // costo de insumos de 1 unidad vendida, o null si no hay receta
+    if (!dishId) return null;
+    var rc = recipeCost(dishId, variant);
+    if (!rc) { var d = S.dishes.find(function (y) { return y.id === dishId; }); if (d) { rc = recipeCost(d.id, ""); if (!rc) variants(d).some(function (v) { rc = recipeCost(d.id, v.label); return !!rc; }); } }
+    return rc && !rc.broken ? rc.cost : null;
   }
   function monthCosts(ym) {
     var nom = 0, fix = 0, vari = 0;
@@ -865,15 +891,25 @@
       '<div class="kpi"><span>Servicio 10 % (local)</span><b>' + money(T.serviceLocal) + '</b><span>personal ' + money(T.serviceStaff) + "</span></div>" +
       '<div class="kpi"><span>Comisiones banco (est.)</span><b>' + money(T.fees) + "</b></div>" +
       '<div class="kpi"><span>Tickets · promedio</span><b>' + T.tickets + "</b><span>" + (T.tickets ? money(T.total / T.tickets) + " por ticket" : "—") + "</span></div>";
-    var result = T.total + T.serviceLocal - T.fees - T.foodCost - C2.total;
+    var L = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 };
+    var gross = T.total - T.foodCost, opex = C2.nom + C2.fix + C2.vari + T.fees + L.merma + L.faltante, net = gross - opex + T.serviceLocal;
+    var staffPctV = num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15);
+    function line(label, v, cls, sub) { return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><td>" + label + (sub ? '<div class="muted">' + sub + "</div>" : "") + '</td><td class="n">' + v + "</td></tr>"; }
+    function pctOf(v) { return T.total ? " (" + pct(v / T.total * 100) + ")" : ""; }
     $("salesResult").innerHTML = T.days ? '<table class="tbl"><tbody>' +
-      "<tr><td>Ventas</td><td class=\"n\">" + money(T.total) + "</td></tr>" +
-      "<tr><td>+ Servicio para el local (" + (100 - num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15)) + " %)</td><td class=\"n\">" + money(T.serviceLocal) + "</td></tr>" +
-      "<tr><td>− Comisiones del banco (estimadas)</td><td class=\"n\">" + money(T.fees) + "</td></tr>" +
-      "<tr><td>− Costo de insumos (según recetas)<div class=\"muted\">Cubre el " + pct(T.coverage) + " de lo vendido; el resto no tiene receta cargada.</div></td><td class=\"n\">" + money(T.foodCost) + "</td></tr>" +
-      "<tr><td>− Nómina, gastos fijos y variables del mes</td><td class=\"n\">" + money(C2.total) + "</td></tr>" +
-      '<tr class="total"><td>Resultado</td><td class="n" style="color:' + (result >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(result) + "</td></tr></tbody></table>" +
-      '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no cuenta como ingreso del local.</p>"
+      line("<b>Ventas</b> (sin el 10 % de servicio)", "<b>" + money(T.total) + "</b>") +
+      line("− Costo de lo vendido (insumos según recetas)", money(T.foodCost), "", "Cubre el " + pct(T.coverage) + " de lo vendido; el resto no tiene receta cargada.") +
+      line("<b>Utilidad bruta</b>" + pctOf(gross), '<b style="color:' + (gross >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(gross) + "</b>", "total") +
+      line("− Nómina", money(C2.nom)) +
+      line("− Gastos fijos", money(C2.fix)) +
+      line("− Gastos variables del mes", money(C2.vari)) +
+      line("− Comisiones del banco (estimadas)", money(T.fees)) +
+      line("− Mermas registradas", money(L.merma)) +
+      line("− Faltantes en conteos", money(L.faltante), "", "Pérdidas que nadie registró") +
+      line("+ Servicio para el local (" + (100 - staffPctV) + " %)", money(T.serviceLocal)) +
+      line("<b>Utilidad neta</b>" + pctOf(net), '<b style="color:' + (net >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(net) + "</b>", "total") +
+      "</tbody></table>" +
+      '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no es ingreso del local. Los impuestos no están incluidos.</p>"
       : '<div class="empty">Sin ventas registradas en este mes. Llegarán desde n8n, o pulsa «+ Día» para cargarlas a mano.</div>';
     $("salesTop").innerHTML = T.top.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="n hide-sm">Costo est.</th><th class="n">Margen</th></tr></thead><tbody>' +
       T.top.slice(0, 15).map(function (x) {
@@ -882,10 +918,14 @@
           '</td><td class="n">' + (x.cost == null ? '<span class="pill">sin receta</span>' : pctPill(x.amount ? x.cost / x.amount * 100 : NaN)) + "</td></tr>";
       }).join("") + "</tbody></table>" : '<div class="empty">Sin detalle por plato todavía.</div>';
     var days = S.salesByMonth[ym] || [];
-    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Servicio</th><th class="n hide-sm">Tickets</th><th class="hide-sm">Origen</th></tr></thead><tbody>' +
+    var itemsM = S.itemsByMonth[ym] || [];
+    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Costo insumos</th><th class="n">Utilidad bruta</th><th class="n hide-sm">Tickets</th></tr></thead><tbody>' +
       days.map(function (d) {
-        return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + money(d.service_amount) +
-          '</td><td class="n hide-sm">' + num(d.tickets) + '</td><td class="hide-sm">' + esc(d.source) + "</td></tr>";
+        var its = itemsM.filter(function (i) { return i.sale_date === d.sale_date; }), fc = 0, cov = 0;
+        its.forEach(function (i) { var uc = itemUnitCost(i.dish_id, i.variant); if (uc != null) { fc += uc * num(i.qty); cov += num(i.amount); } });
+        var g = num(d.total) - fc, partial = its.length && cov < num(d.total) * 0.999;
+        return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + (its.length ? money(fc) : "—") +
+          '</td><td class="n">' + (its.length ? money(g) + (partial ? '<div class="muted">recetas incompletas</div>' : "") : '<span class="muted">sin detalle</span>') + '</td><td class="n hide-sm">' + num(d.tickets) + "</td></tr>";
       }).join("") + "</tbody></table>" : '<div class="empty">Sin días registrados.</div>';
     var st = S.settings;
     $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
@@ -919,6 +959,101 @@
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
   });
+
+  // ---------------------------------------------------------------- Inventario
+  var KIND = { compra: ["Compra", "ok"], merma: ["Merma", "bad"], consumo: ["Consumo por ventas", ""], conteo: ["Conteo", "warn"], ajuste: ["Ajuste", ""] };
+  function unitPrice1(i) { return num(i.buy_qty) > 0 ? num(i.buy_price) / num(i.buy_qty) : 0; } // Ref por unidad de compra
+  function qtyTxt(n, unit) { return nf3.format(Math.round(num(n) * 1000) / 1000) + " " + UNIT_LABEL[unit]; }
+  function lossStats(ym) {
+    var movs = S.movsByMonth[ym] || [], T = { merma: 0, faltante: 0, sobrante: 0, byIng: {}, byEmp: {} };
+    movs.forEach(function (m) {
+      var i = ingById(m.ingredient_id) || { name: "?" }, d = num(m.delta);
+      if (m.kind === "merma") { T.merma += num(m.cost); add(i.name, num(m.cost), "merma"); var e = S.employees.find(function (x) { return x.id === m.employee_id; }); T.byEmp[e ? e.name : "Sin indicar"] = (T.byEmp[e ? e.name : "Sin indicar"] || 0) + num(m.cost); }
+      if (m.kind === "conteo" && d < 0) { T.faltante += num(m.cost); add(i.name, num(m.cost), "faltante"); }
+      if (m.kind === "conteo" && d > 0) T.sobrante += num(m.cost);
+    });
+    function add(n, c, k) { var x = T.byIng[n] = T.byIng[n] || { merma: 0, faltante: 0 }; x[k] += c; }
+    return T;
+  }
+  function renderInventario() {
+    show("invSetup", !S.inventory);
+    if (!S.inventory) { ["invKpis", "invBuy", "invStock", "invLoss", "invMovs"].forEach(function (id) { $(id).innerHTML = ""; }); return; }
+    var ym = $("invMonth").value || ymNow(), L = lossStats(ym);
+    var value = S.ingredients.reduce(function (t, i) { return t + Math.max(0, num(i.stock_qty)) * unitPrice1(i); }, 0);
+    var low = S.ingredients.filter(function (i) { return num(i.min_qty) > 0 && num(i.stock_qty) < num(i.min_qty); });
+    $("invKpis").innerHTML =
+      '<div class="kpi main"><span>Valor del inventario</span><b>' + money(value) + "</b></div>" +
+      '<div class="kpi"><span>Bajo el mínimo</span><b>' + low.length + "</b><span>" + (low.length ? "ver lista de compras" : "todo en orden") + "</span></div>" +
+      '<div class="kpi"><span>Mermas del mes</span><b>' + money(L.merma) + "</b></div>" +
+      '<div class="kpi"><span>Faltantes en conteos</span><b>' + money(L.faltante) + "</b><span>pérdidas no registradas</span></div>";
+    var buyTotal = 0;
+    $("invBuy").innerHTML = low.length ? '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Hay</th><th class="n hide-sm">Mínimo</th><th class="n">Comprar</th><th class="n">Costo est.</th></tr></thead><tbody>' +
+      low.map(function (i) {
+        var need = Math.max(0, num(i.min_qty) * 2 - num(i.stock_qty)), c = need * unitPrice1(i); buyTotal += c;
+        return '<tr class="click" data-inv="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + esc(supName(i) || "") + '</div></td><td class="n">' + qtyTxt(i.stock_qty, i.buy_unit) +
+          '</td><td class="n hide-sm">' + qtyTxt(i.min_qty, i.buy_unit) + '</td><td class="n"><b>' + qtyTxt(need, i.buy_unit) + '</b></td><td class="n">' + money(c) + "</td></tr>";
+      }).join("") + '<tr class="total"><td>Total estimado</td><td></td><td class="hide-sm"></td><td></td><td class="n">' + money(buyTotal) + "</td></tr></tbody></table>"
+      : '<div class="empty">Nada por comprar. Define el stock mínimo de cada insumo en la pestaña Insumos.</div>';
+    var q = $("invSearch").value.trim().toLowerCase();
+    var list = S.ingredients.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
+    $("invStock").innerHTML = list.length ? '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Stock</th><th class="n hide-sm">Mínimo</th><th class="n hide-sm">Valor</th><th class="n">Estado</th></tr></thead><tbody>' +
+      list.map(function (i) {
+        var st = num(i.stock_qty), mn = num(i.min_qty);
+        var pill = st < 0 ? '<span class="pill bad">negativo</span>' : mn > 0 && st < mn ? '<span class="pill warn">comprar</span>' : mn > 0 ? '<span class="pill ok">ok</span>' : '<span class="pill">sin mínimo</span>';
+        return '<tr class="click" data-inv="' + i.id + '"><td><b>' + esc(i.name) + '</b></td><td class="n">' + qtyTxt(st, i.buy_unit) + '</td><td class="n hide-sm">' + (mn ? qtyTxt(mn, i.buy_unit) : "—") +
+          '</td><td class="n hide-sm">' + money(Math.max(0, st) * unitPrice1(i)) + '</td><td class="n">' + pill + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">' + (S.ingredients.length ? "Nada con esa búsqueda." : "Primero añade insumos en la pestaña Insumos.") + "</div>";
+    var ings = Object.keys(L.byIng).sort(function (a, b) { return (L.byIng[b].merma + L.byIng[b].faltante) - (L.byIng[a].merma + L.byIng[a].faltante); });
+    var emps = Object.keys(L.byEmp).sort(function (a, b) { return L.byEmp[b] - L.byEmp[a]; });
+    $("invLoss").innerHTML = ings.length ? '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Mermas</th><th class="n">Faltantes</th><th class="n">Total</th></tr></thead><tbody>' +
+      ings.map(function (n) { var x = L.byIng[n]; return "<tr><td>" + esc(n) + '</td><td class="n">' + money(x.merma) + '</td><td class="n">' + money(x.faltante) + '</td><td class="n"><b>' + money(x.merma + x.faltante) + "</b></td></tr>"; }).join("") +
+      "</tbody></table>" + (emps.length ? "<h3>Mermas reportadas por</h3>" + emps.map(function (n) { return '<div class="row between" style="padding:4px 0"><span>' + esc(n) + "</span><b>" + money(L.byEmp[n]) + "</b></div>"; }).join("") : "")
+      : '<div class="empty">Sin mermas ni faltantes este mes.</div>';
+    var movs = (S.movsByMonth[ym] || []).slice(0, 80);
+    $("invMovs").innerHTML = movs.length ? '<table class="tbl"><thead><tr><th>Fecha</th><th>Insumo</th><th>Tipo</th><th class="n">Cantidad</th><th class="n hide-sm">Valor</th></tr></thead><tbody>' +
+      movs.map(function (m) {
+        var i = ingById(m.ingredient_id) || { name: "?", buy_unit: m.unit }, k = KIND[m.kind] || [m.kind, ""], d = new Date(m.created_at), e = S.employees.find(function (x) { return x.id === m.employee_id; });
+        var amount = m.kind === "conteo" ? (num(m.delta) === 0 ? "sin diferencia" : (num(m.delta) > 0 ? "+" : "−") + qtyTxt(Math.abs(num(m.delta)), i.buy_unit)) : (num(m.delta) >= 0 ? "+" : "−") + qtyTxt(Math.abs(num(m.qty)), m.unit);
+        return "<tr><td>" + esc(d.toLocaleDateString("es", { day: "2-digit", month: "2-digit", timeZone: TZ })) + "</td><td>" + esc(i.name) + '<div class="muted">' + esc([m.reason, e ? e.name : "", m.source !== "manual" && m.kind !== "consumo" ? m.source : ""].filter(Boolean).join(" · ")) +
+          '</div></td><td><span class="pill ' + k[1] + '">' + k[0] + '</span></td><td class="n">' + esc(amount) + '</td><td class="n hide-sm">' + money(m.cost) + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Sin movimientos este mes.</div>';
+  }
+  $("invSearch").addEventListener("input", renderInventario);
+  function movForm(ing) {
+    if (!S.ingredients.length) return toast("Primero añade insumos en la pestaña Insumos");
+    var i0 = ing || S.ingredients[0];
+    openForm({ title: "Movimiento de inventario", values: { ingredient_id: String(i0.id), kind: "compra", unit: i0.buy_unit, qty: "" },
+      fields: [
+        { k: "ingredient_id", label: "Insumo", type: "select", full: true, options: S.ingredients.map(function (i) { return [String(i.id), i.name + " (hay " + qtyTxt(i.stock_qty, i.buy_unit) + ")"]; }) },
+        { k: "kind", label: "Tipo", type: "select", options: [["compra", "Compra (suma)"], ["merma", "Merma o pérdida (resta)"], ["conteo", "Conteo físico (fija la cantidad)"], ["ajuste", "Ajuste (+ o −)"]] },
+        { k: "unit", label: "Unidad", type: "select", options: Object.keys(U).map(function (u) { return [u, UNIT_LABEL[u]]; }) },
+        { k: "qty", label: "Cantidad", type: "number", step: "0.001", req: true },
+        { k: "employee", label: "¿Quién lo reporta?", type: "select", options: [["", "—"]].concat(S.employees.filter(function (e) { return e.active; }).map(function (e) { return [String(e.id), e.name]; })) },
+        { k: "reason", label: "Motivo o nota", full: true, ph: "Factura 123, se quemó, se venció…" }
+      ],
+      extra: '<p class="help" id="movPreview"></p>',
+      onInput: function () {
+        var v = formValues(), i = ingById(Number(v.ingredient_id)); if (!i) return;
+        if (!sameFamily(v.unit, i.buy_unit)) { $("movPreview").textContent = "Usa una unidad de " + ({ m: "peso (kg, g)", v: "volumen (L, ml)", u: "unidades" })[U[i.buy_unit][1]] + " para " + i.name + "."; return; }
+        var qq = num(v.qty) * U[v.unit][0] / U[i.buy_unit][0], now = num(i.stock_qty);
+        var after = v.kind === "compra" ? now + qq : v.kind === "conteo" ? qq : v.kind === "ajuste" ? now + qq : now - qq;
+        var diff = v.kind === "conteo" ? after - now : 0;
+        $("movPreview").textContent = "Stock: " + qtyTxt(now, i.buy_unit) + " → " + qtyTxt(after, i.buy_unit) +
+          (v.kind === "conteo" && diff ? (diff < 0 ? " · faltan " : " · sobran ") + qtyTxt(Math.abs(diff), i.buy_unit) + " (" + money(Math.abs(diff) * unitPrice1(i)) + ")" : "") +
+          (v.kind === "merma" ? " · pérdida de " + money(qq * unitPrice1(i)) : "") + ".";
+      },
+      validate: function (v) {
+        var i = ingById(Number(v.ingredient_id)); if (!i) return "Elige el insumo.";
+        if (!sameFamily(v.unit, i.buy_unit)) return "La unidad no corresponde a este insumo.";
+        if (v.kind !== "ajuste" && !(v.qty >= 0)) return "La cantidad no puede ser negativa.";
+        if (v.kind !== "conteo" && !v.qty) return "Escribe la cantidad.";
+      },
+      onSave: function (v) {
+        return q(sb.rpc("register_movement", { p_ingredient: String(v.ingredient_id), p_kind: v.kind, p_qty: v.qty, p_unit: v.unit, p_reason: v.reason, p_employee: v.employee || null, p_source: "manual" }));
+      } });
+  }
+  $("addMov").addEventListener("click", function () { if (!S.inventory) return toast("Primero vuelve a ejecutar gestion.sql"); movForm(null); });
+  ["invStock", "invBuy"].forEach(function (id) { $(id).addEventListener("click", function (e) { var tr = e.target.closest("[data-inv]"); if (tr) movForm(ingById(Number(tr.dataset.inv))); }); });
 
   // ---------------------------------------------------------------- Recetas
   function renderRecetas() {

@@ -104,3 +104,25 @@ Con esto, **Gestión → Ventas** calcula:
 - y el **resultado del mes**: ventas + servicio del local − comisiones − insumos − nómina y gastos.
 
 Mientras no esté n8n, los días se pueden cargar a mano con «+ Día».
+
+### Ventas → inventario
+
+Al guardar un día con detalle por plato, el sistema **descuenta del stock** los insumos de cada receta
+(teniendo en cuenta la merma del insumo) y lo registra como «Consumo por ventas» en Gestión →
+Inventario. Si el mismo día se envía otra vez, primero deshace el consumo anterior: nunca descuenta
+dos veces. Evita reenviar un día antiguo **después** de un conteo físico posterior, porque el conteo
+ya fijó la cantidad real.
+
+## 3. Mermas e inventario desde n8n o la asistente
+
+`POST …/rest/v1/rpc/register_movement`
+
+```json
+{ "p_ingredient": "Pollo", "p_kind": "merma", "p_qty": 2, "p_unit": "kg",
+  "p_reason": "Se dañó en la nevera", "p_employee": "7", "p_source": "asistente" }
+```
+
+- `p_kind`: `compra`, `merma`, `conteo` (fija la cantidad contada), `ajuste` (+ o −).
+- `p_unit`: puede ser distinta de la de compra si es del mismo tipo (g ↔ kg, ml ↔ L).
+- `p_employee`: nº del equipo facial, número de empleado o nombre (opcional).
+- Devuelve el stock resultante, el costo de lo movido y si quedó por debajo del mínimo (`below_min`).
