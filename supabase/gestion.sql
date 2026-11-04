@@ -520,3 +520,7 @@ begin
 end $$;
 revoke execute on function public.apply_sales_consumption(date) from anon, public;
 grant execute on function public.apply_sales_consumption(date) to authenticated, service_role;
+
+-- ================================================================ IVA
+-- Los precios de la carta incluyen IVA: la gestión lo separa para calcular márgenes y utilidades.
+alter table public.gestion_settings add column if not exists iva_pct numeric(5,2) not null default 16 check (iva_pct between 0 and 100);

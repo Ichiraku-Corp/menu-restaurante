@@ -174,6 +174,7 @@
       <div class="card">
         <h2>Ajustes</h2>
         <div class="grid2">
+          <div><label for="sIva">IVA incluido en los precios (%)</label><input id="sIva" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
           <div><label for="sStaff">% del servicio para el personal</label><input id="sStaff" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
           <div><label for="sDeb">Comisión débito (%)</label><input id="sDeb" type="number" step="0.01" min="0" inputmode="decimal"></div>
           <div><label for="sCre">Comisión crédito (%)</label><input id="sCre" type="number" step="0.01" min="0" inputmode="decimal"></div>
@@ -242,7 +243,7 @@
     <section data-panel="recetas" hidden>
       <div class="card">
         <h2>Costo por receta</h2>
-        <p class="muted">Toca un plato para cargar sus ingredientes. Costo de insumos sobre precio de venta: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
+        <p class="muted">Toca un plato para cargar sus ingredientes. Costo de insumos sobre el precio de venta <b>sin IVA</b>: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
         <div class="scroll" id="recList"></div>
       </div>
     </section>
@@ -396,6 +397,7 @@
   $("expMonth").addEventListener("change", renderGastos);
 
   // ---------------------------------------------------------------- Cálculos
+  function ivaF() { return 1 + num(S.settings.iva_pct != null ? S.settings.iva_pct : 16) / 100; } // precios con IVA → ÷ ivaF() = sin IVA
   function empMonthly(e) { return e.active ? num(e.pay_quincena) * 2 + num(e.monthly_extra) : 0; }
   function inMonth(x, ym) { return String(x.expense_date || "").slice(0, 7) === ym; }
   function recipeCost(dishId, variant) {
@@ -410,9 +412,9 @@
     S.cats.forEach(function (c) {
       S.dishes.filter(function (d) { return d.category_id === c.id; }).forEach(function (d) {
         variants(d).forEach(function (v) {
-          var rc = recipeCost(d.id, v.label), price = num(v.price);
+          var rc = recipeCost(d.id, v.label), price = num(v.price), net = price / ivaF();
           out.push({ dish: d, cat: c, variant: v.label, price: price, rc: rc,
-            pct: rc && price > 0 ? rc.cost / price * 100 : NaN, margin: rc ? price - rc.cost : NaN });
+            pct: rc && net > 0 ? rc.cost / net * 100 : NaN, margin: rc ? net - rc.cost : NaN });
         });
       });
     });
@@ -442,7 +444,7 @@
       '<div class="kpi"><span>Nómina</span><b>' + money(T.nom) + "</b></div>" +
       '<div class="kpi"><span>Gastos fijos</span><b>' + money(T.fix) + "</b></div>" +
       '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>" +
-      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), LL = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 }, res = V.total + V.serviceLocal - V.fees - V.foodCost - total - LL.merma - LL.faltante;
+      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), LL = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 }, res = V.net + V.serviceLocal - V.fees - V.foodCost - total - LL.merma - LL.faltante;
         return '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + '</b></div><div class="kpi"><span>Utilidad neta estimada</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>ver pestaña Ventas</span></div>"; })() : "");
     $("byArea").innerHTML = '<table class="tbl"><thead><tr><th>Área</th><th class="n hide-sm">Nómina</th><th class="n hide-sm">Fijos</th><th class="n hide-sm">Variables</th><th class="n">Total</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
       rows.map(function (r) {
@@ -470,7 +472,7 @@
   }
 
   function recTable(list) {
-    return '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Precio</th><th class="n">Costo</th><th class="n hide-sm">Ganancia</th><th class="n">% costo</th></tr></thead><tbody>' +
+    return '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Precio</th><th class="n">Costo</th><th class="n hide-sm">Ganancia (sin IVA)</th><th class="n">% costo</th></tr></thead><tbody>' +
       list.map(function (r) {
         var bad = r.rc && r.rc.broken;
         return '<tr class="click" data-dish="' + r.dish.id + '" data-variant="' + esc(r.variant) + '"><td>' + esc(r.dish.name) + (r.variant ? ' <span class="muted">' + esc(r.variant) + "</span>" : "") +
@@ -868,6 +870,7 @@
       if (uc != null) { x.cost = uc * x.qty; foodCost += x.cost; covered += x.amount; }
     });
     T.foodCost = foodCost; T.coverage = T.total ? covered / T.total * 100 : 0;
+    T.net = T.total / ivaF(); T.iva = T.total - T.net;
     T.top = Object.keys(dishes).map(function (k) { return dishes[k]; }).sort(function (a, b) { return b.qty - a.qty; });
     return T;
   }
@@ -892,12 +895,14 @@
       '<div class="kpi"><span>Comisiones banco (est.)</span><b>' + money(T.fees) + "</b></div>" +
       '<div class="kpi"><span>Tickets · promedio</span><b>' + T.tickets + "</b><span>" + (T.tickets ? money(T.total / T.tickets) + " por ticket" : "—") + "</span></div>";
     var L = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 };
-    var gross = T.total - T.foodCost, opex = C2.nom + C2.fix + C2.vari + T.fees + L.merma + L.faltante, net = gross - opex + T.serviceLocal;
+    var gross = T.net - T.foodCost, opex = C2.nom + C2.fix + C2.vari + T.fees + L.merma + L.faltante, net = gross - opex + T.serviceLocal;
     var staffPctV = num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15);
     function line(label, v, cls, sub) { return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><td>" + label + (sub ? '<div class="muted">' + sub + "</div>" : "") + '</td><td class="n">' + v + "</td></tr>"; }
-    function pctOf(v) { return T.total ? " (" + pct(v / T.total * 100) + ")" : ""; }
+    function pctOf(v) { return T.net ? " (" + pct(v / T.net * 100) + ")" : ""; }
     $("salesResult").innerHTML = T.days ? '<table class="tbl"><tbody>' +
-      line("<b>Ventas</b> (sin el 10 % de servicio)", "<b>" + money(T.total) + "</b>") +
+      line("Ventas (con IVA, sin el 10 % de servicio)", money(T.total)) +
+      line("− IVA incluido (" + nf2.format(num(S.settings.iva_pct != null ? S.settings.iva_pct : 16)) + " %)", money(T.iva)) +
+      line("<b>Ventas netas</b>", "<b>" + money(T.net) + "</b>") +
       line("− Costo de lo vendido (insumos según recetas)", money(T.foodCost), "", "Cubre el " + pct(T.coverage) + " de lo vendido; el resto no tiene receta cargada.") +
       line("<b>Utilidad bruta</b>" + pctOf(gross), '<b style="color:' + (gross >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(gross) + "</b>", "total") +
       line("− Nómina", money(C2.nom)) +
@@ -909,25 +914,26 @@
       line("+ Servicio para el local (" + (100 - staffPctV) + " %)", money(T.serviceLocal)) +
       line("<b>Utilidad neta</b>" + pctOf(net), '<b style="color:' + (net >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(net) + "</b>", "total") +
       "</tbody></table>" +
-      '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no es ingreso del local. Los impuestos no están incluidos.</p>"
+      '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no es ingreso del local. Los porcentajes son sobre las ventas netas (sin IVA). No incluye el impuesto sobre la renta.</p>"
       : '<div class="empty">Sin ventas registradas en este mes. Llegarán desde n8n, o pulsa «+ Día» para cargarlas a mano.</div>';
     $("salesTop").innerHTML = T.top.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="n hide-sm">Costo est.</th><th class="n">Margen</th></tr></thead><tbody>' +
       T.top.slice(0, 15).map(function (x) {
         return "<tr><td>" + esc(x.name) + (x.variant ? ' <span class="muted">' + esc(x.variant) + "</span>" : "") + (x.dish_id ? "" : ' <span class="pill warn">no está en la carta</span>') +
           '</td><td class="n">' + nf3.format(x.qty) + '</td><td class="n">' + money(x.amount) + '</td><td class="n hide-sm">' + (x.cost == null ? "—" : money(x.cost)) +
-          '</td><td class="n">' + (x.cost == null ? '<span class="pill">sin receta</span>' : pctPill(x.amount ? x.cost / x.amount * 100 : NaN)) + "</td></tr>";
+          '</td><td class="n">' + (x.cost == null ? '<span class="pill">sin receta</span>' : pctPill(x.amount ? x.cost / (x.amount / ivaF()) * 100 : NaN)) + "</td></tr>";
       }).join("") + "</tbody></table>" : '<div class="empty">Sin detalle por plato todavía.</div>';
     var days = S.salesByMonth[ym] || [];
     var itemsM = S.itemsByMonth[ym] || [];
-    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Costo insumos</th><th class="n">Utilidad bruta</th><th class="n hide-sm">Tickets</th></tr></thead><tbody>' +
+    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Costo insumos</th><th class="n">Utilidad bruta (sin IVA)</th><th class="n hide-sm">Tickets</th></tr></thead><tbody>' +
       days.map(function (d) {
         var its = itemsM.filter(function (i) { return i.sale_date === d.sale_date; }), fc = 0, cov = 0;
         its.forEach(function (i) { var uc = itemUnitCost(i.dish_id, i.variant); if (uc != null) { fc += uc * num(i.qty); cov += num(i.amount); } });
-        var g = num(d.total) - fc, partial = its.length && cov < num(d.total) * 0.999;
+        var g = num(d.total) / ivaF() - fc, partial = its.length && cov < num(d.total) * 0.999;
         return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + (its.length ? money(fc) : "—") +
           '</td><td class="n">' + (its.length ? money(g) + (partial ? '<div class="muted">recetas incompletas</div>' : "") : '<span class="muted">sin detalle</span>') + '</td><td class="n hide-sm">' + num(d.tickets) + "</td></tr>";
       }).join("") + "</tbody></table>" : '<div class="empty">Sin días registrados.</div>';
     var st = S.settings;
+    $("sIva").value = num(st.iva_pct != null ? st.iva_pct : 16);
     $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
     $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5);
   }
@@ -954,7 +960,7 @@
   $("salesDays").addEventListener("click", function (e) { var tr = e.target.closest("[data-sale]"); if (!tr) return; var ym = $("salesMonth").value || ymNow();
     saleForm((S.salesByMonth[ym] || []).find(function (d) { return d.sale_date === tr.dataset.sale; })); });
   $("saveSettings").addEventListener("click", function () {
-    var patch = { service_staff_pct: num($("sStaff").value), fee_debito: num($("sDeb").value), fee_credito: num($("sCre").value), fee_pago_movil: num($("sPm").value),
+    var patch = { iva_pct: num($("sIva").value), service_staff_pct: num($("sStaff").value), fee_debito: num($("sDeb").value), fee_credito: num($("sCre").value), fee_pago_movil: num($("sPm").value),
       late_tolerance_min: Math.round(num($("sTol").value)), overtime_factor: num($("sOt").value) };
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
@@ -1106,12 +1112,15 @@
     drawTotals();
   }
   function drawTotals() {
-    var price = num((variants(R.dish).find(function (v) { return v.label === R.variant; }) || {}).price);
+    var priceIva = num((variants(R.dish).find(function (v) { return v.label === R.variant; }) || {}).price), price = priceIva / ivaF();
     var total = 0, ok = true;
     R.lines.forEach(function (l) { var c = lineCost(l, ingById(l.ingredient_id)); if (isNaN(c)) ok = false; else total += c; });
     var p = price > 0 ? total / price * 100 : NaN;
-    $("recKpis").innerHTML = '<div class="kpi"><span>Costo de insumos</span><b>' + money(total) + '</b></div><div class="kpi"><span>Precio de venta</span><b>' + money(price) +
-      '</b></div><div class="kpi"><span>Ganancia</span><b>' + money(price - total) + '</b></div><div class="kpi"><span>% costo</span><b>' + (ok ? pctPill(p) : '<span class="pill bad">revisar</span>') + "</b></div>";
+    $("recKpis").innerHTML =
+      '<div class="kpi"><span>Costo de insumos</span><b>' + money(total) + "</b></div>" +
+      '<div class="kpi"><span>Precio sin IVA</span><b>' + money(price) + "</b><span>carta " + money(priceIva) + "</span></div>" +
+      '<div class="kpi"><span>Ganancia</span><b>' + money(price - total) + "</b></div>" +
+      '<div class="kpi"><span>% costo</span><b>' + (ok ? pctPill(p) : '<span class="pill bad">revisar</span>') + "</b></div>";
     $("recState").textContent = R.dirty ? "Cambios sin guardar" : "";
   }
   $("recLines").addEventListener("input", function (e) {
