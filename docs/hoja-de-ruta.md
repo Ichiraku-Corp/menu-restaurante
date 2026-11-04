@@ -24,7 +24,8 @@ personal y la aprobación del dueño en lo que toca dinero.
 5. Personalidad e historia de Nex.
 6. Modelo Live2D de Nex.
 7. Días libres del personal (cuando estén definidos).
-8. Impresora de comandas: es una **Roccia** térmica de 80 mm, conectada por red. Falta la etiqueta
+8. Impresoras (3): **caja**, **cocina** (comandas) y **salón de arriba** (precuentas a clientes).
+   La de arriba es una **Roccia** térmica de 80 mm, conectada por red. De cada una falta la etiqueta
    (modelo), una foto de los puertos traseros y la hoja de autoprueba (dirección IP).
 9. Nombre del proveedor de facturación digital (para revisar su API).
 
@@ -40,5 +41,6 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 4:** revisión de uniforme al entrar (foto, la IA sugiere y un encargado decide; fotos
   borradas a los 7 días; consentimiento por escrito).
 - **Sistema de facturación propio:** sustituirá al sistema de ventas actual, con facturación digital
-  a través del proveedor autorizado y **comandas automáticas en la impresora de red** de cocina.
+  a través del proveedor autorizado y **impresión automática por red**: comandas en cocina, precuentas en el salón de arriba y
+  facturas o recibos en caja.
 - **Al final:** juego de cartas con los platos (borrador en `docs/borrador-cartas.html`).
