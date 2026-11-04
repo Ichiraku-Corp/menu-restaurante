@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gestión de costos</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg:#f6f4f1; --surface:#fff; --text:#1f1a17; --muted:#6b625b; --line:#e5ded4;
+    --accent:#e5206b; --ok:#2f7d4f; --warn:#a86200; --danger:#b3261e; --chip:#f0ebe3; --sky:#1d6fc0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151210; --surface:#1f1a17; --text:#f4eee7; --muted:#b0a69c; --line:#332b26;
+      --accent:#f0588f; --ok:#5fbf86; --warn:#e0a24a; --danger:#ef7a72; --chip:#2a2420; --sky:#6fb2f0; } }
+  * { box-sizing:border-box; }
+  [hidden], .hidden { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:16px; }
+  header.top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  h1 { font-size:22px; margin:8px 0; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  h3 { font-size:15px; margin:18px 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; margin:14px 0; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input, select, textarea { width:100%; font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  input[type=checkbox] { width:auto; }
+  textarea { min-height:60px; resize:vertical; }
+  button, .btn { font:inherit; border:1px solid var(--line); background:var(--chip); color:var(--text); border-radius:8px;
+    padding:7px 12px; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.danger { color:var(--danger); }
+  button.small { padding:4px 9px; font-size:13px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .between { justify-content:space-between; }
+  .muted { color:var(--muted); font-size:13px; }
+  .tabs { display:flex; gap:6px; overflow-x:auto; padding:2px 0 8px; position:sticky; top:0; background:var(--bg); z-index:5; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tabs button { flex:none; border-radius:999px; font-weight:700; }
+  .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
+  .kpi { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .kpi b { display:block; font-size:22px; font-variant-numeric:tabular-nums; }
+  .kpi span { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .kpi.main { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .kpi.main span { color:#ffe3ee; }
+  .tbl { width:100%; border-collapse:collapse; font-size:14px; }
+  .tbl th, .tbl td { padding:8px 6px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+  .tbl th { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+  .tbl td.n, .tbl th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .tbl tr.total td { font-weight:800; border-bottom:0; border-top:2px solid var(--text); }
+  .tbl tr.click { cursor:pointer; }
+  .tbl tr.click:hover td { background:var(--chip); }
+  .tbl tr.off td { opacity:.5; }
+  .scroll { overflow-x:auto; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; font-weight:700; background:var(--chip); white-space:nowrap; }
+  .pill.ok { background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok); }
+  .pill.warn { background:color-mix(in srgb, var(--warn) 18%, transparent); color:var(--warn); }
+  .pill.bad { background:color-mix(in srgb, var(--danger) 18%, transparent); color:var(--danger); }
+  .bar { height:8px; background:var(--chip); border-radius:4px; overflow:hidden; min-width:60px; }
+  .bar i { display:block; height:100%; background:var(--accent); }
+  .empty { padding:24px; text-align:center; color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  .line { display:grid; grid-template-columns:1fr 90px 92px 80px 34px; gap:6px; align-items:center; margin-top:6px; }
+  .line .cost { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
+  .line.bad select, .line.bad input { border-color:var(--danger); }
+  @media (max-width:560px) {
+    .line { grid-template-columns:1fr 70px 76px; }
+    .line .cost { grid-column:1 / 3; text-align:left; }
+    .grid2 { grid-template-columns:1fr; }
+    .hide-sm { display:none; }
+    .line .li-del { justify-self:end; width:34px; }
+  }
+  dialog { border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--text); width:min(520px, calc(100vw - 24px)); padding:18px; }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:10px 16px;
+    border-radius:999px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; z-index:50; }
+  #toast.show { opacity:1; }
+  .show-sm { display:none; }
+  @media (max-width:560px) { .show-sm { display:block; } }
+  .help { background:var(--chip); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--muted); margin:8px 0 0; }
+</style>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Gestión de costos</h1>
+    <div class="row">
+      <a class="btn" href="admin.html">Panel de la carta</a>
+      <button id="logout" class="hidden">Salir</button>
+    </div>
+  </header>
+
+  <div id="noconfig" class="card hidden"><h2>Falta conectar Supabase</h2><p>Revisa <code>config.js</code>.</p></div>
+  <div id="nosetup" class="card hidden">
+    <h2>Falta preparar la base de datos</h2>
+    <p>En Supabase → <b>SQL Editor</b>, pega y ejecuta el contenido de <code>supabase/gestion.sql</code>. Después recarga esta página.</p>
+  </div>
+  <div id="noaccess" class="card hidden">
+    <h2>Tu cuenta no tiene acceso</h2>
+    <p>Esta sección es solo para el dueño o administradores. Pide que añadan tu correo a la tabla <code>staff</code>.</p>
+  </div>
+
+  <form id="login" class="card hidden" style="max-width:380px">
+    <h2>Entrar</h2>
+    <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+    <label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required>
+    <p><button class="primary" type="submit">Entrar</button></p>
+    <p id="loginErr" class="muted"></p>
+  </form>
+
+  <div id="app" class="hidden">
+    <nav class="tabs" id="tabs">
+      <button data-tab="resumen" class="on">Resumen</button>
+      <button data-tab="nomina">Nómina</button>
+      <button data-tab="gastos">Gastos</button>
+      <button data-tab="insumos">Insumos</button>
+      <button data-tab="recetas">Recetas</button>
+      <button data-tab="areas">Áreas</button>
+    </nav>
+
+    <!-- Resumen -->
+    <section data-panel="resumen">
+      <div class="row between">
+        <p class="muted" style="margin:0">Costo del mes por área: nómina + gastos fijos + gastos variables del mes elegido.</p>
+        <input type="month" id="month" style="width:auto" aria-label="Mes">
+      </div>
+      <div class="kpis" style="margin-top:12px" id="kpis"></div>
+      <div class="card"><h2>Por área</h2><div class="scroll" id="byArea"></div></div>
+      <div class="card"><h2>Recetas y márgenes</h2><div id="recSummary"></div></div>
+      <div class="card"><h2>Punto de equilibrio</h2><div id="breakeven"></div></div>
+    </section>
+
+    <!-- Nómina -->
+    <section data-panel="nomina" hidden>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Nómina quincenal</h2><button class="primary" id="addEmp">+ Empleado</button></div>
+        <p class="muted">Costo mensual = 2 quincenas + bonos u otros pagos del mes. Los inactivos no cuentan.</p>
+        <div class="scroll" id="empList"></div>
+      </div>
+    </section>
+
+    <!-- Gastos -->
+    <section data-panel="gastos" hidden>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Gastos</h2><button class="primary" id="addExp">+ Gasto</button></div>
+        <p class="muted"><b>Fijo</b>: se repite cada mes (alquiler, internet). <b>Variable</b>: ocurre una vez (una reparación, una compra).</p>
+        <div class="row"><label for="expMonth" style="margin:0">Variables del mes</label><input type="month" id="expMonth" style="width:auto"></div>
+        <h3>Fijos mensuales</h3><div class="scroll" id="expFixed"></div>
+        <h3>Variables del mes</h3><div class="scroll" id="expVar"></div>
+      </div>
+    </section>
+
+    <!-- Insumos -->
+    <section data-panel="insumos" hidden>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Insumos</h2><button class="primary" id="addIng">+ Insumo</button></div>
+        <p class="muted">Lo que compras para cocinar, con su precio de compra. La merma es lo que se pierde al limpiar o cocinar y sube el costo real.</p>
+        <input id="ingSearch" type="search" placeholder="Buscar insumo…" style="margin:6px 0 4px">
+        <div class="scroll" id="ingList"></div>
+      </div>
+    </section>
+
+    <!-- Recetas -->
+    <section data-panel="recetas" hidden>
+      <div class="card">
+        <h2>Costo por receta</h2>
+        <p class="muted">Toca un plato para cargar sus ingredientes. Costo de insumos sobre precio de venta: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
+        <div class="scroll" id="recList"></div>
+      </div>
+    </section>
+
+    <!-- Áreas -->
+    <section data-panel="areas" hidden>
+      <div class="card">
+        <h2>Áreas</h2>
+        <p class="muted">Cada empleado y cada gasto pertenece a un área. El número define el orden.</p>
+        <div id="areaList"></div>
+        <form id="newArea" class="row" style="margin-top:10px">
+          <input id="newAreaName" class="grow" placeholder="Nueva área (p. ej. Ventas y marketing)" required style="flex:1">
+          <button type="submit">Añadir</button>
+        </form>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Formulario genérico -->
+<dialog id="dlg"><form id="dlgForm" method="dialog">
+  <h2 id="dlgTitle"></h2>
+  <div id="dlgFields"></div>
+  <p id="dlgErr" class="muted" style="color:var(--danger)"></p>
+  <div class="row between" style="margin-top:14px">
+    <button type="button" id="dlgDelete" class="danger">Eliminar</button>
+    <div class="row"><button type="button" id="dlgCancel">Cancelar</button><button type="submit" class="primary">Guardar</button></div>
+  </div>
+</form></dialog>
+
+<!-- Editor de receta -->
+<dialog id="recDlg" style="width:min(680px, calc(100vw - 24px))">
+  <div class="row between"><h2 id="recTitle" style="margin:0"></h2><button type="button" id="recClose">Cerrar</button></div>
+  <div class="row" id="recVariants" style="margin-top:10px"></div>
+  <div id="recLines"></div>
+  <div class="row" style="margin-top:10px">
+    <button type="button" id="recAdd">+ Ingrediente</button>
+    <button type="button" id="recCopy" class="hidden"></button>
+  </div>
+  <p class="muted" id="recNoIng" hidden>Primero añade insumos en la pestaña <b>Insumos</b>.</p>
+  <div class="kpis" style="margin-top:14px" id="recKpis"></div>
+  <div class="row between" style="margin-top:14px">
+    <span class="muted" id="recState"></span>
+    <button type="button" class="primary" id="recSave">Guardar receta</button>
+  </div>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var C = window.MENU_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+  function show(id, on) { $(id).classList.toggle("hidden", !on); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+  function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
+  function fail(err) { console.error(err); toast("Error: " + (err && err.message || err)); }
+  function num(v) { var n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : 0; }
+  var nf2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nf3 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
+  var PFX = C.PRICE_PREFIX || "Ref";
+  function money(n) { return PFX + " " + nf2.format(n || 0); }
+  function pct(n) { return isFinite(n) ? Math.round(n) + " %" : "—"; }
+  function ymNow() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+
+  // Unidades: todo se lleva a gramos, mililitros o unidades.
+  var U = { kg: [1000, "m"], g: [1, "m"], l: [1000, "v"], ml: [1, "v"], unidad: [1, "u"] };
+  var UNIT_LABEL = { kg: "kg", g: "g", l: "L", ml: "ml", unidad: "unidad" };
+  var BIG = { m: "kg", v: "L", u: "unidad" };
+  function sameFamily(a, b) { return U[a] && U[b] && U[a][1] === U[b][1]; }
+  function costPerBase(ing) {
+    var q = num(ing.buy_qty) * U[ing.buy_unit][0], w = Math.min(num(ing.waste_pct), 89.99);
+    return q > 0 ? num(ing.buy_price) / q / (1 - w / 100) : 0;
+  }
+  function costPerBig(ing) { var f = U[ing.buy_unit][1]; return costPerBase(ing) * (f === "u" ? 1 : 1000); }
+  function lineCost(l, ing) {
+    if (!ing || !sameFamily(l.unit, ing.buy_unit)) return NaN;
+    return num(l.qty) * U[l.unit][0] * costPerBase(ing);
+  }
+
+  var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [] };
+  function areaName(id) { var a = S.areas.find(function (x) { return x.id === id; }); return a ? a.name : "Sin área"; }
+  function ingById(id) { return S.ingredients.find(function (x) { return x.id === id; }); }
+  function variants(d) { return Array.isArray(d.variants) && d.variants.length ? d.variants : [{ label: "", price: Number(d.price) || 0 }]; }
+
+  if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) { show("noconfig", true); return; }
+  var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+  function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
+
+  // ---------------------------------------------------------------- Acceso
+  sb.auth.onAuthStateChange(function (_e, session) {
+    show("login", !session); show("logout", !!session);
+    show("app", false); show("noaccess", false); show("nosetup", false);
+    if (!session) return;
+    sb.rpc("can_manage").then(function (r) {
+      if (r.error) { show("nosetup", true); return; }
+      if (!r.data) { show("noaccess", true); return; }
+      show("app", true); refresh();
+    });
+  });
+  $("login").addEventListener("submit", function (e) {
+    e.preventDefault(); $("loginErr").textContent = "";
+    sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value })
+      .then(function (r) { if (r.error) $("loginErr").textContent = "No se pudo entrar: " + r.error.message; });
+  });
+  $("logout").addEventListener("click", function () { sb.auth.signOut(); });
+
+  function refresh() {
+    return Promise.all([
+      q(sb.from("cost_areas").select("*").order("position")),
+      q(sb.from("employees").select("*").order("name")),
+      q(sb.from("expenses").select("*").order("expense_date", { ascending: false })),
+      q(sb.from("ingredients").select("*").order("name")),
+      q(sb.from("recipe_items").select("*").order("position")),
+      q(sb.from("dishes").select("id,category_id,name,price,variants,position").order("position")),
+      q(sb.from("categories").select("id,name,position").order("position"))
+    ]).then(function (r) {
+      S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
+      renderAll();
+    }).catch(fail);
+  }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderRecetas(); renderAreas(); }
+
+  // ---------------------------------------------------------------- Pestañas
+  $("tabs").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-tab]"); if (!b) return;
+    document.querySelectorAll("#tabs button").forEach(function (x) { x.classList.toggle("on", x === b); });
+    document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
+    try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
+  });
+  try { var t0 = sessionStorage.getItem("gestion-tab"); if (t0) { var b0 = document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); } } catch (e) {}
+  $("month").value = $("expMonth").value = ymNow();
+  $("month").addEventListener("change", renderResumen);
+  $("expMonth").addEventListener("change", renderGastos);
+
+  // ---------------------------------------------------------------- Cálculos
+  function empMonthly(e) { return e.active ? num(e.pay_quincena) * 2 + num(e.monthly_extra) : 0; }
+  function inMonth(x, ym) { return String(x.expense_date || "").slice(0, 7) === ym; }
+  function recipeCost(dishId, variant) {
+    var lines = S.items.filter(function (l) { return l.dish_id === dishId && (l.variant || "") === (variant || ""); });
+    if (!lines.length) return null;
+    var total = 0, broken = false;
+    lines.forEach(function (l) { var c = lineCost(l, ingById(l.ingredient_id)); if (isNaN(c)) broken = true; else total += c; });
+    return { cost: total, lines: lines.length, broken: broken };
+  }
+  function allRecipes() {
+    var out = [];
+    S.cats.forEach(function (c) {
+      S.dishes.filter(function (d) { return d.category_id === c.id; }).forEach(function (d) {
+        variants(d).forEach(function (v) {
+          var rc = recipeCost(d.id, v.label), price = num(v.price);
+          out.push({ dish: d, cat: c, variant: v.label, price: price, rc: rc,
+            pct: rc && price > 0 ? rc.cost / price * 100 : NaN, margin: rc ? price - rc.cost : NaN });
+        });
+      });
+    });
+    return out;
+  }
+  function pctPill(p) {
+    if (!isFinite(p)) return '<span class="pill">sin receta</span>';
+    return '<span class="pill ' + (p <= 30 ? "ok" : p <= 40 ? "warn" : "bad") + '">' + pct(p) + "</span>";
+  }
+
+  // ---------------------------------------------------------------- Resumen
+  function renderResumen() {
+    var ym = $("month").value || ymNow();
+    var rows = S.areas.map(function (a) { return { id: a.id, name: a.name, nom: 0, fix: 0, vari: 0 }; });
+    var none = { id: null, name: "Sin área", nom: 0, fix: 0, vari: 0 };
+    function rowFor(id) { return rows.find(function (r) { return r.id === id; }) || none; }
+    S.employees.forEach(function (e) { rowFor(e.area_id).nom += empMonthly(e); });
+    S.expenses.forEach(function (x) {
+      if (x.kind === "fijo") rowFor(x.area_id).fix += num(x.amount);
+      else if (inMonth(x, ym)) rowFor(x.area_id).vari += num(x.amount);
+    });
+    if (none.nom || none.fix || none.vari) rows.push(none);
+    var T = rows.reduce(function (s, r) { s.nom += r.nom; s.fix += r.fix; s.vari += r.vari; return s; }, { nom: 0, fix: 0, vari: 0 });
+    var total = T.nom + T.fix + T.vari;
+    $("kpis").innerHTML =
+      '<div class="kpi main"><span>Costo del mes</span><b>' + money(total) + "</b></div>" +
+      '<div class="kpi"><span>Nómina</span><b>' + money(T.nom) + "</b></div>" +
+      '<div class="kpi"><span>Gastos fijos</span><b>' + money(T.fix) + "</b></div>" +
+      '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>";
+    $("byArea").innerHTML = '<table class="tbl"><thead><tr><th>Área</th><th class="n hide-sm">Nómina</th><th class="n hide-sm">Fijos</th><th class="n hide-sm">Variables</th><th class="n">Total</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        var t = r.nom + r.fix + r.vari, p = total ? t / total * 100 : 0;
+        return "<tr><td><b>" + esc(r.name) + '</b><div class="muted show-sm">Nómina ' + money(r.nom) + " · Fijos " + money(r.fix) + " · Variables " + money(r.vari) + " · " + pct(p) +
+          '</div></td><td class="n hide-sm">' + money(r.nom) + '</td><td class="n hide-sm">' + money(r.fix) + '</td><td class="n hide-sm">' + money(r.vari) +
+          '</td><td class="n"><b>' + money(t) + '</b></td><td class="hide-sm"><div class="row" style="flex-wrap:nowrap"><div class="bar" style="flex:1"><i style="width:' + p.toFixed(1) + '%"></i></div><span class="muted">' + pct(p) + "</span></div></td></tr>";
+      }).join("") +
+      '<tr class="total"><td>Total</td><td class="n hide-sm">' + money(T.nom) + '</td><td class="n hide-sm">' + money(T.fix) + '</td><td class="n hide-sm">' + money(T.vari) + '</td><td class="n">' + money(total) + '</td><td class="hide-sm"></td></tr></tbody></table>';
+
+    var recs = allRecipes(), done = recs.filter(function (r) { return r.rc && !r.rc.broken; });
+    var avgPct = done.length ? done.reduce(function (s, r) { return s + (isFinite(r.pct) ? r.pct : 0); }, 0) / done.length : NaN;
+    var avgMargin = done.length ? done.reduce(function (s, r) { return s + r.margin; }, 0) / done.length : NaN;
+    var worst = done.filter(function (r) { return isFinite(r.pct); }).sort(function (a, b) { return b.pct - a.pct; }).slice(0, 5);
+    $("recSummary").innerHTML = '<div class="kpis">' +
+      '<div class="kpi"><span>Recetas cargadas</span><b>' + done.length + " / " + recs.length + "</b></div>" +
+      '<div class="kpi"><span>Costo medio de insumos</span><b>' + (isFinite(avgPct) ? pct(avgPct) : "—") + "</b></div>" +
+      '<div class="kpi"><span>Ganancia media por plato</span><b>' + (isFinite(avgMargin) ? money(avgMargin) : "—") + "</b></div></div>" +
+      (worst.length ? "<h3>Platos con el costo más alto</h3>" + recTable(worst) : '<p class="muted">Cuando cargues recetas verás aquí los platos que menos ganancia dejan.</p>');
+
+    $("breakeven").innerHTML = isFinite(avgMargin) && avgMargin > 0 && total > 0
+      ? "<p>Para cubrir los <b>" + money(total) + "</b> de costos del mes necesitas vender unos <b>" + Math.ceil(total / avgMargin) +
+        " platos</b> (≈ " + Math.ceil(total / avgMargin / 30) + " al día), contando una ganancia media de " + money(avgMargin) + ' por plato.</p><p class="muted">Es una estimación: usa el promedio de los platos con receta cargada. Será más precisa cuando registremos las ventas reales.</p>'
+      : '<p class="muted">Se calcula cuando haya costos del mes y al menos una receta cargada.</p>';
+  }
+
+  function recTable(list) {
+    return '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Precio</th><th class="n">Costo</th><th class="n hide-sm">Ganancia</th><th class="n">% costo</th></tr></thead><tbody>' +
+      list.map(function (r) {
+        var bad = r.rc && r.rc.broken;
+        return '<tr class="click" data-dish="' + r.dish.id + '" data-variant="' + esc(r.variant) + '"><td>' + esc(r.dish.name) + (r.variant ? ' <span class="muted">' + esc(r.variant) + "</span>" : "") +
+          (r.rc ? ' <span class="muted">· ' + r.rc.lines + " ing.</span>" : "") + '</td><td class="n">' + money(r.price) + '</td><td class="n">' +
+          (r.rc ? (bad ? '<span class="pill bad">revisar unidades</span>' : money(r.rc.cost)) : "—") + '</td><td class="n hide-sm">' + (r.rc && !bad ? money(r.margin) : "—") +
+          '</td><td class="n">' + (bad ? "—" : pctPill(r.pct)) + "</td></tr>";
+      }).join("") + "</tbody></table>";
+  }
+
+  // ---------------------------------------------------------------- Formulario genérico
+  var form = null;
+  function areaOptions(allowNone) {
+    return (allowNone ? [["", "Sin área"]] : []).concat(S.areas.map(function (a) { return [String(a.id), a.name]; }));
+  }
+  function openForm(cfg) {
+    form = cfg;
+    $("dlgTitle").textContent = cfg.title; $("dlgErr").textContent = "";
+    $("dlgFields").innerHTML = '<div class="grid2">' + cfg.fields.map(function (f) {
+      var v = cfg.values[f.k], id = "f_" + f.k, full = f.full ? ' style="grid-column:1 / -1"' : "";
+      var input;
+      if (f.type === "select") input = '<select id="' + id + '">' + f.options.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(v == null ? "" : v) === String(o[0]) ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select>";
+      else if (f.type === "check") return '<label class="row"' + full + '><input type="checkbox" id="' + id + '"' + (v ? " checked" : "") + "> " + esc(f.label) + "</label>";
+      else if (f.type === "area") input = '<textarea id="' + id + '">' + esc(v || "") + "</textarea>";
+      else input = '<input id="' + id + '" type="' + (f.type || "text") + '"' + (f.step ? ' step="' + f.step + '" min="0" inputmode="decimal"' : "") + (f.req ? " required" : "") +
+        (f.ph ? ' placeholder="' + esc(f.ph) + '"' : "") + ' value="' + esc(v == null ? "" : v) + '">';
+      return "<div" + full + '><label for="' + id + '">' + esc(f.label) + "</label>" + input + (f.hint ? '<div class="muted">' + esc(f.hint) + "</div>" : "") + "</div>";
+    }).join("") + "</div>" + (cfg.extra || "");
+    show("dlgDelete", !!cfg.onDelete);
+    $("dlg").showModal();
+    if (cfg.onInput) { $("dlgFields").oninput = cfg.onInput; cfg.onInput(); } else $("dlgFields").oninput = null;
+  }
+  function formValues() {
+    var o = {};
+    form.fields.forEach(function (f) {
+      var el = $("f_" + f.k);
+      o[f.k] = f.type === "check" ? el.checked : f.step ? num(el.value) : f.k === "area_id" ? (el.value ? Number(el.value) : null) : el.value.trim();
+    });
+    return o;
+  }
+  $("dlgCancel").addEventListener("click", function () { $("dlg").close(); });
+  $("dlgForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = formValues(), err = form.validate && form.validate(v);
+    if (err) { $("dlgErr").textContent = err; return; }
+    form.onSave(v).then(function () { $("dlg").close(); toast("Guardado"); return refresh(); }).catch(function (er) { $("dlgErr").textContent = er.message || String(er); });
+  });
+  $("dlgDelete").addEventListener("click", function () {
+    if (!confirm("¿Eliminar definitivamente?")) return;
+    form.onDelete().then(function () { $("dlg").close(); toast("Eliminado"); return refresh(); }).catch(function (er) {
+      $("dlgErr").textContent = /foreign key|violates/i.test(er.message || "") ? "No se puede eliminar: se usa en alguna receta. Quítalo de las recetas primero." : (er.message || String(er));
+    });
+  });
+  function saver(table, id) { return function (v) { return q(id ? sb.from(table).update(v).eq("id", id) : sb.from(table).insert(v)); }; }
+  function deleter(table, id) { return function () { return q(sb.from(table).delete().eq("id", id)); }; }
+
+  // ---------------------------------------------------------------- Nómina
+  function renderNomina() {
+    if (!S.employees.length) { $("empList").innerHTML = '<div class="empty">Aún no hay empleados. Pulsa «+ Empleado».</div>'; return; }
+    var html = '<table class="tbl"><thead><tr><th>Empleado</th><th class="hide-sm">Área</th><th class="n">Quincena</th><th class="n hide-sm">Bonos/mes</th><th class="n">Costo/mes</th></tr></thead><tbody>';
+    var groups = S.areas.map(function (a) { return a.id; }).concat([null]);
+    var tq = 0, tm = 0;
+    groups.forEach(function (gid) {
+      var list = S.employees.filter(function (e) { return (e.area_id || null) === gid || (gid === null && !S.areas.some(function (a) { return a.id === e.area_id; })); });
+      if (!list.length) return;
+      html += '<tr><td colspan="5" style="background:var(--chip);font-weight:800">' + esc(areaName(gid)) + "</td></tr>";
+      list.forEach(function (e) {
+        if (e.active) tq += num(e.pay_quincena); tm += empMonthly(e);
+        html += '<tr class="click' + (e.active ? "" : " off") + '" data-emp="' + e.id + '"><td><b>' + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? "" : " · inactivo") +
+          '</div></td><td class="hide-sm">' + esc(areaName(e.area_id)) + '</td><td class="n">' + money(e.pay_quincena) + '</td><td class="n hide-sm">' + money(e.monthly_extra) + '</td><td class="n"><b>' + money(empMonthly(e)) + "</b></td></tr>";
+      });
+    });
+    html += '<tr class="total"><td>Total activos</td><td class="hide-sm"></td><td class="n">' + money(tq) + '</td><td class="hide-sm"></td><td class="n">' + money(tm) + "</td></tr></tbody></table>";
+    $("empList").innerHTML = html;
+  }
+  function empForm(e) {
+    openForm({ title: e ? "Editar empleado" : "Nuevo empleado", values: e || { active: true, area_id: S.areas[0] && S.areas[0].id },
+      fields: [
+        { k: "name", label: "Nombre", req: true }, { k: "job_title", label: "Cargo", ph: "Cocinero, mesonero…" },
+        { k: "area_id", label: "Área", type: "select", options: areaOptions(true) }, { k: "start_date", label: "Fecha de ingreso", type: "date" },
+        { k: "pay_quincena", label: "Pago por quincena (" + PFX + ")", type: "number", step: "0.01" },
+        { k: "monthly_extra", label: "Bonos u otros pagos al mes (" + PFX + ")", type: "number", step: "0.01", hint: "Bono de alimentación, transporte, etc." },
+        { k: "active", label: "Activo (cuenta en la nómina)", type: "check", full: true }, { k: "notes", label: "Notas", type: "area", full: true }
+      ],
+      validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!v.start_date) v.start_date = null; },
+      onSave: saver("employees", e && e.id), onDelete: e && deleter("employees", e.id) });
+  }
+  $("addEmp").addEventListener("click", function () { empForm(null); });
+  $("empList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-emp]"); if (tr) empForm(S.employees.find(function (x) { return x.id === Number(tr.dataset.emp); })); });
+
+  // ---------------------------------------------------------------- Gastos
+  function expTable(list, withDate) {
+    if (!list.length) return '<div class="empty">Sin gastos.</div>';
+    var t = 0;
+    return '<table class="tbl"><thead><tr>' + (withDate ? "<th>Fecha</th>" : "") + '<th>Concepto</th><th class="hide-sm">Área</th><th class="n">Monto</th></tr></thead><tbody>' +
+      list.map(function (x) { t += num(x.amount);
+        return '<tr class="click" data-exp="' + x.id + '">' + (withDate ? "<td>" + esc(String(x.expense_date).slice(8, 10) + "/" + String(x.expense_date).slice(5, 7)) + "</td>" : "") +
+          "<td><b>" + esc(x.concept) + '</b><div class="muted">' + esc(areaName(x.area_id)) + (x.notes ? " · " + esc(x.notes) : "") + '</div></td><td class="hide-sm">' + esc(areaName(x.area_id)) + '</td><td class="n">' + money(x.amount) + "</td></tr>";
+      }).join("") + '<tr class="total"><td' + (withDate ? ' colspan="2"' : "") + '>Total</td><td class="hide-sm"></td><td class="n">' + money(t) + "</td></tr></tbody></table>";
+  }
+  function renderGastos() {
+    var ym = $("expMonth").value || ymNow();
+    $("expFixed").innerHTML = expTable(S.expenses.filter(function (x) { return x.kind === "fijo"; }), false);
+    $("expVar").innerHTML = expTable(S.expenses.filter(function (x) { return x.kind !== "fijo" && inMonth(x, ym); }), true);
+  }
+  function expForm(x) {
+    openForm({ title: x ? "Editar gasto" : "Nuevo gasto",
+      values: x || { kind: "variable", expense_date: new Date().toISOString().slice(0, 10), area_id: S.areas[0] && S.areas[0].id },
+      fields: [
+        { k: "concept", label: "Concepto", req: true, ph: "Alquiler, luz, reparación…", full: true },
+        { k: "area_id", label: "Área", type: "select", options: areaOptions(true) },
+        { k: "kind", label: "Tipo", type: "select", options: [["variable", "Variable (una vez)"], ["fijo", "Fijo (cada mes)"]] },
+        { k: "amount", label: "Monto (" + PFX + ")", type: "number", step: "0.01", req: true },
+        { k: "expense_date", label: "Fecha", type: "date", hint: "En los fijos solo sirve como referencia." },
+        { k: "notes", label: "Notas", type: "area", full: true }
+      ],
+      validate: function (v) { if (!v.concept) return "Escribe el concepto."; if (!(v.amount > 0)) return "El monto debe ser mayor que 0."; if (!v.expense_date) v.expense_date = new Date().toISOString().slice(0, 10); },
+      onSave: saver("expenses", x && x.id), onDelete: x && deleter("expenses", x.id) });
+  }
+  $("addExp").addEventListener("click", function () { expForm(null); });
+  ["expFixed", "expVar"].forEach(function (id) { $(id).addEventListener("click", function (ev) { var tr = ev.target.closest("[data-exp]"); if (tr) expForm(S.expenses.find(function (x) { return x.id === Number(tr.dataset.exp); })); }); });
+
+  // ---------------------------------------------------------------- Insumos
+  function renderInsumos() {
+    var s = $("ingSearch").value.trim().toLowerCase();
+    var list = S.ingredients.filter(function (i) { return !s || i.name.toLowerCase().indexOf(s) >= 0 || (i.supplier || "").toLowerCase().indexOf(s) >= 0; });
+    if (!list.length) { $("ingList").innerHTML = '<div class="empty">' + (S.ingredients.length ? "Nada con esa búsqueda." : "Aún no hay insumos. Pulsa «+ Insumo».") + "</div>"; return; }
+    $("ingList").innerHTML = '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Compra</th><th class="n hide-sm">Merma</th><th class="n">Costo real</th></tr></thead><tbody>' +
+      list.map(function (i) {
+        var fam = U[i.buy_unit][1], uses = S.items.filter(function (l) { return l.ingredient_id === i.id; }).length;
+        return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (i.supplier ? esc(i.supplier) + " · " : "") + uses + " receta" + (uses === 1 ? "" : "s") +
+          '</div></td><td class="n">' + money(i.buy_price) + '<div class="muted">por ' + nf3.format(i.buy_qty) + " " + UNIT_LABEL[i.buy_unit] + '</div></td><td class="n hide-sm">' + pct(num(i.waste_pct)) +
+          '</td><td class="n"><b>' + money(costPerBig(i)) + '</b><div class="muted">por ' + BIG[fam] + "</div></td></tr>";
+      }).join("") + "</tbody></table>";
+  }
+  $("ingSearch").addEventListener("input", renderInsumos);
+  function ingForm(i) {
+    openForm({ title: i ? "Editar insumo" : "Nuevo insumo", values: i || { buy_unit: "kg", buy_qty: 1, waste_pct: 0 },
+      fields: [
+        { k: "name", label: "Nombre", req: true, ph: "Pechuga de pollo", full: true },
+        { k: "buy_price", label: "Precio de compra (" + PFX + ")", type: "number", step: "0.01", req: true },
+        { k: "buy_qty", label: "Cantidad comprada", type: "number", step: "0.001", req: true },
+        { k: "buy_unit", label: "Unidad", type: "select", options: [["kg", "kg"], ["g", "g"], ["l", "litros"], ["ml", "ml"], ["unidad", "unidades"]] },
+        { k: "waste_pct", label: "Merma (%)", type: "number", step: "0.1", hint: "Ej.: 20 si de 1 kg se aprovechan 800 g." },
+        { k: "supplier", label: "Proveedor", full: true }
+      ],
+      extra: '<p class="help" id="ingPreview"></p>',
+      onInput: function () {
+        var v = formValues(); if (!U[v.buy_unit]) return;
+        $("ingPreview").textContent = v.buy_qty > 0 ? "Costo real: " + money(costPerBig(v)) + " por " + BIG[U[v.buy_unit][1]] + "." : "Indica la cantidad comprada.";
+      },
+      validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!(v.buy_qty > 0)) return "La cantidad debe ser mayor que 0."; if (v.waste_pct >= 90) return "La merma debe ser menor que 90 %.";
+        if (i && i.buy_unit !== v.buy_unit && !sameFamily(i.buy_unit, v.buy_unit) && S.items.some(function (l) { return l.ingredient_id === i.id; })) return "Este insumo se usa en recetas: no puedes cambiar de peso a volumen o unidades."; },
+      onSave: saver("ingredients", i && i.id), onDelete: i && deleter("ingredients", i.id) });
+  }
+  $("addIng").addEventListener("click", function () { ingForm(null); });
+  $("ingList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-ing]"); if (tr) ingForm(S.ingredients.find(function (x) { return x.id === Number(tr.dataset.ing); })); });
+
+  // ---------------------------------------------------------------- Recetas
+  function renderRecetas() {
+    var recs = allRecipes();
+    if (!recs.length) { $("recList").innerHTML = '<div class="empty">No hay platos en la carta.</div>'; return; }
+    var html = "";
+    S.cats.forEach(function (c) {
+      var list = recs.filter(function (r) { return r.cat.id === c.id; });
+      if (list.length) html += "<h3>" + esc(c.name) + "</h3>" + recTable(list);
+    });
+    $("recList").innerHTML = html;
+  }
+  document.addEventListener("click", function (ev) {
+    var tr = ev.target.closest("tr[data-dish]"); if (!tr) return;
+    openRecipe(S.dishes.find(function (d) { return d.id === Number(tr.dataset.dish); }), tr.dataset.variant || "");
+  });
+
+  var R = null; // { dish, variant, lines: [{ingredient_id, qty, unit}], dirty }
+  function openRecipe(d, variant) {
+    if (!d) return;
+    R = { dish: d, variant: variant, dirty: false, lines: S.items.filter(function (l) { return l.dish_id === d.id && (l.variant || "") === variant; })
+      .map(function (l) { return { ingredient_id: l.ingredient_id, qty: num(l.qty), unit: l.unit }; }) };
+    $("recTitle").textContent = d.name;
+    var vs = variants(d);
+    $("recVariants").innerHTML = vs.length > 1 ? vs.map(function (v) {
+      return '<button type="button" data-v="' + esc(v.label) + '"' + (v.label === variant ? ' class="primary"' : "") + ">" + esc(v.label) + " · " + money(v.price) + "</button>";
+    }).join("") : "";
+    var other = vs.filter(function (v) { return v.label !== variant && recipeCost(d.id, v.label); })[0];
+    show("recCopy", !!other); if (other) { $("recCopy").textContent = "Copiar de " + other.label; $("recCopy").dataset.v = other.label; }
+    if (!R.lines.length && S.ingredients.length) R.lines.push({ ingredient_id: S.ingredients[0].id, qty: 0, unit: defaultUnit(S.ingredients[0]) });
+    drawRecipe();
+    if (!$("recDlg").open) $("recDlg").showModal();
+  }
+  function defaultUnit(ing) { return { kg: "g", g: "g", l: "ml", ml: "ml", unidad: "unidad" }[ing.buy_unit]; }
+  function unitOptions(ing, sel) {
+    var fam = ing ? U[ing.buy_unit][1] : "m";
+    return Object.keys(U).filter(function (u) { return U[u][1] === fam; }).map(function (u) { return '<option value="' + u + '"' + (u === sel ? " selected" : "") + ">" + UNIT_LABEL[u] + "</option>"; }).join("");
+  }
+  function drawRecipe() {
+    $("recNoIng").hidden = !!S.ingredients.length;
+    $("recAdd").disabled = !S.ingredients.length;
+    $("recLines").innerHTML = R.lines.length ? '<div class="line muted" style="font-size:12px"><span>Ingrediente</span><span>Cantidad</span><span>Unidad</span><span class="hide-sm" style="text-align:right">Costo</span><span></span></div>' +
+      R.lines.map(function (l, i) {
+        var ing = ingById(l.ingredient_id), c = lineCost(l, ing);
+        return '<div class="line' + (isNaN(c) ? " bad" : "") + '" data-i="' + i + '"><select class="li-ing">' + S.ingredients.map(function (x) {
+          return '<option value="' + x.id + '"' + (x.id === l.ingredient_id ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") +
+          '</select><input class="li-qty" type="number" step="0.001" min="0" inputmode="decimal" value="' + (l.qty || "") + '" placeholder="0"><select class="li-unit">' + unitOptions(ing, l.unit) +
+          '</select><span class="cost">' + (isNaN(c) ? "—" : money(c)) + '</span><button type="button" class="small danger li-del" aria-label="Quitar">×</button></div>';
+      }).join("") : '<p class="muted">Sin ingredientes todavía.</p>';
+    drawTotals();
+  }
+  function drawTotals() {
+    var price = num((variants(R.dish).find(function (v) { return v.label === R.variant; }) || {}).price);
+    var total = 0, ok = true;
+    R.lines.forEach(function (l) { var c = lineCost(l, ingById(l.ingredient_id)); if (isNaN(c)) ok = false; else total += c; });
+    var p = price > 0 ? total / price * 100 : NaN;
+    $("recKpis").innerHTML = '<div class="kpi"><span>Costo de insumos</span><b>' + money(total) + '</b></div><div class="kpi"><span>Precio de venta</span><b>' + money(price) +
+      '</b></div><div class="kpi"><span>Ganancia</span><b>' + money(price - total) + '</b></div><div class="kpi"><span>% costo</span><b>' + (ok ? pctPill(p) : '<span class="pill bad">revisar</span>') + "</b></div>";
+    $("recState").textContent = R.dirty ? "Cambios sin guardar" : "";
+  }
+  $("recLines").addEventListener("input", function (e) {
+    var row = e.target.closest(".line[data-i]"); if (!row) return;
+    var l = R.lines[Number(row.dataset.i)];
+    if (e.target.classList.contains("li-qty")) l.qty = num(e.target.value);
+    if (e.target.classList.contains("li-unit")) l.unit = e.target.value;
+    if (e.target.classList.contains("li-ing")) { l.ingredient_id = Number(e.target.value); var ing = ingById(l.ingredient_id); if (!sameFamily(l.unit, ing.buy_unit)) l.unit = defaultUnit(ing); }
+    R.dirty = true;
+    if (e.target.classList.contains("li-qty")) {  // no redibujar mientras se escribe
+      var c = lineCost(l, ingById(l.ingredient_id)); row.querySelector(".cost").textContent = isNaN(c) ? "—" : money(c);
+      row.classList.toggle("bad", isNaN(c)); drawTotals();
+    } else drawRecipe();
+  });
+  $("recLines").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("li-del")) return;
+    R.lines.splice(Number(e.target.closest(".line").dataset.i), 1); R.dirty = true; drawRecipe();
+  });
+  $("recAdd").addEventListener("click", function () {
+    var ing = S.ingredients[0]; R.lines.push({ ingredient_id: ing.id, qty: 0, unit: defaultUnit(ing) }); R.dirty = true; drawRecipe();
+    var qs = $("recLines").querySelectorAll(".li-ing"); if (qs.length) qs[qs.length - 1].focus();
+  });
+  $("recCopy").addEventListener("click", function () {
+    var from = this.dataset.v;
+    R.lines = S.items.filter(function (l) { return l.dish_id === R.dish.id && (l.variant || "") === from; }).map(function (l) { return { ingredient_id: l.ingredient_id, qty: num(l.qty), unit: l.unit }; });
+    R.dirty = true; drawRecipe(); toast("Copiado de " + from + ": ajusta las cantidades");
+  });
+  $("recVariants").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-v]"); if (!b) return;
+    if (R.dirty && !confirm("Hay cambios sin guardar. ¿Cambiar de tamaño sin guardar?")) return;
+    openRecipe(R.dish, b.dataset.v);
+  });
+  $("recClose").addEventListener("click", function () {
+    if (R && R.dirty && !confirm("Hay cambios sin guardar. ¿Cerrar sin guardar?")) return;
+    $("recDlg").close();
+  });
+  $("recDlg").addEventListener("cancel", function (e) { if (R && R.dirty && !confirm("Hay cambios sin guardar. ¿Cerrar sin guardar?")) e.preventDefault(); });
+  $("recSave").addEventListener("click", function () {
+    var lines = R.lines.filter(function (l) { return l.qty > 0; });
+    if (lines.some(function (l) { return isNaN(lineCost(l, ingById(l.ingredient_id))); })) { toast("Revisa las unidades marcadas en rojo"); return; }
+    var btn = this; btn.disabled = true;
+    q(sb.from("recipe_items").delete().eq("dish_id", R.dish.id).eq("variant", R.variant)).then(function () {
+      if (!lines.length) return;
+      return q(sb.from("recipe_items").insert(lines.map(function (l, i) {
+        return { dish_id: R.dish.id, variant: R.variant, ingredient_id: l.ingredient_id, qty: l.qty, unit: l.unit, position: i };
+      })));
+    }).then(function () { R.dirty = false; toast("Receta guardada"); return refresh(); })
+      .then(function () { openRecipe(R.dish, R.variant); })
+      .catch(fail).then(function () { btn.disabled = false; });
+  });
+
+  // ---------------------------------------------------------------- Áreas
+  function renderAreas() {
+    $("areaList").innerHTML = S.areas.map(function (a) {
+      var n = S.employees.filter(function (e) { return e.area_id === a.id; }).length + S.expenses.filter(function (x) { return x.area_id === a.id; }).length;
+      return '<div class="row" style="margin-top:6px;flex-wrap:nowrap" data-area="' + a.id + '"><input class="pos" type="number" value="' + a.position + '" style="width:64px" aria-label="Orden">' +
+        '<input class="name" value="' + esc(a.name) + '" style="flex:1" aria-label="Nombre"><span class="muted hide-sm" style="white-space:nowrap">' + n + ' registros</span><button type="button" class="danger small del">Eliminar</button></div>';
+    }).join("") || '<p class="muted">No hay áreas.</p>';
+  }
+  $("areaList").addEventListener("change", function (e) {
+    var row = e.target.closest("[data-area]"); if (!row) return;
+    var patch = e.target.classList.contains("pos") ? { position: parseInt(e.target.value, 10) || 0 } : { name: e.target.value.trim() };
+    if (patch.name === "") return toast("El nombre no puede estar vacío");
+    q(sb.from("cost_areas").update(patch).eq("id", Number(row.dataset.area))).then(function () { toast("Guardado"); return refresh(); }).catch(fail);
+  });
+  $("areaList").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("del")) return;
+    var id = Number(e.target.closest("[data-area]").dataset.area);
+    if (!confirm("¿Eliminar el área? Sus empleados y gastos quedarán como «Sin área».")) return;
+    q(sb.from("cost_areas").delete().eq("id", id)).then(refresh).catch(fail);
+  });
+  $("newArea").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var max = S.areas.reduce(function (m, a) { return Math.max(m, a.position); }, 0);
+    q(sb.from("cost_areas").insert({ name: $("newAreaName").value.trim(), position: max + 1 })).then(function () { $("newAreaName").value = ""; return refresh(); }).catch(fail);
+  });
+})();
+</script>
+</body>
+</html>

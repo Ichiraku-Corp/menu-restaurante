@@ -25,6 +25,22 @@ para cambiar precios, platos, fotos y disponibilidad.
 - **WhatsApp** (opcional): rellena `WHATSAPP_NUMBER` en `config.js` y aparece el botón
   «Enviar por WhatsApp» con el pedido ya escrito.
 
+## Gestión de costos (solo administración)
+
+`gestion.html` (enlace «Gestión de costos» en el panel) calcula los costos del restaurante,
+divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámaras (editables).
+
+- **Nómina quincenal**: empleados con su área, pago por quincena y bonos del mes.
+- **Gastos**: fijos (se repiten cada mes) y variables (con fecha).
+- **Insumos**: precio de compra, unidad y merma; calcula el costo real por kg, litro o unidad.
+- **Recetas**: ingredientes y cantidades por plato y tamaño (Peq/Gr); da el costo, la ganancia
+  y el % de costo sobre el precio de venta.
+- **Resumen**: costo del mes por área, márgenes y punto de equilibrio estimado.
+
+**Activarla (una vez):** en Supabase → SQL Editor ejecuta `supabase/gestion.sql`. Crea las
+tablas y añade como autorizadas las cuentas que ya existen en Authentication → Users.
+Nada de esto es público: solo lo ven las cuentas de la tabla `staff` con rol dueño o admin.
+
 ## Contenido actual
 
 `data/menu.json` tiene la carta completa: 6 categorías y 34 productos, con las fotos recortadas
