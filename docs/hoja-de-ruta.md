@@ -24,7 +24,8 @@ personal y la aprobación del dueño en lo que toca dinero.
 5. Personalidad e historia de Nex.
 6. Modelo Live2D de Nex.
 7. Días libres del personal (cuando estén definidos).
-8. Foto de la impresora de comandas (marca, modelo y etiqueta). Se conecta por red.
+8. Impresora de comandas: es una **Roccia** térmica de 80 mm, conectada por red. Falta la etiqueta
+   (modelo), una foto de los puertos traseros y la hoja de autoprueba (dirección IP).
 9. Nombre del proveedor de facturación digital (para revisar su API).
 
 ## Próximas fases
