@@ -39,6 +39,12 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
 - **Proveedores y precios automáticos**: los precios nuevos que cambian hasta un 5 % se
   aplican solos; si cambian más, esperan tu aprobación. Historial de cada cambio.
   Preparado para n8n: ver [`docs/n8n-precios.md`](docs/n8n-precios.md).
+- **Asistencia**: marcaciones del equipo de reconocimiento facial (vía n8n), con horario fijo por
+  empleado, tolerancia de 5 min, faltas y retrasos descontados de forma proporcional y horas extra
+  a 1,5 ×. Calcula lo que corresponde pagar en cada quincena.
+- **Ventas**: ventas diarias por método de pago y por plato (vía n8n o a mano), comisiones del
+  banco, reparto del 10 % de servicio (85 % local / 15 % personal) y resultado del mes.
+  Ver [`docs/n8n-asistencia-ventas.md`](docs/n8n-asistencia-ventas.md).
 
 **Activarla:** en Supabase → SQL Editor ejecuta `supabase/gestion.sql` (y de nuevo cada vez que se actualice; no borra datos). Crea las
 tablas y añade como autorizadas las cuentas que ya existen en Authentication → Users.

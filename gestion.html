@@ -77,6 +77,8 @@
   #toast.show { opacity:1; }
   .show-sm { display:none; }
   @media (max-width:560px) { .show-sm { display:block; } }
+  .sched { display:grid; gap:6px; }
+  .sched-row { display:grid; grid-template-columns:1fr 110px 110px; gap:6px; align-items:center; }
   .pend { border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; }
   .pend-prices { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
   .help { background:var(--chip); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--muted); margin:8px 0 0; }
@@ -116,6 +118,8 @@
     <nav class="tabs" id="tabs">
       <button data-tab="resumen" class="on">Resumen</button>
       <button data-tab="nomina">Nómina</button>
+      <button data-tab="asistencia">Asistencia</button>
+      <button data-tab="ventas">Ventas</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="insumos">Insumos</button>
       <button data-tab="recetas">Recetas</button>
@@ -140,6 +144,43 @@
         <div class="row between"><h2 style="margin:0">Nómina quincenal</h2><button class="primary" id="addEmp">+ Empleado</button></div>
         <p class="muted">Costo mensual = 2 quincenas + bonos u otros pagos del mes. Los inactivos no cuentan.</p>
         <div class="scroll" id="empList"></div>
+      </div>
+    </section>
+
+    <!-- Asistencia -->
+    <section data-panel="asistencia" hidden>
+      <div class="card hidden" id="attSetup"><p class="muted" style="margin:0">Para activar <b>asistencia y ventas</b>, vuelve a ejecutar <code>supabase/gestion.sql</code> en Supabase → SQL Editor.</p></div>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Asistencia de la quincena</h2>
+          <div class="row"><input type="month" id="attMonth" style="width:auto" aria-label="Mes">
+            <select id="attHalf" style="width:auto" aria-label="Quincena"><option value="1">1 – 15</option><option value="2">16 – fin de mes</option></select></div></div>
+        <p class="muted">Las marcaciones llegan del equipo de reconocimiento facial vía n8n. Tolerancia de <b id="attTol">5</b> min · horas extra a <b id="attOt">1.5</b>× · descuentos proporcionales. Toca un empleado para ver el detalle por día.</p>
+        <div class="scroll" id="attList"></div>
+        <p class="help">Para calcular, cada empleado necesita su <b>horario</b> y su <b>nº en el equipo facial</b> (Nómina → editar empleado). La marcación más temprana del día cuenta como entrada y la más tardía como salida.</p>
+      </div>
+    </section>
+
+    <!-- Ventas -->
+    <section data-panel="ventas" hidden>
+      <div class="row between">
+        <p class="muted" style="margin:0">Ventas del mes, comisiones del banco, reparto del servicio y resultado.</p>
+        <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button class="primary" id="addSale">+ Día</button></div>
+      </div>
+      <div class="kpis" style="margin-top:12px" id="salesKpis"></div>
+      <div class="card"><h2>Resultado del mes</h2><div id="salesResult"></div></div>
+      <div class="card"><h2>Platos más vendidos</h2><div class="scroll" id="salesTop"></div></div>
+      <div class="card"><h2>Ventas por día</h2><div class="scroll" id="salesDays"></div></div>
+      <div class="card">
+        <h2>Ajustes</h2>
+        <div class="grid2">
+          <div><label for="sStaff">% del servicio para el personal</label><input id="sStaff" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
+          <div><label for="sDeb">Comisión débito (%)</label><input id="sDeb" type="number" step="0.01" min="0" inputmode="decimal"></div>
+          <div><label for="sCre">Comisión crédito (%)</label><input id="sCre" type="number" step="0.01" min="0" inputmode="decimal"></div>
+          <div><label for="sPm">Comisión pago móvil (%)</label><input id="sPm" type="number" step="0.01" min="0" inputmode="decimal"></div>
+          <div><label for="sTol">Tolerancia de llegada (min)</label><input id="sTol" type="number" step="1" min="0" inputmode="numeric"></div>
+          <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
+        </div>
+        <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
       </div>
     </section>
 
@@ -267,7 +308,8 @@
   }
 
   var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [],
-            pricing: false, suppliers: [], settings: { auto_apply_pct: 5 }, updates: [], history: [] };
+            pricing: false, suppliers: [], settings: { auto_apply_pct: 5 }, updates: [], history: [],
+            attendance: false, events: [], salesByMonth: {}, itemsByMonth: {} };
   function supName(i) {
     var x = i.supplier_id && S.suppliers.find(function (y) { return y.id === i.supplier_id; });
     return x ? x.name : (i.supplier || "");
@@ -310,17 +352,19 @@
       opt(sb.from("suppliers").select("*").order("name")),
       opt(sb.from("gestion_settings").select("*")),
       opt(sb.from("price_updates").select("*").order("created_at", { ascending: false }).limit(60)),
-      opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15))
+      opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15)),
+      opt(sb.from("attendance_events").select("id").limit(1))
     ]).then(function (r) {
       S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
-      renderAll();
-    }).catch(fail);
+      S.attendance = r[11] !== null;
+      return loadPeriods();
+    }).then(renderAll).catch(fail);
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
   function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); }
 
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
@@ -380,7 +424,9 @@
       '<div class="kpi main"><span>Costo del mes</span><b>' + money(total) + "</b></div>" +
       '<div class="kpi"><span>Nómina</span><b>' + money(T.nom) + "</b></div>" +
       '<div class="kpi"><span>Gastos fijos</span><b>' + money(T.fix) + "</b></div>" +
-      '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>";
+      '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>" +
+      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), res = V.total + V.serviceLocal - V.fees - V.foodCost - total;
+        return '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + '</b></div><div class="kpi"><span>Resultado estimado</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>ver pestaña Ventas</span></div>"; })() : "");
     $("byArea").innerHTML = '<table class="tbl"><thead><tr><th>Área</th><th class="n hide-sm">Nómina</th><th class="n hide-sm">Fijos</th><th class="n hide-sm">Variables</th><th class="n">Total</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
       rows.map(function (r) {
         var t = r.nom + r.fix + r.vari, p = total ? t / total * 100 : 0;
@@ -436,6 +482,7 @@
       return "<div" + full + '><label for="' + id + '">' + esc(f.label) + "</label>" + input + (f.hint ? '<div class="muted">' + esc(f.hint) + "</div>" : "") + "</div>";
     }).join("") + "</div>" + (cfg.extra || "");
     show("dlgDelete", !!cfg.onDelete);
+    $("dlgForm").querySelector('button[type="submit"]').hidden = false; $("dlgCancel").textContent = "Cancelar";
     $("dlg").showModal();
     if (cfg.onInput) { $("dlgFields").oninput = cfg.onInput; cfg.onInput(); } else $("dlgFields").oninput = null;
   }
@@ -489,9 +536,12 @@
         { k: "area_id", label: "Área", type: "select", options: areaOptions(true) }, { k: "start_date", label: "Fecha de ingreso", type: "date" },
         { k: "pay_quincena", label: "Pago por quincena (" + PFX + ")", type: "number", step: "0.01" },
         { k: "monthly_extra", label: "Bonos u otros pagos al mes (" + PFX + ")", type: "number", step: "0.01", hint: "Bono de alimentación, transporte, etc." },
+        S.attendance ? { k: "device_user_id", label: "Nº de empleado en el equipo facial", ph: "Ej.: 7", hint: "El «Employee No.» con que lo registraste en el equipo." } : null,
         { k: "active", label: "Activo (cuenta en la nómina)", type: "check", full: true }, { k: "notes", label: "Notas", type: "area", full: true }
-      ],
-      validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!v.start_date) v.start_date = null; },
+      ].filter(Boolean),
+      extra: S.attendance ? scheduleEditor(e && e.schedule) : "",
+      validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!v.start_date) v.start_date = null;
+        if (S.attendance) { var sc = readSchedule(); if (typeof sc === "string") return sc; v.schedule = sc; v.device_user_id = v.device_user_id || null; } },
       onSave: saver("employees", e && e.id), onDelete: e && deleter("employees", e.id) });
   }
   $("addEmp").addEventListener("click", function () { empForm(null); });
@@ -629,6 +679,246 @@
   }
   $("addSup").addEventListener("click", function () { supForm(null); });
   $("supList").addEventListener("click", function (e) { var tr = e.target.closest("[data-sup]"); if (tr) supForm(S.suppliers.find(function (x) { return x.id === Number(tr.dataset.sup); })); });
+
+  // ---------------------------------------------------------------- Datos por periodo (asistencia y ventas)
+  var TZ = "America/Caracas";
+  function pageAll(make) { // Supabase entrega como máximo ~1000 filas por consulta: se pide por páginas.
+    var out = [], size = 1000;
+    function next(from) {
+      return make().range(from, from + size - 1).then(function (r) {
+        if (r.error) throw r.error;
+        out = out.concat(r.data || []);
+        return (r.data || []).length === size ? next(from + size) : out;
+      });
+    }
+    return next(0);
+  }
+  function monthBounds(ym) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7); var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { from: ym + "-01", to: ym + "-" + String(last).padStart(2, "0"), last: last }; }
+  function attPeriod() {
+    var ym = $("attMonth").value || ymNow(), b = monthBounds(ym), half = $("attHalf").value;
+    return half === "1" ? { from: ym + "-01", to: ym + "-15" } : { from: ym + "-16", to: b.to };
+  }
+  function loadPeriods() {
+    if (!S.attendance) return Promise.resolve();
+    var ap = attPeriod();
+    // margen de un día a cada lado por la zona horaria
+    var fromTs = new Date(ap.from + "T00:00:00-04:00").getTime() - 864e5, toTs = new Date(ap.to + "T23:59:59-04:00").getTime() + 864e5;
+    var months = [$("month").value || ymNow(), $("salesMonth").value || ymNow()].filter(function (m, i, a) { return a.indexOf(m) === i; });
+    return Promise.all([
+      pageAll(function () { return sb.from("attendance_events").select("*").gte("event_time", new Date(fromTs).toISOString()).lte("event_time", new Date(toTs).toISOString()).order("event_time"); })
+    ].concat(months.map(function (m) {
+      var b = monthBounds(m);
+      return Promise.all([
+        pageAll(function () { return sb.from("daily_sales").select("*").gte("sale_date", b.from).lte("sale_date", b.to).order("sale_date", { ascending: false }); }),
+        pageAll(function () { return sb.from("sales_items").select("*").gte("sale_date", b.from).lte("sale_date", b.to).order("id"); })
+      ]).then(function (r) { S.salesByMonth[m] = r[0]; S.itemsByMonth[m] = r[1]; });
+    }))).then(function (r) { S.events = r[0]; });
+  }
+  function reloadPeriods() { loadPeriods().then(renderAll).catch(fail); }
+
+  // ---------------------------------------------------------------- Horario (en el formulario del empleado)
+  var DAYS = [["1", "Lunes"], ["2", "Martes"], ["3", "Miércoles"], ["4", "Jueves"], ["5", "Viernes"], ["6", "Sábado"], ["7", "Domingo"]];
+  function scheduleEditor(sc) {
+    sc = sc || {};
+    return '<label style="margin-top:14px">Horario fijo</label><div class="sched">' + DAYS.map(function (d) {
+      var x = sc[d[0]] || null;
+      return '<div class="sched-row" data-day="' + d[0] + '"><label class="row" style="margin:0;color:var(--text)"><input type="checkbox" class="sc-on"' + (x ? " checked" : "") + "> " + d[1] + "</label>" +
+        '<input type="time" class="sc-in" value="' + esc(x ? x["in"] : "12:00") + '" aria-label="Entrada ' + d[1] + '"><input type="time" class="sc-out" value="' + esc(x ? x.out : "22:00") + '" aria-label="Salida ' + d[1] + '"></div>';
+    }).join("") + '</div><p class="muted" style="margin:6px 0 0">Marca los días que trabaja, con su hora de entrada y salida.</p>';
+  }
+  function readSchedule() {
+    var out = {}, err = "";
+    document.querySelectorAll("#dlgFields .sched-row").forEach(function (r) {
+      if (!r.querySelector(".sc-on").checked) return;
+      var a = r.querySelector(".sc-in").value, b = r.querySelector(".sc-out").value;
+      if (!a || !b) err = "Completa las horas de los días marcados."; else out[r.dataset.day] = { "in": a, out: b };
+    });
+    return err || out;
+  }
+  function hm(t) { var p = String(t || "0:0").split(":"); return (+p[0]) * 60 + (+p[1] || 0); }
+  function dayMinutes(x) { var a = hm(x["in"]), b = hm(x.out); if (b <= a) b += 1440; return b - a; }
+  function weeklyMinutes(sc) { return Object.keys(sc || {}).reduce(function (t, k) { return t + dayMinutes(sc[k]); }, 0); }
+  var fmtLocal = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  function local(ts) {
+    var p = {}; fmtLocal.formatToParts(new Date(ts)).forEach(function (x) { p[x.type] = x.value; });
+    return { date: p.year + "-" + p.month + "-" + p.day, min: (+p.hour) * 60 + (+p.minute) };
+  }
+  function isoDow(dateStr) { var d = new Date(dateStr + "T12:00:00Z").getUTCDay(); return String(d === 0 ? 7 : d); }
+  function hhmm(min) { min = Math.round(min); var h = Math.floor(min / 60), m = min % 60; return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0"); }
+  function dur(min) { min = Math.round(min); return min >= 60 ? Math.floor(min / 60) + " h " + String(min % 60).padStart(2, "0") + " min" : min + " min"; }
+
+  // ---------------------------------------------------------------- Cálculo de asistencia
+  function attendanceFor(e, period) {
+    var sc = e.schedule || {}, weekly = weeklyMinutes(sc), tol = num(S.settings.late_tolerance_min != null ? S.settings.late_tolerance_min : 5);
+    var factor = num(S.settings.overtime_factor != null ? S.settings.overtime_factor : 1.5);
+    var rateMin = weekly > 0 ? (num(e.pay_quincena) * 2) / (weekly * 52 / 12) : 0; // Ref por minuto
+    var byDay = {};
+    S.events.forEach(function (ev) { if (ev.employee_id !== e.id) return; var l = local(ev.event_time); (byDay[l.date] = byDay[l.date] || []).push(l.min); });
+    var today = local(Date.now()), days = [], T = { worked: 0, late: 0, lateDays: 0, absent: 0, ot: 0, incomplete: 0, ded: 0, otPay: 0 };
+    for (var d = new Date(period.from + "T12:00:00Z"); d.toISOString().slice(0, 10) <= period.to; d.setUTCDate(d.getUTCDate() + 1)) {
+      var ds = d.toISOString().slice(0, 10); if (ds > today.date) break;
+      var s = sc[isoDow(ds)], evs = (byDay[ds] || []).sort(function (a, b) { return a - b; }), row = { date: ds, s: s, evs: evs, st: "", late: 0, ot: 0, worked: 0, ded: 0 };
+      if (s) {
+        var sIn = hm(s["in"]), sOut = sIn + dayMinutes(s);
+        if (!evs.length) {
+          if (ds === today.date && today.min < sOut) { row.st = "hoy"; }
+          else { row.st = "falta"; row.ded = dayMinutes(s) * rateMin; T.absent++; }
+        } else if (evs.length === 1) {
+          row.st = ds === today.date ? "en turno" : "incompleta"; if (row.st === "incompleta") T.incomplete++;
+        } else {
+          var a = evs[0], b = evs[evs.length - 1]; if (b < a) b += 1440;
+          row.worked = b - a; var late = a - sIn, ot = b - sOut;
+          row.late = late > tol ? late : 0; row.ot = ot > tol ? ot : 0;
+          row.ded = row.late * rateMin; row.st = row.late ? "tarde" : "ok";
+          if (row.late) T.lateDays++;
+        }
+      } else if (evs.length >= 2) { // día libre trabajado: todo cuenta como extra
+        row.worked = evs[evs.length - 1] - evs[0]; row.ot = row.worked; row.st = "extra";
+      } else if (evs.length === 1) { row.st = "incompleta"; T.incomplete++; }
+      else continue;
+      T.worked += row.worked; T.late += row.late; T.ot += row.ot; T.ded += row.ded;
+      days.push(row);
+    }
+    T.otPay = T.ot * rateMin * factor;
+    T.pay = num(e.pay_quincena) - T.ded + T.otPay;
+    return { days: days, T: T, rateMin: rateMin, weekly: weekly };
+  }
+
+  function renderAsistencia() {
+    show("attSetup", !S.attendance);
+    $("attTol").textContent = num(S.settings.late_tolerance_min != null ? S.settings.late_tolerance_min : 5);
+    $("attOt").textContent = num(S.settings.overtime_factor != null ? S.settings.overtime_factor : 1.5);
+    if (!S.attendance) { $("attList").innerHTML = ""; return; }
+    var period = attPeriod(), list = S.employees.filter(function (e) { return e.active; });
+    if (!list.length) { $("attList").innerHTML = '<div class="empty">No hay empleados activos.</div>'; return; }
+    var G = { ded: 0, otPay: 0, base: 0, pay: 0 };
+    $("attList").innerHTML = '<table class="tbl"><thead><tr><th>Empleado</th><th class="n hide-sm">Horas</th><th class="n hide-sm">Faltas</th><th class="n hide-sm">Tarde</th><th class="n hide-sm">Extra</th><th class="n">A pagar</th></tr></thead><tbody>' +
+      list.map(function (e) {
+        var A = attendanceFor(e, period), T = A.T, noSched = !A.weekly, noId = !e.device_user_id;
+        G.base += num(e.pay_quincena); G.ded += T.ded; G.otPay += T.otPay; G.pay += A.weekly ? T.pay : num(e.pay_quincena);
+        return '<tr class="click" data-att="' + e.id + '"><td><b>' + esc(e.name) + '</b><div class="muted">' + esc(areaName(e.area_id)) +
+          (noSched ? ' · <span class="pill warn">sin horario</span>' : "") + (noId ? ' · <span class="pill warn">sin nº de equipo</span>' : "") + (T.incomplete ? ' · <span class="pill warn">' + T.incomplete + " incompleta" + (T.incomplete > 1 ? "s" : "") + "</span>" : "") +
+          '</div><div class="muted show-sm">' + dur(T.worked) + " · faltas " + T.absent + (T.late ? " · tarde " + dur(T.late) : "") + (T.ot ? " · extra " + dur(T.ot) : "") + '</div></td><td class="n hide-sm">' + dur(T.worked) + '</td><td class="n hide-sm">' + (T.absent ? '<span class="pill bad">' + T.absent + "</span>" : "0") +
+          '</td><td class="n hide-sm">' + (T.late ? '<span class="pill warn">' + dur(T.late) + "</span>" : "—") + '</td><td class="n hide-sm">' + (T.ot ? dur(T.ot) : "—") +
+          '</td><td class="n"><b>' + money(A.weekly ? T.pay : num(e.pay_quincena)) + "</b>" + (A.weekly && (T.ded || T.otPay) ? '<div class="muted">' + (T.ded ? "−" + money(T.ded) : "") + (T.otPay ? " +" + money(T.otPay) : "") + "</div>" : "") + "</td></tr>";
+      }).join("") +
+      '<tr class="total"><td>Total quincena<div class="muted">' + (G.ded ? "descuentos −" + money(G.ded) : "") + (G.otPay ? " · extra +" + money(G.otPay) : "") + '</div></td><td class="hide-sm"></td><td class="hide-sm"></td><td class="hide-sm"></td><td class="hide-sm"></td><td class="n">' + money(G.pay) + "</td></tr></tbody></table>";
+  }
+  $("attList").addEventListener("click", function (ev) {
+    var tr = ev.target.closest("[data-att]"); if (!tr) return;
+    var e = S.employees.find(function (x) { return x.id === Number(tr.dataset.att); }), A = attendanceFor(e, attPeriod());
+    var label = { ok: '<span class="pill ok">a tiempo</span>', tarde: '<span class="pill warn">tarde</span>', falta: '<span class="pill bad">falta</span>', incompleta: '<span class="pill warn">sin salida</span>',
+      extra: '<span class="pill ok">día extra</span>', hoy: '<span class="pill">hoy</span>', "en turno": '<span class="pill">en turno</span>' };
+    $("dlgTitle").textContent = e.name + " · asistencia";
+    $("dlgFields").innerHTML = (A.weekly ? '<p class="muted">Horario: ' + dur(A.weekly) + " por semana · valor hora " + money(A.rateMin * 60) + "</p>" : '<p class="muted">Sin horario: añádelo en Nómina para calcular retrasos y faltas.</p>') +
+      (A.days.length ? '<div class="scroll"><table class="tbl"><thead><tr><th>Día</th><th class="hide-sm">Horario</th><th>Marcas</th><th>Estado</th><th class="n">Ajuste</th></tr></thead><tbody>' + A.days.map(function (r) {
+        return "<tr><td>" + esc(r.date.slice(8, 10) + "/" + r.date.slice(5, 7)) + "</td><td class=\"hide-sm\">" + (r.s ? esc(r.s["in"] + "–" + r.s.out) : "—") + "</td><td>" + (r.evs.map(hhmm).join(" · ") || "—") + "</td><td>" + (label[r.st] || "") +
+          (r.late ? ' <span class="muted">' + dur(r.late) + "</span>" : "") + (r.ot ? ' <span class="muted">+' + dur(r.ot) + "</span>" : "") + '</td><td class="n">' + [r.ded ? "−" + money(r.ded) : "", r.ot ? "+" + money(r.ot * A.rateMin * num(S.settings.overtime_factor != null ? S.settings.overtime_factor : 1.5)) : ""].filter(Boolean).join("<br>") + "</td></tr>";
+      }).join("") + "</tbody></table></div>" : '<p class="muted">Sin días en este periodo.</p>');
+    form = { fields: [], onSave: function () { return Promise.resolve(); } };
+    show("dlgDelete", false); $("dlgFields").oninput = null; $("dlgErr").textContent = "";
+    $("dlgForm").querySelector('button[type="submit"]').hidden = true; $("dlgCancel").textContent = "Cerrar";
+    $("dlg").showModal();
+  });
+  $("attMonth").value = $("salesMonth").value = ymNow();
+  $("attHalf").value = new Date().getDate() <= 15 ? "1" : "2";
+  ["attMonth", "attHalf", "salesMonth"].forEach(function (id) { $(id).addEventListener("change", reloadPeriods); });
+  $("month").removeEventListener("change", renderResumen); $("month").addEventListener("change", reloadPeriods);
+
+  // ---------------------------------------------------------------- Ventas
+  var METHODS = [["debito", "Débito"], ["credito", "Crédito"], ["pago_movil", "Pago móvil"], ["efectivo", "Efectivo"], ["otros", "Otros"]];
+  function feePct(k) { var m = { debito: "fee_debito", credito: "fee_credito", pago_movil: "fee_pago_movil" }[k]; return m ? num(S.settings[m]) : 0; }
+  function salesStats(ym) {
+    var days = S.salesByMonth[ym] || [], items = S.itemsByMonth[ym] || [], staffPct = num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15);
+    var T = { total: 0, service: 0, tickets: 0, fees: 0, methods: {}, days: days.length };
+    days.forEach(function (d) {
+      T.total += num(d.total); T.service += num(d.service_amount); T.tickets += num(d.tickets);
+      METHODS.forEach(function (m) { var v = num((d.by_method || {})[m[0]]); T.methods[m[0]] = (T.methods[m[0]] || 0) + v; T.fees += v * feePct(m[0]) / 100; });
+    });
+    T.serviceStaff = T.service * staffPct / 100; T.serviceLocal = T.service - T.serviceStaff;
+    var dishes = {}, foodCost = 0, covered = 0;
+    items.forEach(function (it) {
+      var k = it.dish_name + "|" + it.variant, x = dishes[k] = dishes[k] || { name: it.dish_name, variant: it.variant, dish_id: it.dish_id, qty: 0, amount: 0, cost: null };
+      x.qty += num(it.qty); x.amount += num(it.amount);
+    });
+    Object.keys(dishes).forEach(function (k) {
+      var x = dishes[k], rc = x.dish_id ? (recipeCost(x.dish_id, x.variant) || (x.variant ? null : (function () {
+        var d = S.dishes.find(function (y) { return y.id === x.dish_id; }); return d ? recipeCost(d.id, variants(d)[0].label) : null; })())) : null;
+      if (rc && !rc.broken) { x.cost = rc.cost * x.qty; foodCost += x.cost; covered += x.amount; }
+    });
+    T.foodCost = foodCost; T.coverage = T.total ? covered / T.total * 100 : 0;
+    T.top = Object.keys(dishes).map(function (k) { return dishes[k]; }).sort(function (a, b) { return b.qty - a.qty; });
+    return T;
+  }
+  function monthCosts(ym) {
+    var nom = 0, fix = 0, vari = 0;
+    S.employees.forEach(function (e) { nom += empMonthly(e); });
+    S.expenses.forEach(function (x) { if (x.kind === "fijo") fix += num(x.amount); else if (inMonth(x, ym)) vari += num(x.amount); });
+    return { nom: nom, fix: fix, vari: vari, total: nom + fix + vari };
+  }
+  function renderVentas() {
+    if (!S.attendance) { $("salesKpis").innerHTML = '<div class="card" style="grid-column:1/-1"><p class="muted" style="margin:0">Para activar ventas, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p></div>'; ["salesResult", "salesTop", "salesDays"].forEach(function (id) { $(id).innerHTML = ""; }); return; }
+    var ym = $("salesMonth").value || ymNow(), T = salesStats(ym), C2 = monthCosts(ym);
+    $("salesKpis").innerHTML =
+      '<div class="kpi main"><span>Ventas del mes</span><b>' + money(T.total) + "</b></div>" +
+      '<div class="kpi"><span>Servicio 10 % (local)</span><b>' + money(T.serviceLocal) + '</b><span>personal ' + money(T.serviceStaff) + "</span></div>" +
+      '<div class="kpi"><span>Comisiones banco (est.)</span><b>' + money(T.fees) + "</b></div>" +
+      '<div class="kpi"><span>Tickets · promedio</span><b>' + T.tickets + "</b><span>" + (T.tickets ? money(T.total / T.tickets) + " por ticket" : "—") + "</span></div>";
+    var result = T.total + T.serviceLocal - T.fees - T.foodCost - C2.total;
+    $("salesResult").innerHTML = T.days ? '<table class="tbl"><tbody>' +
+      "<tr><td>Ventas</td><td class=\"n\">" + money(T.total) + "</td></tr>" +
+      "<tr><td>+ Servicio para el local (" + (100 - num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15)) + " %)</td><td class=\"n\">" + money(T.serviceLocal) + "</td></tr>" +
+      "<tr><td>− Comisiones del banco (estimadas)</td><td class=\"n\">" + money(T.fees) + "</td></tr>" +
+      "<tr><td>− Costo de insumos (según recetas)<div class=\"muted\">Cubre el " + pct(T.coverage) + " de lo vendido; el resto no tiene receta cargada.</div></td><td class=\"n\">" + money(T.foodCost) + "</td></tr>" +
+      "<tr><td>− Nómina, gastos fijos y variables del mes</td><td class=\"n\">" + money(C2.total) + "</td></tr>" +
+      '<tr class="total"><td>Resultado</td><td class="n" style="color:' + (result >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(result) + "</td></tr></tbody></table>" +
+      '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no cuenta como ingreso del local.</p>"
+      : '<div class="empty">Sin ventas registradas en este mes. Llegarán desde n8n, o pulsa «+ Día» para cargarlas a mano.</div>';
+    $("salesTop").innerHTML = T.top.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="n hide-sm">Costo est.</th><th class="n">Margen</th></tr></thead><tbody>' +
+      T.top.slice(0, 15).map(function (x) {
+        return "<tr><td>" + esc(x.name) + (x.variant ? ' <span class="muted">' + esc(x.variant) + "</span>" : "") + (x.dish_id ? "" : ' <span class="pill warn">no está en la carta</span>') +
+          '</td><td class="n">' + nf3.format(x.qty) + '</td><td class="n">' + money(x.amount) + '</td><td class="n hide-sm">' + (x.cost == null ? "—" : money(x.cost)) +
+          '</td><td class="n">' + (x.cost == null ? '<span class="pill">sin receta</span>' : pctPill(x.amount ? x.cost / x.amount * 100 : NaN)) + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Sin detalle por plato todavía.</div>';
+    var days = S.salesByMonth[ym] || [];
+    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Servicio</th><th class="n hide-sm">Tickets</th><th class="hide-sm">Origen</th></tr></thead><tbody>' +
+      days.map(function (d) {
+        return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + money(d.service_amount) +
+          '</td><td class="n hide-sm">' + num(d.tickets) + '</td><td class="hide-sm">' + esc(d.source) + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Sin días registrados.</div>';
+    var st = S.settings;
+    $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
+    $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5);
+  }
+  function saleForm(d) {
+    var ym = $("salesMonth").value || ymNow(), items = d ? (S.itemsByMonth[ym] || []).filter(function (i) { return i.sale_date === d.sale_date; }) : [];
+    var bm = (d && d.by_method) || {}, vals = { sale_date: d ? d.sale_date : new Date().toISOString().slice(0, 10), service_amount: d ? num(d.service_amount) : 0, tickets: d ? num(d.tickets) : 0, notes: d ? d.notes : "" };
+    METHODS.forEach(function (m) { vals["m_" + m[0]] = num(bm[m[0]]); });
+    openForm({ title: d ? "Ventas del " + d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7) : "Registrar ventas de un día", values: vals,
+      fields: [{ k: "sale_date", label: "Fecha", type: "date", req: true }, { k: "tickets", label: "Tickets (ventas)", type: "number", step: "1" }]
+        .concat(METHODS.map(function (m) { return { k: "m_" + m[0], label: m[1] + " (" + PFX + ")", type: "number", step: "0.01" }; }))
+        .concat([{ k: "service_amount", label: "Servicio 10 % cobrado (" + PFX + ")", type: "number", step: "0.01" }, { k: "notes", label: "Notas", type: "area", full: true }]),
+      extra: '<p class="help" id="salePreview"></p>' + (items.length ? '<p class="muted">El detalle por plato (' + items.length + " platos) se conserva.</p>" : ""),
+      onInput: function () { var v = formValues(), t = METHODS.reduce(function (s2, m) { return s2 + v["m_" + m[0]]; }, 0); $("salePreview").textContent = "Total de ventas (sin servicio): " + money(t) + "."; },
+      validate: function (v) { if (!v.sale_date) return "Elige la fecha."; },
+      onSave: function (v) {
+        var methods = {}, total = 0; METHODS.forEach(function (m) { methods[m[0]] = v["m_" + m[0]]; total += v["m_" + m[0]]; });
+        return q(sb.rpc("upsert_daily_sales", { p_date: v.sale_date, p_total: total, p_service: v.service_amount, p_methods: methods, p_tickets: Math.round(v.tickets), p_source: "manual", p_notes: v.notes,
+          p_items: items.map(function (i) { return { name: i.dish_name, variant: i.variant, qty: num(i.qty), amount: num(i.amount) }; }) }))
+          .then(function () { return d && d.sale_date !== v.sale_date ? q(sb.from("daily_sales").delete().eq("sale_date", d.sale_date)) : null; });
+      },
+      onDelete: d && function () { return q(sb.from("daily_sales").delete().eq("sale_date", d.sale_date)); } });
+  }
+  $("addSale").addEventListener("click", function () { if (!S.attendance) return toast("Primero vuelve a ejecutar gestion.sql"); saleForm(null); });
+  $("salesDays").addEventListener("click", function (e) { var tr = e.target.closest("[data-sale]"); if (!tr) return; var ym = $("salesMonth").value || ymNow();
+    saleForm((S.salesByMonth[ym] || []).find(function (d) { return d.sale_date === tr.dataset.sale; })); });
+  $("saveSettings").addEventListener("click", function () {
+    var patch = { service_staff_pct: num($("sStaff").value), fee_debito: num($("sDeb").value), fee_credito: num($("sCre").value), fee_pago_movil: num($("sPm").value),
+      late_tolerance_min: Math.round(num($("sTol").value)), overtime_factor: num($("sOt").value) };
+    if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
+    q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
+  });
 
   // ---------------------------------------------------------------- Recetas
   function renderRecetas() {

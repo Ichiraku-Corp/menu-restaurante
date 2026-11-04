@@ -283,3 +283,114 @@ revoke execute on function public.propose_price(text, numeric, numeric, text, te
 revoke execute on function public.decide_price(bigint, boolean) from anon, public;
 grant execute on function public.propose_price(text, numeric, numeric, text, text, text, text) to authenticated, service_role;
 grant execute on function public.decide_price(bigint, boolean) to authenticated;
+
+-- ================================================================ Asistencia (reconocimiento facial vía n8n)
+-- El equipo facial guarda las caras; aquí solo llega QUIÉN marcó y CUÁNDO.
+-- schedule: horario fijo por día ISO (1 = lunes … 7 = domingo), p. ej.
+--   {"2": {"in": "12:00", "out": "22:00"}, "3": {"in": "12:00", "out": "22:00"}}
+alter table public.employees add column if not exists schedule jsonb not null default '{}'::jsonb;
+alter table public.employees add column if not exists device_user_id text;
+create unique index if not exists employees_device_uid on public.employees (device_user_id) where device_user_id is not null and device_user_id <> '';
+
+alter table public.gestion_settings add column if not exists late_tolerance_min int not null default 5 check (late_tolerance_min between 0 and 120);
+alter table public.gestion_settings add column if not exists overtime_factor numeric(4,2) not null default 1.5 check (overtime_factor >= 0);
+alter table public.gestion_settings add column if not exists service_staff_pct numeric(5,2) not null default 15 check (service_staff_pct between 0 and 100);
+alter table public.gestion_settings add column if not exists fee_debito numeric(5,2) not null default 1.75;
+alter table public.gestion_settings add column if not exists fee_credito numeric(5,2) not null default 4.00;
+alter table public.gestion_settings add column if not exists fee_pago_movil numeric(5,2) not null default 1.90;
+
+create table if not exists public.attendance_events (
+  id          bigint generated always as identity primary key,
+  employee_id bigint not null references public.employees(id) on delete cascade,
+  event_time  timestamptz not null,
+  kind        text not null default 'auto' check (kind in ('in', 'out', 'auto')),
+  source      text not null default 'n8n',
+  device_ref  text not null default '',
+  created_at  timestamptz not null default now(),
+  unique (employee_id, event_time)
+);
+create index if not exists attendance_time_idx on public.attendance_events (event_time);
+
+-- Registra una marcación. p_employee acepta el ID del equipo facial, el número
+-- de empleado o el nombre exacto. Si la marcación ya existe, no la duplica.
+create or replace function public.record_attendance(
+  p_employee text, p_time timestamptz, p_kind text default 'auto', p_source text default 'n8n', p_device text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare emp bigint; new_id bigint;
+begin
+  if not public.can_manage_or_service() then raise exception 'Sin permiso'; end if;
+  select id into emp from public.employees where device_user_id = trim(p_employee);
+  if emp is null and p_employee ~ '^\d+$' then select id into emp from public.employees where id = p_employee::bigint; end if;
+  if emp is null then select id into emp from public.employees where lower(name) = lower(trim(p_employee)); end if;
+  if emp is null then raise exception 'Empleado no encontrado: %', p_employee; end if;
+  insert into public.attendance_events (employee_id, event_time, kind, source, device_ref)
+  values (emp, p_time, coalesce(nullif(p_kind, ''), 'auto'), coalesce(p_source, 'n8n'), coalesce(p_device, ''))
+  on conflict (employee_id, event_time) do nothing returning id into new_id;
+  return jsonb_build_object('id', new_id, 'employee_id', emp, 'duplicate', new_id is null);
+end $$;
+
+-- ================================================================ Ventas diarias (vía n8n o a mano)
+-- by_method: {"debito": 0, "credito": 0, "pago_movil": 0, "efectivo": 0, "otros": 0} (sin el 10 % de servicio)
+create table if not exists public.daily_sales (
+  sale_date      date primary key,
+  total          numeric(12,2) not null default 0 check (total >= 0),   -- ventas sin servicio
+  service_amount numeric(12,2) not null default 0 check (service_amount >= 0),
+  by_method      jsonb not null default '{}'::jsonb,
+  tickets        int not null default 0 check (tickets >= 0),
+  source         text not null default 'manual',
+  notes          text not null default '',
+  updated_at     timestamptz not null default now()
+);
+
+create table if not exists public.sales_items (
+  id        bigint generated always as identity primary key,
+  sale_date date not null references public.daily_sales(sale_date) on delete cascade,
+  dish_id   bigint references public.dishes(id) on delete set null,
+  dish_name text not null,
+  variant   text not null default '',
+  qty       numeric(10,2) not null default 0 check (qty >= 0),
+  amount    numeric(12,2) not null default 0 check (amount >= 0),
+  unique (sale_date, dish_name, variant)
+);
+
+-- Guarda (o reemplaza) las ventas de un día. p_items: [{"name": "Hokage", "variant": "", "qty": 3, "amount": 75}, …]
+-- El plato se enlaza solo con la carta si el nombre coincide (sin distinguir mayúsculas).
+create or replace function public.upsert_daily_sales(
+  p_date date, p_total numeric, p_service numeric default 0, p_methods jsonb default '{}'::jsonb,
+  p_tickets int default 0, p_items jsonb default '[]'::jsonb, p_source text default 'n8n', p_notes text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not public.can_manage_or_service() then raise exception 'Sin permiso'; end if;
+  insert into public.daily_sales (sale_date, total, service_amount, by_method, tickets, source, notes, updated_at)
+  values (p_date, coalesce(p_total, 0), coalesce(p_service, 0), coalesce(p_methods, '{}'::jsonb), coalesce(p_tickets, 0), coalesce(p_source, 'n8n'), coalesce(p_notes, ''), now())
+  on conflict (sale_date) do update set total = excluded.total, service_amount = excluded.service_amount, by_method = excluded.by_method,
+    tickets = excluded.tickets, source = excluded.source, notes = excluded.notes, updated_at = now();
+  delete from public.sales_items where sale_date = p_date;
+  insert into public.sales_items (sale_date, dish_id, dish_name, variant, qty, amount)
+  select p_date, d.id, coalesce(d.name, trim(i.name)), coalesce(trim(i.variant), ''), sum(coalesce(i.qty, 0)), sum(coalesce(i.amount, 0))
+  from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as i(name text, variant text, qty numeric, amount numeric)
+  left join public.dishes d on lower(d.name) = lower(trim(i.name))
+  where coalesce(trim(i.name), '') <> ''
+  group by d.id, coalesce(d.name, trim(i.name)), coalesce(trim(i.variant), '');
+  get diagnostics n = row_count;
+  return jsonb_build_object('date', p_date, 'items', n);
+end $$;
+
+alter table public.attendance_events enable row level security;
+alter table public.daily_sales       enable row level security;
+alter table public.sales_items       enable row level security;
+do $$
+declare t text;
+begin
+  foreach t in array array['attendance_events', 'daily_sales', 'sales_items'] loop
+    execute format('drop policy if exists "manage %1$s" on public.%1$I', t);
+    execute format('create policy "manage %1$s" on public.%1$I for all to authenticated
+                    using (public.can_manage()) with check (public.can_manage())', t);
+  end loop;
+end $$;
+revoke all on public.attendance_events, public.daily_sales, public.sales_items from anon;
+revoke execute on function public.record_attendance(text, timestamptz, text, text, text) from anon, public;
+revoke execute on function public.upsert_daily_sales(date, numeric, numeric, jsonb, int, jsonb, text, text) from anon, public;
+grant execute on function public.record_attendance(text, timestamptz, text, text, text) to authenticated, service_role;
+grant execute on function public.upsert_daily_sales(date, numeric, numeric, jsonb, int, jsonb, text, text) to authenticated, service_role;
