@@ -77,6 +77,8 @@
   #toast.show { opacity:1; }
   .show-sm { display:none; }
   @media (max-width:560px) { .show-sm { display:block; } }
+  .pend { border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; }
+  .pend-prices { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
   .help { background:var(--chip); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--muted); margin:8px 0 0; }
 </style>
 <script src="config.js"></script>
@@ -154,11 +156,28 @@
 
     <!-- Insumos -->
     <section data-panel="insumos" hidden>
+      <div class="card hidden" id="priceSetup"><p class="muted" style="margin:0">Para activar <b>proveedores y precios automáticos</b>, vuelve a ejecutar <code>supabase/gestion.sql</code> en Supabase → SQL Editor.</p></div>
+      <div class="card" id="pendCard">
+        <div class="row between"><h2 style="margin:0">Precios pendientes <span class="pill" id="pendCount">0</span></h2>
+          <label class="row" style="margin:0;color:var(--text)">Aplicar automáticamente si cambian hasta
+            <input id="autoPct" type="number" min="0" max="100" step="0.5" style="width:72px" inputmode="decimal"> %</label></div>
+        <p class="muted">Los precios nuevos (de n8n o de un proveedor) que cambian más que ese porcentaje esperan tu aprobación aquí.</p>
+        <div class="scroll" id="pendList"></div>
+      </div>
       <div class="card">
         <div class="row between"><h2 style="margin:0">Insumos</h2><button class="primary" id="addIng">+ Insumo</button></div>
         <p class="muted">Lo que compras para cocinar, con su precio de compra. La merma es lo que se pierde al limpiar o cocinar y sube el costo real.</p>
         <input id="ingSearch" type="search" placeholder="Buscar insumo…" style="margin:6px 0 4px">
         <div class="scroll" id="ingList"></div>
+      </div>
+      <div class="card" id="supCard">
+        <div class="row between"><h2 style="margin:0">Proveedores</h2><button class="primary" id="addSup">+ Proveedor</button></div>
+        <p class="muted">El WhatsApp es el que usará n8n para pedirles precios.</p>
+        <div class="scroll" id="supList"></div>
+      </div>
+      <div class="card" id="histCard">
+        <h2>Últimos cambios de precio</h2>
+        <div class="scroll" id="histList"></div>
       </div>
     </section>
 
@@ -247,7 +266,12 @@
     return num(l.qty) * U[l.unit][0] * costPerBase(ing);
   }
 
-  var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [] };
+  var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [],
+            pricing: false, suppliers: [], settings: { auto_apply_pct: 5 }, updates: [], history: [] };
+  function supName(i) {
+    var x = i.supplier_id && S.suppliers.find(function (y) { return y.id === i.supplier_id; });
+    return x ? x.name : (i.supplier || "");
+  }
   function areaName(id) { var a = S.areas.find(function (x) { return x.id === id; }); return a ? a.name : "Sin área"; }
   function ingById(id) { return S.ingredients.find(function (x) { return x.id === id; }); }
   function variants(d) { return Array.isArray(d.variants) && d.variants.length ? d.variants : [{ label: "", price: Number(d.price) || 0 }]; }
@@ -282,13 +306,21 @@
       q(sb.from("ingredients").select("*").order("name")),
       q(sb.from("recipe_items").select("*").order("position")),
       q(sb.from("dishes").select("id,category_id,name,price,variants,position").order("position")),
-      q(sb.from("categories").select("id,name,position").order("position"))
+      q(sb.from("categories").select("id,name,position").order("position")),
+      opt(sb.from("suppliers").select("*").order("name")),
+      opt(sb.from("gestion_settings").select("*")),
+      opt(sb.from("price_updates").select("*").order("created_at", { ascending: false }).limit(60)),
+      opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15))
     ]).then(function (r) {
       S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
+      S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
+      S.updates = r[9] || []; S.history = r[10] || [];
       renderAll();
     }).catch(fail);
   }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderRecetas(); renderAreas(); }
+  // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
+  function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); }
 
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
@@ -411,7 +443,7 @@
     var o = {};
     form.fields.forEach(function (f) {
       var el = $("f_" + f.k);
-      o[f.k] = f.type === "check" ? el.checked : f.step ? num(el.value) : f.k === "area_id" ? (el.value ? Number(el.value) : null) : el.value.trim();
+      o[f.k] = f.type === "check" ? el.checked : f.step ? num(el.value) : (f.k === "area_id" || f.k === "supplier_id") ? (el.value ? Number(el.value) : null) : el.value.trim();
     });
     return o;
   }
@@ -500,12 +532,12 @@
   // ---------------------------------------------------------------- Insumos
   function renderInsumos() {
     var s = $("ingSearch").value.trim().toLowerCase();
-    var list = S.ingredients.filter(function (i) { return !s || i.name.toLowerCase().indexOf(s) >= 0 || (i.supplier || "").toLowerCase().indexOf(s) >= 0; });
+    var list = S.ingredients.filter(function (i) { return !s || i.name.toLowerCase().indexOf(s) >= 0 || supName(i).toLowerCase().indexOf(s) >= 0; });
     if (!list.length) { $("ingList").innerHTML = '<div class="empty">' + (S.ingredients.length ? "Nada con esa búsqueda." : "Aún no hay insumos. Pulsa «+ Insumo».") + "</div>"; return; }
     $("ingList").innerHTML = '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Compra</th><th class="n hide-sm">Merma</th><th class="n">Costo real</th></tr></thead><tbody>' +
       list.map(function (i) {
         var fam = U[i.buy_unit][1], uses = S.items.filter(function (l) { return l.ingredient_id === i.id; }).length;
-        return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (i.supplier ? esc(i.supplier) + " · " : "") + uses + " receta" + (uses === 1 ? "" : "s") +
+        return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (supName(i) ? esc(supName(i)) + " · " : "") + uses + " receta" + (uses === 1 ? "" : "s") +
           '</div></td><td class="n">' + money(i.buy_price) + '<div class="muted">por ' + nf3.format(i.buy_qty) + " " + UNIT_LABEL[i.buy_unit] + '</div></td><td class="n hide-sm">' + pct(num(i.waste_pct)) +
           '</td><td class="n"><b>' + money(costPerBig(i)) + '</b><div class="muted">por ' + BIG[fam] + "</div></td></tr>";
       }).join("") + "</tbody></table>";
@@ -519,7 +551,8 @@
         { k: "buy_qty", label: "Cantidad comprada", type: "number", step: "0.001", req: true },
         { k: "buy_unit", label: "Unidad", type: "select", options: [["kg", "kg"], ["g", "g"], ["l", "litros"], ["ml", "ml"], ["unidad", "unidades"]] },
         { k: "waste_pct", label: "Merma (%)", type: "number", step: "0.1", hint: "Ej.: 20 si de 1 kg se aprovechan 800 g." },
-        { k: "supplier", label: "Proveedor", full: true }
+        S.pricing ? { k: "supplier_id", label: "Proveedor", type: "select", full: true, options: [["", "—"]].concat(S.suppliers.map(function (x) { return [String(x.id), x.name]; })) }
+                  : { k: "supplier", label: "Proveedor", full: true }
       ],
       extra: '<p class="help" id="ingPreview"></p>',
       onInput: function () {
@@ -532,6 +565,70 @@
   }
   $("addIng").addEventListener("click", function () { ingForm(null); });
   $("ingList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-ing]"); if (tr) ingForm(S.ingredients.find(function (x) { return x.id === Number(tr.dataset.ing); })); });
+
+  // ---------------------------------------------------------------- Precios y proveedores
+  function bigCost(perBase, unit) { return perBase * (U[unit][1] === "u" ? 1 : 1000); }
+  function fmtPct(n) { return n == null ? "—" : (n > 0 ? "+" : "") + nf2.format(n) + " %"; }
+  function renderPrecios() {
+    show("priceSetup", !S.pricing); ["pendCard", "supCard", "histCard"].forEach(function (id) { show(id, S.pricing); });
+    if (!S.pricing) return;
+    $("autoPct").value = num(S.settings.auto_apply_pct);
+    var pend = S.updates.filter(function (u) { return u.status === "pending"; });
+    $("pendCount").textContent = pend.length;
+    $("pendCount").className = "pill" + (pend.length ? " warn" : "");
+    var tab = document.querySelector('#tabs [data-tab="insumos"]');
+    tab.textContent = "Insumos" + (pend.length ? " (" + pend.length + ")" : "");
+    $("pendList").innerHTML = pend.length ? pend.map(function (u) {
+        var ing = ingById(u.ingredient_id) || { name: "?", buy_unit: u.buy_unit }, sup = S.suppliers.find(function (x) { return x.id === u.supplier_id; });
+        return '<div class="pend"><div class="row between" style="flex-wrap:nowrap"><b>' + esc(ing.name) + "</b>" +
+          (u.change_pct == null ? '<span class="pill warn">revisar</span>' : '<span class="pill ' + (u.change_pct > 0 ? "bad" : "ok") + '">' + fmtPct(num(u.change_pct)) + "</span>") + "</div>" +
+          '<div class="pend-prices"><span>Antes <b>' + (u.old_unit_cost == null ? "—" : money(bigCost(num(u.old_unit_cost), ing.buy_unit)) + " / " + BIG[U[ing.buy_unit][1]]) +
+          "</b></span><span>→</span><span>Nuevo <b>" + money(bigCost(num(u.new_unit_cost), u.buy_unit)) + " / " + BIG[U[u.buy_unit][1]] + "</b></span></div>" +
+          '<div class="muted">' + esc(money(u.buy_price) + " por " + nf3.format(u.buy_qty) + " " + UNIT_LABEL[u.buy_unit]) + (sup ? " · " + esc(sup.name) : "") + " · " + esc(u.source) + " · " + esc(u.reason) + "</div>" +
+          (u.raw_message ? '<div class="muted" style="font-style:italic">«' + esc(u.raw_message) + "»</div>" : "") +
+          '<div class="row" style="margin-top:8px"><button type="button" class="primary" data-ok="' + u.id + '">Aprobar</button>' +
+          '<button type="button" class="danger" data-no="' + u.id + '">Rechazar</button></div></div>';
+      }).join("") : '<div class="empty">No hay precios esperando aprobación.</div>';
+
+    $("supList").innerHTML = S.suppliers.length ? '<table class="tbl"><thead><tr><th>Proveedor</th><th>WhatsApp</th><th class="n">Insumos</th></tr></thead><tbody>' +
+      S.suppliers.map(function (x) {
+        var n = S.ingredients.filter(function (i) { return i.supplier_id === x.id; }).length;
+        return '<tr class="click' + (x.active ? "" : " off") + '" data-sup="' + x.id + '"><td><b>' + esc(x.name) + "</b>" + (x.notes ? '<div class="muted">' + esc(x.notes) + "</div>" : "") +
+          "</td><td>" + esc(x.whatsapp || "—") + '</td><td class="n">' + n + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Aún no hay proveedores. Pulsa «+ Proveedor».</div>';
+
+    $("histList").innerHTML = S.history.length ? '<table class="tbl"><thead><tr><th>Fecha</th><th>Insumo</th><th class="n">Antes</th><th class="n">Ahora</th><th class="hide-sm">Origen</th></tr></thead><tbody>' +
+      S.history.map(function (h) {
+        var ing = ingById(h.ingredient_id) || { name: "?" }, d = new Date(h.changed_at);
+        return "<tr><td>" + esc(d.toLocaleDateString("es", { day: "2-digit", month: "2-digit" })) + "</td><td>" + esc(ing.name) +
+          '</td><td class="n">' + money(h.old_price) + '<div class="muted">' + esc(nf3.format(h.old_qty) + " " + UNIT_LABEL[h.old_unit]) + '</div></td><td class="n">' + money(h.new_price) +
+          '<div class="muted">' + esc(nf3.format(h.new_qty) + " " + UNIT_LABEL[h.new_unit]) + '</div></td><td class="hide-sm">' + esc(h.source) + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Todavía no hay cambios de precio.</div>';
+  }
+  $("pendList").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-ok],button[data-no]"); if (!b) return;
+    var ok = b.hasAttribute("data-ok"), id = Number(b.getAttribute(ok ? "data-ok" : "data-no"));
+    if (!ok && !confirm("¿Rechazar este precio? El insumo se queda con su precio actual.")) return;
+    b.disabled = true;
+    q(sb.rpc("decide_price", { p_id: id, p_approve: ok })).then(function () { toast(ok ? "Precio aplicado" : "Precio rechazado"); return refresh(); }).catch(fail);
+  });
+  $("autoPct").addEventListener("change", function () {
+    var v = num(this.value); if (v < 0 || v > 100) { toast("Pon un valor entre 0 y 100"); return; }
+    q(sb.from("gestion_settings").update({ auto_apply_pct: v }).eq("id", 1)).then(function () { toast("Guardado: hasta " + v + " %"); return refresh(); }).catch(fail);
+  });
+  function supForm(x) {
+    openForm({ title: x ? "Editar proveedor" : "Nuevo proveedor", values: x || { active: true },
+      fields: [
+        { k: "name", label: "Nombre", req: true, full: true },
+        { k: "whatsapp", label: "WhatsApp (con código de país)", ph: "+58 412 1234567", full: true },
+        { k: "active", label: "Activo", type: "check", full: true },
+        { k: "notes", label: "Notas", type: "area", full: true, ph: "Qué vende, días de entrega…" }
+      ],
+      validate: function (v) { if (!v.name) return "Escribe el nombre."; },
+      onSave: saver("suppliers", x && x.id), onDelete: x && deleter("suppliers", x.id) });
+  }
+  $("addSup").addEventListener("click", function () { supForm(null); });
+  $("supList").addEventListener("click", function (e) { var tr = e.target.closest("[data-sup]"); if (tr) supForm(S.suppliers.find(function (x) { return x.id === Number(tr.dataset.sup); })); });
 
   // ---------------------------------------------------------------- Recetas
   function renderRecetas() {

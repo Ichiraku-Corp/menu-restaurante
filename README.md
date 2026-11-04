@@ -36,8 +36,11 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
 - **Recetas**: ingredientes y cantidades por plato y tamaño (Peq/Gr); da el costo, la ganancia
   y el % de costo sobre el precio de venta.
 - **Resumen**: costo del mes por área, márgenes y punto de equilibrio estimado.
+- **Proveedores y precios automáticos**: los precios nuevos que cambian hasta un 5 % se
+  aplican solos; si cambian más, esperan tu aprobación. Historial de cada cambio.
+  Preparado para n8n: ver [`docs/n8n-precios.md`](docs/n8n-precios.md).
 
-**Activarla (una vez):** en Supabase → SQL Editor ejecuta `supabase/gestion.sql`. Crea las
+**Activarla:** en Supabase → SQL Editor ejecuta `supabase/gestion.sql` (y de nuevo cada vez que se actualice; no borra datos). Crea las
 tablas y añade como autorizadas las cuentas que ya existen en Authentication → Users.
 Nada de esto es público: solo lo ven las cuentas de la tabla `staff` con rol dueño o admin.
 
