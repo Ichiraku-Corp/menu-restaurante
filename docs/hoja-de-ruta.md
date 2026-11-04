@@ -45,8 +45,8 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 3:** avatar Live2D, personalidad oficial e identificación por cara en la tablet.
 - **Nex, fase 4:** revisión de uniforme al entrar (foto, la IA sugiere y un encargado decide; fotos
   borradas a los 7 días; consentimiento por escrito).
-- **Centro del local (un PC que ya tiene el local):** encendido en horario, IP fija y sin suspensión;
-  falta saber su sistema operativo. Puente entre el sistema en internet y los aparatos de
+- **Centro del local: la laptop de caja (Windows)**, que queda encendida. Configurar IP fija en la red
+  del local y que no se suspenda. Puente entre el sistema en internet y los aparatos de
   la red local: envía trabajos ESC/POS a las 3 impresoras (puerto 9100) y recibe las marcaciones del
   Hikvision.
 - **Sistema de punto de venta y facturación propio** (sustituye al sistema de ventas actual):
