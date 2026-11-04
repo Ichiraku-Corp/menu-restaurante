@@ -28,7 +28,8 @@ personal y la aprobación del dueño en lo que toca dinero.
    Revisada: **Roccia RC-8002**, 80 mm, cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**;
    recibe por TCP en el **puerto 9100**; IP por cable aparentemente fija **192.168.0.30** (video borroso,
    confirmar al instalar); wifi con modo AP 10.10.100.254. Contraseña de fábrica 12345678: cambiarla.
-   Falta saber cómo imprime hoy el sistema de ventas y la IP de las otras dos.
+   Hoy imprime en ellas el sistema de ventas por red, así que las 3 están en la red del local.
+   Falta la IP de las otras dos (cocina y caja).
 9. Nombre del proveedor de facturación digital (para revisar su API).
 
 ## Próximas fases
@@ -42,7 +43,8 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 3:** avatar Live2D, personalidad oficial e identificación por cara en la tablet.
 - **Nex, fase 4:** revisión de uniforme al entrar (foto, la IA sugiere y un encargado decide; fotos
   borradas a los 7 días; consentimiento por escrito).
-- **Centro del local (mini PC o Raspberry Pi):** puente entre el sistema en internet y los aparatos de
+- **Centro del local (un PC que ya tiene el local):** encendido en horario, IP fija y sin suspensión;
+  falta saber su sistema operativo. Puente entre el sistema en internet y los aparatos de
   la red local: envía trabajos ESC/POS a las 3 impresoras (puerto 9100) y recibe las marcaciones del
   Hikvision.
 - **Sistema de facturación propio:** sustituirá al sistema de ventas actual, con facturación digital
