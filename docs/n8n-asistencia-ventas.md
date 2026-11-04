@@ -42,22 +42,33 @@ En **Gestión → Nómina**, cada empleado necesita:
 - `p_time`: fecha y hora **con zona horaria**.
 - Si la misma marcación llega dos veces, no se duplica (`"duplicate": true`).
 
-### Equipo Hikvision DS-K1T321MFWX
+### Equipo Hikvision DS-K1T321MFWX-B
 
-Es un terminal de reconocimiento facial, huella y tarjeta, con wifi y red. Tiene dos formas de
-entregar las marcaciones a n8n; **n8n debe estar en la misma red local que el equipo** (por ejemplo,
-en un mini PC del local), porque no conviene abrir el equipo a internet.
+Según su ficha técnica oficial: reconocimiento facial, huella, tarjeta M1 y PIN; 500 caras,
+3.000 huellas, 150.000 eventos; antisuplantación; menú en español; **ISAPI, ISUP 5.0 y Push SDK**;
+función de asistencia (también en modo «solo asistencia»).
 
-1. **El equipo avisa a n8n (recomendado):** en la configuración web del equipo, en
-   *Network → Advanced → HTTP Listening* (el nombre exacto varía según el firmware), pon la dirección
-   de un **Webhook** de n8n. Cada vez que alguien marca, el equipo envía el evento con el
-   `employeeNoString` y la hora. n8n solo tiene que reenviarlo a `record_attendance`.
-2. **n8n pregunta al equipo cada pocos minutos:** con un nodo HTTP Request (autenticación *Digest*)
-   a la API ISAPI del equipo, `POST /ISAPI/AccessControl/AcsEvent?format=json`, filtrando por las
-   marcaciones válidas desde la última consulta.
+**Instalación**
 
-> Antes de comprar, confirma con el vendedor que el firmware trae **ISAPI / HTTP Listening** activo
-> y pide el manual de la API. Es lo que permite conectarlo sin la nube de Hikvision.
+- Alimentación **12 VDC** (≤ 6 W), **no PoE**: adaptador de 12 V / 1 A (comprobar si viene incluido).
+- Conectarlo al router **con cable de red (RJ-45)**. El wifi de la ficha es «modo AP» (para
+  configurarlo), no está garantizado que se una a la red del local.
+- Uso en interior, a la altura de la cara (reconoce entre 0,3 y 1,5 m).
+- Registrar a cada empleado con su **Employee No.** y poner ese mismo número en
+  Gestión → Nómina → «Nº de empleado en el equipo facial».
+
+**Conexión con n8n en la nube**
+
+El equipo está dentro de la red del local; n8n en la nube no puede consultarlo sin abrir puertos
+del router (no recomendado). Por eso:
+
+1. **Primero probar el envío desde el equipo:** en su configuración web, en el apartado de envío de
+   eventos (*HTTP Listening* / *Event upload*, según el firmware), poner la URL del **Webhook** de
+   n8n. Si el equipo acepta una URL HTTPS de internet, cada marcación llegará sola y n8n la
+   reenvía a `record_attendance` (campo `employeeNoString` y la hora del evento).
+2. **Si no acepta HTTPS:** poner un puente en el local (por ejemplo una Raspberry Pi) que reciba
+   los eventos del equipo por la red local y los reenvíe a n8n en la nube o directamente a
+   `record_attendance`.
 
 ## 2. Ventas diarias
 
