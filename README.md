@@ -55,6 +55,13 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
 tablas y añade como autorizadas las cuentas que ya existen en Authentication → Users.
 Nada de esto es público: solo lo ven las cuentas de la tabla `staff` con rol dueño o admin.
 
+## Nex, asistente de cocina por voz
+
+`cocina.html` es la página de la tablet de cocina: el personal habla con **Nex** para registrar mermas
+y conteos, consultar stock y recetas y ver qué falta comprar. Usa Claude a través de la función de
+Supabase `supabase/functions/nex/` (la clave nunca llega a la tablet). Instalación y detalles en
+[`docs/nex-asistente.md`](docs/nex-asistente.md).
+
 ## Contenido actual
 
 `data/menu.json` tiene la carta completa: 6 categorías y 34 productos, con las fotos recortadas

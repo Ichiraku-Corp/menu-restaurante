@@ -524,3 +524,17 @@ grant execute on function public.apply_sales_consumption(date) to authenticated,
 -- ================================================================ IVA
 -- Los precios de la carta incluyen IVA: la gestión lo separa para calcular márgenes y utilidades.
 alter table public.gestion_settings add column if not exists iva_pct numeric(5,2) not null default 16 check (iva_pct between 0 and 100);
+
+-- ================================================================ Rol «cocina» (tablet de Nex)
+-- Una cuenta con rol cocina solo puede usar la asistente (función nex): no lee
+-- nóminas, ventas ni costos. Crear la cuenta en Authentication → Users y luego:
+--   insert into public.staff (email, role) values ('cocina@tu-dominio.com', 'cocina');
+alter table public.staff drop constraint if exists staff_role_check;
+alter table public.staff add constraint staff_role_check check (role in ('dueño', 'admin', 'cajero', 'cocina'));
+
+create or replace function public.staff_role() returns text
+language sql stable security definer set search_path = public as $$
+  select role from public.staff where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+$$;
+revoke execute on function public.staff_role() from anon, public;
+grant execute on function public.staff_role() to authenticated;

@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#2a1220">
+<title>Nex · Cocina</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  :root { --pink:#e5206b; --pink2:#ff5c9a; --sky:#3bb8ea; --bg:#1d0c16; --bg2:#2a1220; --card:#341827; --text:#fff4f8; --muted:#d7b3c4; --line:#4a2538; --ok:#5fd39a; --bad:#ff7a8a; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html, body { height:100%; }
+  body { margin:0; background:radial-gradient(120% 80% at 30% 0%, #4a1530, var(--bg) 70%) fixed; color:var(--text);
+    font:18px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; overflow:hidden; }
+  button { font:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .screen { position:fixed; inset:0; display:flex; flex-direction:column; padding:calc(14px + env(safe-area-inset-top)) 16px calc(14px + env(safe-area-inset-bottom)); }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .brand { font-weight:900; font-size:20px; letter-spacing:.02em; }
+  .brand span { color:var(--pink2); }
+  .ghost { background:transparent; color:var(--text); border:1.5px solid rgba(255,255,255,.3); border-radius:999px; padding:8px 14px; font-size:15px; font-weight:700; }
+  .center { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:14px; min-height:0; }
+  h1 { margin:0; font-size:30px; font-weight:900; }
+  .muted { color:var(--muted); font-size:15px; }
+  /* Login */
+  .login { width:min(380px, 100%); background:var(--card); border:1px solid var(--line); border-radius:20px; padding:22px; text-align:left; }
+  .login label { display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; }
+  .login input { width:100%; font:inherit; color:var(--text); background:var(--bg2); border:1.5px solid var(--line); border-radius:12px; padding:12px; }
+  .primary { background:var(--pink); color:#fff; border:0; border-radius:14px; padding:14px 18px; font-weight:800; width:100%; margin-top:16px; }
+  /* Quién eres */
+  .people { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; width:min(820px, 100%); overflow-y:auto; padding:4px; }
+  .person { background:var(--card); border:2px solid var(--line); color:var(--text); border-radius:18px; padding:18px 10px; font-weight:800; font-size:20px; }
+  .person small { display:block; font-weight:600; font-size:13px; color:var(--muted); margin-top:4px; }
+  .person:active { border-color:var(--pink); transform:scale(.97); }
+  /* Nex */
+  .stage { flex:1; display:grid; grid-template-columns:minmax(220px, 40%) 1fr; gap:16px; min-height:0; margin-top:10px; }
+  @media (max-width:760px), (orientation:portrait) { .stage { grid-template-columns:1fr; grid-template-rows:auto 1fr; } .avatar-wrap { height:34vh; } }
+  .avatar-wrap { position:relative; background:linear-gradient(180deg, rgba(229,32,107,.18), rgba(59,184,234,.12)); border:1px solid var(--line); border-radius:24px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .avatar { width:min(88%, 340px); height:auto; max-height:92%; }
+  .avatar .mouth { transform-origin:160px 214px; transition:transform .08s; }
+  .speaking .avatar .mouth { animation:talk .22s infinite alternate; }
+  @keyframes talk { from { transform:scaleY(.35); } to { transform:scaleY(1.25); } }
+  .avatar .eyes { animation:blink 4.5s infinite; transform-origin:160px 168px; }
+  @keyframes blink { 0%, 95%, 100% { transform:scaleY(1); } 97% { transform:scaleY(.1); } }
+  .listening .avatar-wrap { box-shadow:0 0 0 3px var(--sky) inset; }
+  .tag { position:absolute; left:12px; bottom:12px; background:rgba(0,0,0,.35); border-radius:999px; padding:5px 12px; font-size:13px; font-weight:700; }
+  .chat-col { display:flex; flex-direction:column; min-height:0; }
+  .chat { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 2px 10px; }
+  .msg { max-width:88%; padding:12px 15px; border-radius:18px; font-size:19px; line-height:1.35; }
+  .msg.me { align-self:flex-end; background:var(--sky); color:#062234; border-bottom-right-radius:6px; }
+  .msg.nex { align-self:flex-start; background:var(--card); border:1px solid var(--line); border-bottom-left-radius:6px; }
+  .msg.err { align-self:center; background:transparent; color:var(--bad); font-size:15px; }
+  .msg.live { opacity:.7; font-style:italic; }
+  .dots::after { content:"…"; animation:dots 1s steps(3) infinite; }
+  @keyframes dots { 0% { content:"."; } 33% { content:".."; } 66% { content:"..."; } }
+  .controls { display:flex; gap:10px; align-items:center; }
+  .mic { flex:none; width:96px; height:96px; border-radius:50%; border:0; background:var(--pink); color:#fff; display:grid; place-items:center;
+    box-shadow:0 8px 24px rgba(229,32,107,.45); }
+  .mic svg { width:42px; height:42px; }
+  .listening .mic { background:var(--sky); animation:pulse 1.2s infinite; }
+  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(59,184,234,.6); } 100% { box-shadow:0 0 0 22px rgba(59,184,234,0); } }
+  .mic:disabled { opacity:.5; }
+  .typebox { flex:1; display:flex; gap:8px; }
+  .typebox input { flex:1; min-width:0; font:inherit; color:var(--text); background:var(--bg2); border:1.5px solid var(--line); border-radius:14px; padding:14px; }
+  .typebox button { border:0; border-radius:14px; background:var(--card); color:var(--text); padding:0 16px; font-weight:800; }
+  .hint { text-align:center; font-size:14px; color:var(--muted); margin-top:8px; }
+</style>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+<!-- 1. Entrar (cuenta de cocina) -->
+<section class="screen" id="sLogin" hidden>
+  <div class="top"><div class="brand">Ichiraku <span>· Nex</span></div></div>
+  <div class="center">
+    <form class="login" id="loginForm">
+      <h1 style="font-size:24px">Tablet de cocina</h1>
+      <p class="muted">Entra con la cuenta de cocina. Solo se hace una vez.</p>
+      <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+      <label for="password">Contraseña</label><input id="password" type="password" autocomplete="current-password" required>
+      <button class="primary" type="submit">Entrar</button>
+      <p class="muted" id="loginErr" style="color:var(--bad)"></p>
+    </form>
+  </div>
+</section>
+
+<!-- 2. ¿Quién eres? -->
+<section class="screen" id="sWho" hidden>
+  <div class="top"><div class="brand">Ichiraku <span>· Nex</span></div><button class="ghost" id="logout">Salir</button></div>
+  <div class="center">
+    <h1>¿Quién eres?</h1>
+    <p class="muted">Toca tu nombre para hablar con Nex.</p>
+    <div class="people" id="people"><p class="muted dots">Cargando</p></div>
+  </div>
+</section>
+
+<!-- 3. Nex -->
+<section class="screen" id="sNex" hidden>
+  <div class="top"><div class="brand">Hola, <span id="who"></span></div><button class="ghost" id="change">Cambiar persona</button></div>
+  <div class="stage">
+    <div class="avatar-wrap" id="avatarWrap">
+      <!-- Avatar provisional de Nex (se reemplazará por el modelo Live2D) -->
+      <svg class="avatar" viewBox="0 0 320 320" aria-label="Nex">
+        <defs><linearGradient id="hair" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a2a4a"/><stop offset="1" stop-color="#22162e"/></linearGradient></defs>
+        <path d="M60 300c0-56 44-92 100-92s100 36 100 92z" fill="#1d1d2b"/>
+        <path d="M104 230h112l-16 70h-80z" fill="#fff"/>
+        <path d="M140 226l20 18 20-18" fill="none" stroke="#e5206b" stroke-width="8" stroke-linecap="round"/>
+        <ellipse cx="160" cy="160" rx="84" ry="92" fill="url(#hair)"/>
+        <ellipse cx="160" cy="172" rx="66" ry="70" fill="#ffe3d6"/>
+        <path d="M94 150c10-46 44-66 66-66s58 18 68 64c-22-26-44-34-68-34s-46 8-66 36z" fill="url(#hair)"/>
+        <path d="M96 92c20-20 108-20 128 0l-10 16c-30-14-78-14-108 0z" fill="#fff"/>
+        <path d="M104 96c18 6 22 0 28 8m24-12c8 8 0 10 8 12m24-10c6 8 2 10 10 10" stroke="#e5206b" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <g class="eyes">
+          <ellipse cx="134" cy="168" rx="11" ry="15" fill="#2a1a3a"/><ellipse cx="186" cy="168" rx="11" ry="15" fill="#2a1a3a"/>
+          <circle cx="138" cy="162" r="4" fill="#fff"/><circle cx="190" cy="162" r="4" fill="#fff"/>
+        </g>
+        <ellipse cx="118" cy="196" rx="12" ry="6" fill="#ff9bb8" opacity=".7"/><ellipse cx="202" cy="196" rx="12" ry="6" fill="#ff9bb8" opacity=".7"/>
+        <ellipse class="mouth" cx="160" cy="214" rx="11" ry="7" fill="#b3264f"/>
+      </svg>
+      <span class="tag" id="state">Lista</span>
+    </div>
+    <div class="chat-col">
+      <div class="chat" id="chat" aria-live="polite"></div>
+      <div class="controls">
+        <button class="mic" id="mic" aria-label="Hablar con Nex">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+        </button>
+        <form class="typebox" id="typeForm"><input id="typeIn" placeholder="O escribe aquí…" autocomplete="off" enterkeyhint="send"><button type="submit">Enviar</button></form>
+      </div>
+      <p class="hint" id="hint">Toca el micrófono y habla. Ejemplo: «se quemaron dos kilos de pollo».</p>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var C = window.MENU_CONFIG || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var IDLE_MS = 3 * 60 * 1000, MAX_MSGS = 60;
+  var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
+  var who = null, messages = [], busy = false, idleTimer = null;
+
+  function screen(id) { ["sLogin", "sWho", "sNex"].forEach(function (s) { $(s).hidden = s !== id; }); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+
+  // ---------------------------------------------------------------- Sesión
+  sb.auth.onAuthStateChange(function (_e, session) { if (!session) screen("sLogin"); else if ($("sLogin").hidden === false || !who) loadPeople(); });
+  $("loginForm").addEventListener("submit", function (e) {
+    e.preventDefault(); $("loginErr").textContent = "";
+    sb.auth.signInWithPassword({ email: $("email").value, password: $("password").value })
+      .then(function (r) { if (r.error) $("loginErr").textContent = "No se pudo entrar: " + r.error.message; });
+  });
+  $("logout").addEventListener("click", function () { sb.auth.signOut(); });
+
+  function call(body) {
+    return sb.functions.invoke("nex", { body: body }).then(function (r) {
+      if (r.error) {
+        var ctx = r.error.context;
+        return (ctx && ctx.json ? ctx.json() : Promise.resolve({})).catch(function () { return {}; })
+          .then(function (j) { throw new Error(j.error || r.error.message); });
+      }
+      return r.data;
+    });
+  }
+
+  // ---------------------------------------------------------------- ¿Quién eres?
+  function loadPeople() {
+    screen("sWho"); $("people").innerHTML = '<p class="muted dots">Cargando</p>';
+    call({ action: "empleados" }).then(function (d) {
+      var list = d.empleados || [];
+      $("people").innerHTML = list.length ? list.map(function (p) {
+        return '<button class="person" data-id="' + p.id + '" data-name="' + esc(p.name) + '">' + esc(p.name) + "<small>" + esc(p.job_title || "") + "</small></button>";
+      }).join("") : '<p class="muted">No hay empleados activos.</p>';
+    }).catch(function (e) {
+      $("people").innerHTML = '<p class="muted" style="color:var(--bad)">' + esc(e.message) + "</p>" +
+        (/acceso/i.test(e.message) ? '<p class="muted">Esta cuenta no está autorizada para Nex.</p>' : "");
+    });
+  }
+  $("people").addEventListener("click", function (e) {
+    var b = e.target.closest(".person"); if (!b) return;
+    startWith({ id: Number(b.dataset.id), name: b.dataset.name });
+  });
+  function startWith(p) {
+    who = p; messages = []; $("who").textContent = p.name; $("chat").innerHTML = "";
+    screen("sNex");
+    addMsg("nex", "¡Hola, " + p.name + "! Soy Nex. Dime si algo se dañó, si quieres contar inventario o consultar una receta.");
+    touch();
+  }
+  $("change").addEventListener("click", reset);
+  function reset() { stopListening(); speechSynthesis && speechSynthesis.cancel(); who = null; messages = []; loadPeople(); }
+  function touch() { clearTimeout(idleTimer); idleTimer = setTimeout(reset, IDLE_MS); }
+
+  // ---------------------------------------------------------------- Chat
+  function addMsg(kind, text, extra) {
+    var d = document.createElement("div"); d.className = "msg " + kind + (extra ? " " + extra : ""); d.textContent = text;
+    $("chat").appendChild(d); $("chat").scrollTop = $("chat").scrollHeight; return d;
+  }
+  function setState(t) { $("state").textContent = t; }
+  function send(text) {
+    text = String(text || "").trim(); if (!text || busy || !who) return;
+    touch(); busy = true; $("mic").disabled = true;
+    if (messages.length > MAX_MSGS) messages = []; // conversación nueva (nunca se recorta: se empieza de cero)
+    addMsg("me", text);
+    var thinking = addMsg("nex", "", "dots"); setState("Pensando…");
+    var turn = { role: "user", content: "[Habla: " + who.name + "] " + text };
+    call({ messages: messages.concat([turn]), employee_id: who.id }).then(function (d) {
+      messages.push(turn); (d.added || []).forEach(function (m) { messages.push(m); });
+      thinking.classList.remove("dots"); thinking.textContent = d.reply;
+      speak(d.reply);
+    }).catch(function (e) {
+      thinking.remove(); addMsg("err", "No pude responder: " + e.message); setState("Lista");
+    }).then(function () { busy = false; $("mic").disabled = false; $("chat").scrollTop = $("chat").scrollHeight; });
+  }
+  $("typeForm").addEventListener("submit", function (e) { e.preventDefault(); var v = $("typeIn").value; $("typeIn").value = ""; send(v); });
+
+  // ---------------------------------------------------------------- Voz de Nex
+  var voice = null;
+  function pickVoice() {
+    var vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+    var es = vs.filter(function (v) { return /^es/i.test(v.lang); });
+    voice = es.find(function (v) { return /VE|US|MX|419|CO/i.test(v.lang) && /female|mujer|paulina|sabina|helena|monica|lupe|google/i.test(v.name); })
+      || es.find(function (v) { return /VE|419|MX|US|CO/i.test(v.lang); }) || es[0] || null;
+  }
+  if (window.speechSynthesis) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+  function speak(text) {
+    if (!window.speechSynthesis || !text) { setState("Lista"); return; }
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice; u.lang = voice ? voice.lang : "es-VE"; u.rate = 1.05; u.pitch = 1.3;
+    u.onstart = function () { document.body.classList.add("speaking"); setState("Hablando"); };
+    u.onend = u.onerror = function () { document.body.classList.remove("speaking"); setState("Lista"); };
+    speechSynthesis.speak(u);
+  }
+
+  // ---------------------------------------------------------------- Escuchar (micrófono)
+  var Rec = window.SpeechRecognition || window.webkitSpeechRecognition, rec = null, live = null, finalText = "";
+  if (!Rec) { $("hint").textContent = "Este navegador no reconoce la voz: usa Chrome en la tablet, o escribe abajo."; }
+  function startListening() {
+    if (!Rec || busy) return;
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    rec = new Rec(); rec.lang = "es-VE"; rec.interimResults = true; rec.continuous = false; finalText = "";
+    rec.onstart = function () { document.body.classList.add("listening"); setState("Escuchando…"); live = addMsg("me", "…", "live"); };
+    rec.onresult = function (e) {
+      var interim = ""; finalText = "";
+      for (var i = 0; i < e.results.length; i++) { if (e.results[i].isFinal) finalText += e.results[i][0].transcript; else interim += e.results[i][0].transcript; }
+      if (live) live.textContent = (finalText + interim) || "…";
+    };
+    rec.onerror = function (e) { if (e.error === "not-allowed") $("hint").textContent = "Permite el micrófono en el navegador para hablar con Nex."; };
+    rec.onend = function () {
+      document.body.classList.remove("listening"); if (live) { live.remove(); live = null; } rec = null;
+      if (finalText.trim()) send(finalText); else setState("Lista");
+    };
+    try { rec.start(); } catch (e) { /* ya estaba escuchando */ }
+  }
+  function stopListening() { if (rec) try { rec.stop(); } catch (e) {} }
+  $("mic").addEventListener("click", function () { touch(); if (rec) stopListening(); else startListening(); });
+
+  if (!C.SUPABASE_URL) { document.body.innerHTML = '<p style="padding:24px">Falta configurar Supabase en config.js.</p>'; return; }
+  sb.auth.getSession().then(function (r) { if (!r.data.session) screen("sLogin"); });
+})();
+</script>
+</body>
+</html>
