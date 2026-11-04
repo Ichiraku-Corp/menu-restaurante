@@ -21,8 +21,8 @@ personal y la aprobación del dueño en lo que toca dinero.
 2. Recetas correctas y actualizadas, con precios de insumos.
 3. Receta de los fideos caseros (ingredientes por tanda y porciones).
 4. Proveedores y su WhatsApp.
-5. Personalidad e historia de Nex.
-6. Modelo Live2D de Nex.
+5. ~~Personalidad e historia de Nex~~ ✅ recibida e integrada (si hay un texto de lore más largo, enviarlo).
+6. Modelo del avatar de Nex (la ficha lo describe como 3D).
 7. Días libres del personal (cuando estén definidos).
 8. Impresoras (3, iguales): **caja**, **cocina** (comandas) y **salón de arriba** (precuentas).
    Revisada: **Roccia RC-8002**, 80 mm, cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**;

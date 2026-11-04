@@ -54,9 +54,17 @@ Inventario) y los platos sus **recetas**.
 
 ## Personalidad
 
-`SYSTEM_PROMPT` en `supabase/functions/nex/index.ts` tiene una personalidad provisional (maid alegre y
-motivadora). Se sustituirá por la ficha y la historia oficial de Nex. El avatar de `cocina.html` también
-es provisional hasta tener su modelo Live2D.
+`SYSTEM_PROMPT` en `supabase/functions/nex/index.ts` contiene la **identidad oficial de Nex** (ficha del
+dueño): historia, personalidad, aspecto, frases, sueños, lo que conoce de *Ichiraku: Infinitas
+Historias* y su relación con Edgar, adaptada a la tablet de cocina (respuestas cortas para voz, reglas
+de trabajo por encima de todo y, si no tiene un dato del lore, lo dice en lugar de inventarlo). Por
+estar el repositorio público, el texto usa solo el nombre «Edgar», sin apellidos.
+
+Para cambiar algo de su personalidad: edita ese texto y vuelve a publicar la función `nex`.
+
+En la tablet, los emojis de Nex se ven en pantalla pero no se leen en voz alta. El avatar de
+`cocina.html` es un dibujo provisional según su ficha (coletas castaño miel con horquillas de estrella,
+ojos avellana, pecas, uniforme de maid con prendedor «NEX») hasta tener su modelo animado.
 
 ## Pruebas
 
