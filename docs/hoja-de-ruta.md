@@ -24,9 +24,11 @@ personal y la aprobación del dueño en lo que toca dinero.
 5. Personalidad e historia de Nex.
 6. Modelo Live2D de Nex.
 7. Días libres del personal (cuando estén definidos).
-8. Impresoras (3): **caja**, **cocina** (comandas) y **salón de arriba** (precuentas a clientes).
-   La de arriba es una **Roccia** térmica de 80 mm, conectada por red. De cada una falta la etiqueta
-   (modelo), una foto de los puertos traseros y la hoja de autoprueba (dirección IP).
+8. Impresoras (3, iguales): **caja**, **cocina** (comandas) y **salón de arriba** (precuentas).
+   Revisada: **Roccia RC-8002**, 80 mm, cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**;
+   recibe por TCP en el **puerto 9100**; IP por cable aparentemente fija **192.168.0.30** (video borroso,
+   confirmar al instalar); wifi con modo AP 10.10.100.254. Contraseña de fábrica 12345678: cambiarla.
+   Falta saber cómo imprime hoy el sistema de ventas y la IP de las otras dos.
 9. Nombre del proveedor de facturación digital (para revisar su API).
 
 ## Próximas fases
@@ -40,6 +42,9 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 3:** avatar Live2D, personalidad oficial e identificación por cara en la tablet.
 - **Nex, fase 4:** revisión de uniforme al entrar (foto, la IA sugiere y un encargado decide; fotos
   borradas a los 7 días; consentimiento por escrito).
+- **Centro del local (mini PC o Raspberry Pi):** puente entre el sistema en internet y los aparatos de
+  la red local: envía trabajos ESC/POS a las 3 impresoras (puerto 9100) y recibe las marcaciones del
+  Hikvision.
 - **Sistema de facturación propio:** sustituirá al sistema de ventas actual, con facturación digital
   a través del proveedor autorizado y **impresión automática por red**: comandas en cocina, precuentas en el salón de arriba y
   facturas o recibos en caja.
