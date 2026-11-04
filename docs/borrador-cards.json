@@ -1,0 +1,277 @@
+{
+ "_info": "Estadísticas de las cartas (0–10) por nombre de plato. Si el plato tiene 'attributes' en Supabase, esos valores tienen prioridad.",
+ "cards": {
+  "Pollo Saiyan": {
+   "rareza": "rara",
+   "picante": 3,
+   "llenador": 6,
+   "sabor": 9,
+   "rapidez": 7,
+   "habilidad": "Poder oculto: su sabor supera los 9.000."
+  },
+  "Pollo Kobayashi": {
+   "rareza": "rara",
+   "picante": 2,
+   "llenador": 6,
+   "sabor": 8,
+   "rapidez": 7,
+   "habilidad": "Portal crujiente: la tempura llega de otra dimensión."
+  },
+  "Pollo Kyojuro": {
+   "rareza": "rara",
+   "picante": 9,
+   "llenador": 6,
+   "sabor": 8,
+   "rapidez": 7,
+   "habilidad": "Llama ardiente: está picante. Muy picante."
+  },
+  "Gyozas": {
+   "rareza": "comun",
+   "picante": 1,
+   "llenador": 4,
+   "sabor": 7,
+   "rapidez": 8,
+   "habilidad": "Vapor sorpresa: doble salsa, doble ataque."
+  },
+  "Imo mochi": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 4,
+   "sabor": 7,
+   "rapidez": 8,
+   "habilidad": "Estiramiento infinito: queso que nunca se rompe."
+  },
+  "Asuka Corn Dog": {
+   "rareza": "comun",
+   "picante": 1,
+   "llenador": 5,
+   "sabor": 7,
+   "rapidez": 8,
+   "habilidad": "Armadura crujiente: papas, ramen o panko a elección."
+  },
+  "Amaterasu": {
+   "rareza": "epica",
+   "picante": 2,
+   "llenador": 9,
+   "sabor": 9,
+   "rapidez": 5,
+   "habilidad": "Fuego eterno: fideos, tocineta y crema de queso unidos."
+  },
+  "Kyubi": {
+   "rareza": "epica",
+   "picante": 2,
+   "llenador": 9,
+   "sabor": 8,
+   "rapidez": 5,
+   "habilidad": "Nueve colas: nueve ingredientes en un solo plato."
+  },
+  "Tteokbokki": {
+   "rareza": "rara",
+   "picante": 8,
+   "llenador": 6,
+   "sabor": 8,
+   "rapidez": 6,
+   "habilidad": "Mordisco de chile: pasta de arroz que no se rinde."
+  },
+  "Hokage": {
+   "rareza": "legendaria",
+   "picante": 3,
+   "llenador": 10,
+   "sabor": 10,
+   "rapidez": 3,
+   "habilidad": "Voluntad del líder: el ramen más completo de la casa."
+  },
+  "Tonkotsu": {
+   "rareza": "rara",
+   "picante": 1,
+   "llenador": 8,
+   "sabor": 8,
+   "rapidez": 5,
+   "habilidad": "Caldo ancestral: miso o vegetariano, siempre poderoso."
+  },
+  "Kakashi": {
+   "rareza": "rara",
+   "picante": 6,
+   "llenador": 7,
+   "sabor": 8,
+   "rapidez": 5,
+   "habilidad": "Ojo marino: un toque de mar y picante inesperado."
+  },
+  "Kisame": {
+   "rareza": "rara",
+   "picante": 1,
+   "llenador": 8,
+   "sabor": 8,
+   "rapidez": 5,
+   "habilidad": "Ataque del tiburón: camarones pankeados al frente."
+  },
+  "Chilly D Ace": {
+   "rareza": "epica",
+   "picante": 9,
+   "llenador": 8,
+   "sabor": 9,
+   "rapidez": 4,
+   "habilidad": "Puño de fuego: el caldo más picante del mar."
+  },
+  "Teuchi": {
+   "rareza": "rara",
+   "picante": 1,
+   "llenador": 8,
+   "sabor": 8,
+   "rapidez": 5,
+   "habilidad": "Receta del maestro: lomito de res y tocineta ahumada."
+  },
+  "Sanji": {
+   "rareza": "comun",
+   "picante": 1,
+   "llenador": 7,
+   "sabor": 7,
+   "rapidez": 6,
+   "habilidad": "Patada del chef: milanesa salteada al instante."
+  },
+  "Luffy": {
+   "rareza": "comun",
+   "picante": 1,
+   "llenador": 7,
+   "sabor": 7,
+   "rapidez": 6,
+   "habilidad": "Estómago elástico: siempre cabe un poco más."
+  },
+  "Rengoku": {
+   "rareza": "comun",
+   "picante": 1,
+   "llenador": 6,
+   "sabor": 7,
+   "rapidez": 7,
+   "habilidad": "¡UMAI!: pequeño pero con el corazón ardiendo."
+  },
+  "Gompachiroll": {
+   "rareza": "rara",
+   "picante": 0,
+   "llenador": 7,
+   "sabor": 8,
+   "rapidez": 6,
+   "habilidad": "Diez cortes: diez rolls de un solo golpe."
+  },
+  "All Blue Roll": {
+   "rareza": "rara",
+   "picante": 0,
+   "llenador": 8,
+   "sabor": 8,
+   "rapidez": 6,
+   "habilidad": "Mar legendario: lomito, plátano y dos quesos."
+  },
+  "Roll Agatsuma": {
+   "rareza": "epica",
+   "picante": 1,
+   "llenador": 7,
+   "sabor": 9,
+   "rapidez": 6,
+   "habilidad": "Rayo dorado: resistencia a los rayos +1."
+  },
+  "Tokyo Tiramisú": {
+   "rareza": "epica",
+   "picante": 0,
+   "llenador": 4,
+   "sabor": 9,
+   "rapidez": 7,
+   "habilidad": "Final perfecto: café y mascarpone en equilibrio."
+  },
+  "Fruit Sandu": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 3,
+   "sabor": 7,
+   "rapidez": 8,
+   "habilidad": "Golpe frutal: crema fresca y fruta en cada mordida."
+  },
+  "Taiyaki": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 3,
+   "sabor": 7,
+   "rapidez": 9,
+   "habilidad": "Pez de chocolate: nada directo a tu antojo."
+  },
+  "Dorayaki": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 3,
+   "sabor": 7,
+   "rapidez": 9,
+   "habilidad": "Bolsillo secreto: chocolate escondido en el bizcocho."
+  },
+  "Dangos": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 3,
+   "sabor": 7,
+   "rapidez": 8,
+   "habilidad": "Combo de cinco: cinco bolitas, cinco golpes."
+  },
+  "Limonada rosa": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 1,
+   "sabor": 7,
+   "rapidez": 10,
+   "habilidad": "Escudo fresco: perfecta para un día caluroso (en serio)."
+  },
+  "Agua": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 0,
+   "sabor": 4,
+   "rapidez": 10,
+   "habilidad": "Fuente vital: recupera toda la energía del equipo."
+  },
+  "Refresco": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 1,
+   "sabor": 6,
+   "rapidez": 10,
+   "habilidad": "Burbuja rápida: lata lista en un segundo."
+  },
+  "Jugo Natural": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 1,
+   "sabor": 8,
+   "rapidez": 9,
+   "habilidad": "Cuatro elementos: fresa, parchita, mora o melocotón."
+  },
+  "Bubble Tea": {
+   "rareza": "rara",
+   "picante": 0,
+   "llenador": 3,
+   "sabor": 8,
+   "rapidez": 8,
+   "habilidad": "Lluvia de perlas: tapioca en cada sorbo."
+  },
+  "Milk Tea": {
+   "rareza": "rara",
+   "picante": 0,
+   "llenador": 4,
+   "sabor": 8,
+   "rapidez": 8,
+   "habilidad": "Nube cremosa: leche, tapioca y crema."
+  },
+  "Té Verde": {
+   "rareza": "comun",
+   "picante": 0,
+   "llenador": 0,
+   "sabor": 6,
+   "rapidez": 10,
+   "habilidad": "Calma zen: equilibrio total."
+  },
+  "Jugo Sakura": {
+   "rareza": "epica",
+   "picante": 0,
+   "llenador": 1,
+   "sabor": 9,
+   "rapidez": 9,
+   "habilidad": "Flor estelar: la bebida insignia de Ichiraku."
+  }
+ }
+}
