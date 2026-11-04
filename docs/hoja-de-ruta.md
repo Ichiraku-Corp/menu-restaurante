@@ -30,7 +30,9 @@ personal y la aprobación del dueño en lo que toca dinero.
    confirmar al instalar); wifi con modo AP 10.10.100.254. Contraseña de fábrica 12345678: cambiarla.
    Hoy imprime en ellas el sistema de ventas por red, así que las 3 están en la red del local.
    Falta la IP de las otras dos (cocina y caja).
-9. Nombre del proveedor de facturación digital (para revisar su API).
+9. Sistema de ventas actual: **Syth Software** (proveedor). Confirmar si también emite la factura
+   digital o quién es el proveedor autorizado, y si permite exportar el historial de ventas.
+10. Saber si el internet del local tiene IP fija (para limitar caja a la red del local).
 
 ## Próximas fases
 
@@ -53,7 +55,10 @@ personal y la aprobación del dueño en lo que toca dinero.
   - **Seguridad:** solo dispositivos aprobados por el dueño (bloqueables), PIN personal por mesera,
     horario y, si es posible, solo desde la red del local; PIN de encargado para anular, descontar o
     dar cortesías; registro de auditoría; las impresoras solo reciben trabajos del puente del local.
-  - **Salón:** áreas (planta baja, salón de arriba…), mapa de mesas con estados, mover y unir mesas.
+  - **Salón:** áreas **Feria de comida** (afuera, ~20 mesas), **Tokio** (recepción, 8 mesas) y
+    **Edo** (arriba, 5 mesas; impresora de precuentas); mapa de mesas con estados, mover y unir mesas.
+  - **Sin internet sigue funcionando:** el PC del local guarda las operaciones y las sincroniza al
+    volver la conexión (arquitectura con servidor local).
   - **Comandas:** tamaños, sabores, notas, tiempos; impresión automática en cocina; agotados en tiempo
     real.
   - **Cuentas:** dividir por platos, a partes iguales o por persona; mover platos; precuenta impresa
