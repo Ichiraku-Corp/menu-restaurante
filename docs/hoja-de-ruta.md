@@ -40,6 +40,14 @@ personal y la aprobación del dueño en lo que toca dinero.
     `ANTHROPIC_API_KEY` y publicar la función `nex` (`docs/nex-asistente.md`).
 15. Crear la cuenta de la tablet de cocina y darle el rol «cocina».
 
+### 🔐 Seguridad (de tu lado)
+17. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
+18. Activar la **verificación en dos pasos (2FA)** en tu cuenta de Supabase y en la de GitHub.
+19. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en
+    GitHub y probarla con «Run workflow» (`docs/copias-de-seguridad.md`).
+20. Completar y revisar con un abogado el **borrador de política de privacidad**
+    (`docs/borrador-politica-privacidad.md`) antes de activar el registro de clientes.
+
 ### 📦 Cuando llegue
 16. Equipo Hikvision: instalación guiada; antes, consentimiento por escrito de cada empleado.
 
