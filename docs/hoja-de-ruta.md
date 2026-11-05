@@ -17,41 +17,44 @@ personal y la aprobación del dueño en lo que toca dinero.
 
 ## Pendientes (actualizado el 5 nov 2026)
 
+### 🔴 Primero (rápido, 5–10 min cada uno)
+1. Entrar en Panel → Gestión de costos y confirmar que se ven los **11 empleados** y los **9 gastos fijos**.
+2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub.
+3. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
+4. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
+   probar con «Run workflow» (`docs/copias-de-seguridad.md`).
+
 ### 📎 Para enviar
-1. Reporte de ventas desde la apertura (exportado de Syth Software).
-2. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
-3. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
-4. Receta de los fideos caseros (ingredientes por tanda y porciones).
-5. Proveedores: nombre, WhatsApp y qué vende cada uno.
-6. Modelo **Live2D** de Nex, con su apariencia definitiva (cambiará respecto a la ficha actual).
-7. Hoja de autoprueba de las impresoras de **cocina** y **caja** (para su IP).
+5. Reporte de ventas desde la apertura (exportado de Syth Software).
+6. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
+7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
+8. Receta de los fideos caseros (ingredientes por tanda y porciones).
+9. Proveedores: nombre, WhatsApp y qué vende cada uno.
+10. Hoja de autoprueba de las impresoras de **cocina** y **caja** (para su IP).
+11. Modelo **Live2D** de Nex, cuando tenga su apariencia definitiva.
 
 ### ❓ Para averiguar
-8. **Syth Software** (sistema de ventas actual): ¿emiten la factura digital o quién es el proveedor
-   autorizado? ¿Pueden exportar el historial de ventas?
-9. Proveedor de internet: ¿el local tiene IP fija? (para limitar caja a la red del local)
-10. Días libres de cada empleado (cuando estén definidos).
+12. **Syth Software:** ¿emiten la factura digital o quién es el proveedor autorizado? ¿Pueden exportar el
+    historial de ventas?
+13. Proveedor de internet: ¿el local tiene IP fija?
+14. Días libres de cada empleado (cuando estén definidos).
 
-### 🛠️ En Supabase
-11. ~~Ejecutar `supabase/gestion.sql`~~ ✅ hecho (5 nov).
-12. ~~Ejecutar los datos iniciales privados~~ ✅ hecho (5 nov).
-13. Entrar en Gestión de costos y confirmar que se ven los 11 empleados y los 9 gastos fijos.
-14. Nex: crear la clave en console.anthropic.com (con límite de gasto), guardarla como secreto
-    `ANTHROPIC_API_KEY` y publicar la función `nex` (`docs/nex-asistente.md`).
-15. Crear la cuenta de la tablet de cocina y darle el rol «cocina».
+### 🤖 Nex
+15. Crear la clave en console.anthropic.com (con límite de gasto), guardarla como secreto
+    `ANTHROPIC_API_KEY` en Supabase y publicar la función `nex` (`docs/nex-asistente.md`).
+16. Crear la cuenta de la tablet de cocina y darle el rol «cocina».
 
-### 🔐 Seguridad (de tu lado)
-17. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
-18. Activar la **verificación en dos pasos (2FA)** en tu cuenta de Supabase y en la de GitHub.
-19. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en
-    GitHub y probarla con «Run workflow» (`docs/copias-de-seguridad.md`).
-20. Completar y revisar con un abogado el **borrador de política de privacidad**
-    (`docs/borrador-politica-privacidad.md`) antes de activar el registro de clientes.
+### 📝 Documentos
+17. Completar el borrador de **política de privacidad** con razón social, RIF y contacto, y que lo revise
+    un abogado o el contador (`docs/borrador-politica-privacidad.md`), antes del registro de clientes.
 
 ### 📦 Cuando llegue
-16. Equipo Hikvision: instalación guiada; antes, consentimiento por escrito de cada empleado.
+18. **Equipo Hikvision:** instalación guiada; antes, consentimiento por escrito de cada empleado.
 
 ### ✅ Resuelto
+- SQL de gestión y datos iniciales ejecutados en Supabase (5 nov).
+- Seguridad web: CSP, librerías propias, vista previa al compartir, página 404, copia diaria cifrada (falta
+  activarla) y borrador de política de privacidad.
 - Personalidad e historia de Nex: recibida e integrada.
 - Impresoras (3, iguales: caja, cocina y precuentas del salón Edo): **Roccia RC-8002**, 80 mm,
   cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**; puerto **9100**; la de arriba parece tener
