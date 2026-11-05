@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-M97Iq1Y9KRiXc3ef5etjZmD0YwnPfHRCUAxg/FGHBrM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ai7l2DwR3ymI8JmQ2Gkz7vo26uOC1dsEecWD5XfJKXg='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Panel del menú</title>
@@ -68,6 +68,7 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="mfa.js"></script>
 <script src="vendor/qrcode-generator-1.4.4/qrcode.js"></script>
 </head>
 <body>
@@ -95,6 +96,7 @@
     <p><button class="primary" type="submit">Entrar</button></p>
     <p id="loginErr" class="muted"></p>
   </form>
+  <div id="mfa" class="card hidden" style="max-width:420px"></div>
 
   <div id="app" class="hidden">
     <div class="card">
@@ -201,9 +203,20 @@
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
 
   // --- Auth ---------------------------------------------------------------
+  // Tras la contraseña se exige el código de la app (2FA). Las llamadas de autenticación se hacen
+  // fuera del callback (setTimeout) para no bloquear la librería.
+  var mfaOk = false, gating = false;
   sb.auth.onAuthStateChange(function (_e, session) {
-    show("login", !session); show("app", !!session); show("logout", !!session);
-    if (session) refresh();
+    show("logout", !!session);
+    if (!session) { mfaOk = false; show("login", true); show("app", false); show("mfa", false); return; }
+    show("login", false);
+    if (mfaOk || gating) return;
+    gating = true; show("app", false); show("mfa", true);
+    setTimeout(function () {
+      IchirakuMFA.gate(sb, $("mfa")).then(function () {
+        mfaOk = true; show("mfa", false); show("app", true); refresh();
+      }).catch(fail).then(function () { gating = false; });
+    }, 0);
   });
   $("login").addEventListener("submit", function (e) {
     e.preventDefault(); $("loginErr").textContent = "";

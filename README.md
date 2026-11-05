@@ -72,6 +72,9 @@ Supabase `supabase/functions/nex/` (la clave nunca llega a la tablet). Instalaci
 - Las páginas privadas (panel, gestión, tablet) llevan `noindex`. GitHub Pages solo lee `robots.txt`
   en la raíz del dominio, por eso no hay uno aquí.
 - **Vista previa** al compartir la carta (`assets/og.jpg`) y página `404.html`.
+- **Verificación en dos pasos obligatoria** en el panel y la gestión (`mfa.js`): la base de datos solo
+  entrega datos sensibles y permite editar la carta a sesiones verificadas con código. Ver
+  [`docs/verificacion-en-dos-pasos.md`](docs/verificacion-en-dos-pasos.md).
 
 ## Contenido actual
 

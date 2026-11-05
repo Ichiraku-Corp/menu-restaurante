@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TugQCpLf8juTjA4+hWm/hUTQynUr36AiA5QWoDli5NQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8xw0UVhslj20LU+UofefrgbESuE6srfIVZEBrZsLZ4c='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -86,6 +86,7 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="mfa.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -114,6 +115,7 @@
     <p><button class="primary" type="submit">Entrar</button></p>
     <p id="loginErr" class="muted"></p>
   </form>
+  <div id="mfa" class="card hidden" style="max-width:420px"></div>
 
   <div id="app" class="hidden">
     <nav class="tabs" id="tabs">
@@ -341,15 +343,25 @@
   function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
 
   // ---------------------------------------------------------------- Acceso
+  // Contraseña → código de la app (2FA) → comprobar permisos. La base de datos solo entrega
+  // datos a sesiones verificadas con código (nivel aal2).
+  var mfaOk = false, gating = false;
   sb.auth.onAuthStateChange(function (_e, session) {
-    show("login", !session); show("logout", !!session);
-    show("app", false); show("noaccess", false); show("nosetup", false);
-    if (!session) return;
-    sb.rpc("can_manage").then(function (r) {
-      if (r.error) { show("nosetup", true); return; }
-      if (!r.data) { show("noaccess", true); return; }
-      show("app", true); refresh();
-    });
+    show("logout", !!session);
+    if (!session) { mfaOk = false; ["app", "noaccess", "nosetup", "mfa"].forEach(function (id) { show(id, false); }); show("login", true); return; }
+    show("login", false);
+    if (mfaOk || gating) return;
+    gating = true; ["app", "noaccess", "nosetup"].forEach(function (id) { show(id, false); }); show("mfa", true);
+    setTimeout(function () {
+      IchirakuMFA.gate(sb, $("mfa")).then(function () {
+        show("mfa", false);
+        return sb.rpc("can_manage").then(function (r) {
+          if (r.error) { show("nosetup", true); return; }
+          if (!r.data) { show("noaccess", true); return; }
+          mfaOk = true; show("app", true); refresh();
+        });
+      }).catch(fail).then(function () { gating = false; });
+    }, 0);
   });
   $("login").addEventListener("submit", function (e) {
     e.preventDefault(); $("loginErr").textContent = "";

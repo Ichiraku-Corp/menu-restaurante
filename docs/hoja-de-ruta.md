@@ -18,8 +18,10 @@ personal y la aprobación del dueño en lo que toca dinero.
 ## Pendientes (actualizado el 5 nov 2026)
 
 ### 🔴 Primero (rápido, 5–10 min cada uno)
+0. **Ejecutar de nuevo `supabase/gestion.sql`** (activa la 2FA obligatoria en la base de datos y cierra la
+   edición de la carta a dueño/admin) y entrar en `/admin.html` para **vincular el teléfono** con el QR.
 1. Entrar en Panel → Gestión de costos y confirmar que se ven los **11 empleados** y los **9 gastos fijos**.
-2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub.
+2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub (GitHub ✅ en curso).
 3. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
 4. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).

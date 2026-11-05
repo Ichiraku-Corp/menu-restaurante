@@ -15,9 +15,10 @@ create table if not exists public.staff (
   created_at timestamptz not null default now()
 );
 
+-- Dueño o admin **con la sesión verificada por código (2FA, nivel aal2)**.
 create or replace function public.can_manage() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (
+  select coalesce(auth.jwt() ->> 'aal', '') = 'aal2' and exists (
     select 1 from public.staff
     where lower(email) = lower(coalesce(auth.jwt() ->> 'email', ''))
       and role in ('dueño', 'admin')
@@ -538,3 +539,22 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.staff_role() from anon, public;
 grant execute on function public.staff_role() to authenticated;
+
+-- ================================================================ Carta: solo dueño/admin con 2FA puede modificarla
+-- (sustituye las políticas de schema.sql, que permitían escribir a cualquier usuario con sesión)
+drop policy if exists "categories admin write" on public.categories;
+create policy "categories admin write" on public.categories for all to authenticated
+  using (public.can_manage()) with check (public.can_manage());
+drop policy if exists "dishes admin write" on public.dishes;
+create policy "dishes admin write" on public.dishes for all to authenticated
+  using (public.can_manage()) with check (public.can_manage());
+
+drop policy if exists "dish photos admin insert" on storage.objects;
+create policy "dish photos admin insert" on storage.objects for insert
+  to authenticated with check (bucket_id = 'dishes' and public.can_manage());
+drop policy if exists "dish photos admin update" on storage.objects;
+create policy "dish photos admin update" on storage.objects for update
+  to authenticated using (bucket_id = 'dishes' and public.can_manage());
+drop policy if exists "dish photos admin delete" on storage.objects;
+create policy "dish photos admin delete" on storage.objects for delete
+  to authenticated using (bucket_id = 'dishes' and public.can_manage());
