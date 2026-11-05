@@ -62,6 +62,17 @@ y conteos, consultar stock y recetas y ver qué falta comprar. Usa Claude a trav
 Supabase `supabase/functions/nex/` (la clave nunca llega a la tablet). Instalación y detalles en
 [`docs/nex-asistente.md`](docs/nex-asistente.md).
 
+## Seguridad de las páginas
+
+- **Librerías propias:** `supabase-js` y `qrcode-generator` se sirven desde `vendor/` (copias exactas
+  de npm), sin CDN externo.
+- **Política CSP** en cada página: solo se ejecuta código del propio sitio y los scripts en línea con
+  huella conocida, y solo se conecta a Supabase. **Si cambias un `<script>` de una página, ejecuta**
+  `node scripts/csp.js` (y `node scripts/csp.js --check` para comprobar).
+- Las páginas privadas (panel, gestión, tablet) llevan `noindex`. GitHub Pages solo lee `robots.txt`
+  en la raíz del dominio, por eso no hay uno aquí.
+- **Vista previa** al compartir la carta (`assets/og.jpg`) y página `404.html`.
+
 ## Contenido actual
 
 `data/menu.json` tiene la carta completa: 6 categorías y 34 productos, con las fotos recortadas

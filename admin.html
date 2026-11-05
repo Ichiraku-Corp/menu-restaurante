@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-M97Iq1Y9KRiXc3ef5etjZmD0YwnPfHRCUAxg/FGHBrM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Panel del menú</title>
@@ -66,8 +67,8 @@
   #qr svg { width: 240px; height: auto; display:block; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.15); }
 </style>
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="vendor/qrcode-generator-1.4.4/qrcode.js"></script>
 </head>
 <body>
 <div class="wrap">
