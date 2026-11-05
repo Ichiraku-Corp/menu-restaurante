@@ -1,0 +1,56 @@
+# Copia de seguridad diaria de la base de datos de Supabase (esquema public),
+# cifrada con AES-256 y guardada 30 días como artefacto de GitHub Actions.
+# El repositorio es público: la copia SOLO se guarda cifrada.
+#
+# Secretos necesarios (GitHub → Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL     cadena de conexión «Session pooler» de Supabase (Connect → Session pooler)
+#   BACKUP_PASSPHRASE   contraseña para cifrar (mínimo 16 caracteres; guárdala en un lugar seguro)
+# Restaurar: docs/copias-de-seguridad.md
+name: Copia de seguridad diaria
+
+on:
+  schedule:
+    - cron: "17 7 * * *" # 03:17 en Venezuela (UTC-4)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Comprobar los secretos
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB_URL" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL"; exit 1; fi
+          if [ "${#PASS}" -lt 16 ]; then echo "::error::BACKUP_PASSPHRASE debe tener al menos 16 caracteres"; exit 1; fi
+
+      - name: Volcar la base de datos
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          docker run --rm -e DB_URL -v "$PWD:/out" postgres:17-alpine \
+            sh -c 'pg_dump "$DB_URL" --schema=public --no-owner --no-privileges --format=custom --file=/out/ichiraku.dump'
+          ls -la ichiraku.dump
+
+      - name: Cifrar la copia
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          name="ichiraku-$(date -u +%Y-%m-%d).dump.gpg"
+          printf '%s' "$PASS" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "$name" ichiraku.dump
+          shred -u ichiraku.dump
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+
+      - name: Guardar la copia cifrada (30 días)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 30
+          if-no-files-found: error
