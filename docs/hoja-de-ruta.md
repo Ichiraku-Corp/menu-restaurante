@@ -15,29 +15,47 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 2** (`cocina.html` + función `nex`): asistente por voz para mermas, conteos, stock y
   recetas, con Claude Opus 5.5.
 
-## Pendiente de recibir
+## Pendientes (actualizado el 5 nov 2026)
 
-1. Reporte de ventas desde la apertura.
-2. Recetas correctas y actualizadas, con precios de insumos.
-3. Receta de los fideos caseros (ingredientes por tanda y porciones).
-4. Proveedores y su WhatsApp.
-5. ~~Personalidad e historia de Nex~~ ✅ recibida e integrada.
+### 📎 Para enviar
+1. Reporte de ventas desde la apertura (exportado de Syth Software).
+2. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
+3. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
+4. Receta de los fideos caseros (ingredientes por tanda y porciones).
+5. Proveedores: nombre, WhatsApp y qué vende cada uno.
 6. Modelo **Live2D** de Nex, con su apariencia definitiva (cambiará respecto a la ficha actual).
-7. Días libres del personal (cuando estén definidos).
-8. Impresoras (3, iguales): **caja**, **cocina** (comandas) y **salón de arriba** (precuentas).
-   Revisada: **Roccia RC-8002**, 80 mm, cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**;
-   recibe por TCP en el **puerto 9100**; IP por cable aparentemente fija **192.168.0.30** (video borroso,
-   confirmar al instalar); wifi con modo AP 10.10.100.254. Contraseña de fábrica 12345678: cambiarla.
-   Hoy imprime en ellas el sistema de ventas por red, así que las 3 están en la red del local.
-   Falta la IP de las otras dos (cocina y caja).
-9. Sistema de ventas actual: **Syth Software** (proveedor). Confirmar si también emite la factura
-   digital o quién es el proveedor autorizado, y si permite exportar el historial de ventas.
-10. Saber si el internet del local tiene IP fija (para limitar caja a la red del local).
+7. Hoja de autoprueba de las impresoras de **cocina** y **caja** (para su IP).
+
+### ❓ Para averiguar
+8. **Syth Software** (sistema de ventas actual): ¿emiten la factura digital o quién es el proveedor
+   autorizado? ¿Pueden exportar el historial de ventas?
+9. Proveedor de internet: ¿el local tiene IP fija? (para limitar caja a la red del local)
+10. Días libres de cada empleado (cuando estén definidos).
+
+### 🛠️ En Supabase
+11. ~~Ejecutar `supabase/gestion.sql`~~ ✅ hecho (5 nov).
+12. ~~Ejecutar los datos iniciales privados~~ ✅ hecho (5 nov).
+13. Entrar en Gestión de costos y confirmar que se ven los 11 empleados y los 9 gastos fijos.
+14. Nex: crear la clave en console.anthropic.com (con límite de gasto), guardarla como secreto
+    `ANTHROPIC_API_KEY` y publicar la función `nex` (`docs/nex-asistente.md`).
+15. Crear la cuenta de la tablet de cocina y darle el rol «cocina».
+
+### 📦 Cuando llegue
+16. Equipo Hikvision: instalación guiada; antes, consentimiento por escrito de cada empleado.
+
+### ✅ Resuelto
+- Personalidad e historia de Nex: recibida e integrada.
+- Impresoras (3, iguales: caja, cocina y precuentas del salón Edo): **Roccia RC-8002**, 80 mm,
+  cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**; puerto **9100**; la de arriba parece tener
+  IP fija **192.168.0.30** (confirmar al instalar); contraseña de fábrica 12345678, cambiarla. Ya están en
+  la red del local (hoy imprime en ellas el sistema de ventas).
+- PC del local: la **laptop de caja con Windows**, queda encendida.
+- QR para la Feria de comida: no hacen falta.
 
 ## Próximas fases
 
-- **Puesta en marcha:** ejecutar `supabase/gestion.sql` y los datos iniciales, publicar la función
-  `nex` con la clave de Claude, crear la cuenta de la tablet.
+- **Puesta en marcha:** SQL y datos iniciales ✅; falta confirmar en Gestión, publicar la función
+  `nex` con la clave de Claude y crear la cuenta de la tablet.
 - **Equipo facial:** instalar el Hikvision (12 V, cable de red), registrar caras con su nº de empleado
   y conectar las marcaciones a n8n (en la nube; si el equipo no envía a HTTPS, puente local).
 - **n8n:** precios de proveedores por WhatsApp Business (API oficial de Meta), ventas diarias y
