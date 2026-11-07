@@ -27,10 +27,9 @@ personal y la aprobación del dueño en lo que toca dinero.
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
 ### 📎 Para enviar
-5. **Base de datos del sistema anterior (Syth Software), últimos 2 años** — anunciada, aún no recibida.
-   Con ella: historial de ventas, platos más vendidos, ganancia por período, proyecciones de ventas y
-   base de clientes (para promociones, solo con su consentimiento).
-5b. **Horarios de los empleados** — anunciados, aún no recibidos.
+5. ✅ **Syth Software (2 años) y horarios** — recibidos. Falta pegar en Supabase → SQL Editor la nueva
+   versión de `supabase/gestion.sql` y luego el archivo privado del histórico (no está en el repositorio).
+   Se ven en Gestión → **Histórico** y **Clientes**. Pendiente: el pago de Gise (nueva en cocina).
 6. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
 7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
 8. Receta de los fideos caseros (ingredientes por tanda y porciones).

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-8xw0UVhslj20LU+UofefrgbESuE6srfIVZEBrZsLZ4c='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-YYO3qwSvQfKVdyj2lW5ecBU4OgcwJiWmOfPBE+Pp2J8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -83,6 +83,20 @@
   .pend { border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; }
   .pend-prices { display:flex; gap:8px; flex-wrap:wrap; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
   .help { background:var(--chip); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--muted); margin:8px 0 0; }
+  .chart { position:relative; }
+  .chart svg { display:block; width:100%; overflow:visible; }
+  .chart .grid { stroke:var(--line); stroke-width:1; }
+  .chart .axis { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+  .chart .real { fill:var(--accent); }
+  .chart .proj { fill:transparent; stroke:var(--accent); stroke-width:1.5; }
+  .chart .hit { fill:transparent; cursor:pointer; }
+  .chart .hit.on { fill:color-mix(in srgb, var(--text) 7%, transparent); }
+  .tip { position:absolute; pointer-events:none; background:var(--text); color:var(--bg); border-radius:8px; padding:6px 9px; font-size:12px; line-height:1.35;
+    white-space:nowrap; transform:translate(-50%, calc(-100% - 8px)); z-index:3; font-variant-numeric:tabular-nums; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:0 0 8px; }
+  .legend i { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:5px; background:var(--accent); }
+  .legend i.proj { background:repeating-linear-gradient(45deg, var(--accent) 0 2px, transparent 2px 5px); border:1.5px solid var(--accent); }
+  details.tview { margin-top:8px; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
@@ -123,6 +137,8 @@
       <button data-tab="nomina">Nómina</button>
       <button data-tab="asistencia">Asistencia</button>
       <button data-tab="ventas">Ventas</button>
+      <button data-tab="historico">Histórico</button>
+      <button data-tab="clientes">Clientes</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -186,6 +202,30 @@
           <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
         </div>
         <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
+      </div>
+    </section>
+
+    <!-- Histórico -->
+    <section data-panel="historico" hidden>
+      <div class="card hidden" id="histSetup"><p class="muted" style="margin:0">Para ver el histórico, vuelve a ejecutar <code>supabase/gestion.sql</code> y luego el archivo con los datos de Syth.</p></div>
+      <p class="muted" style="margin:0" id="histIntro">Ventas con IVA y sin el 10 % de servicio. Incluye lo importado del sistema anterior (Syth Software).</p>
+      <div class="kpis" style="margin-top:12px" id="histKpis"></div>
+      <div class="card"><h2>Ventas por mes</h2><div id="histMonths"></div></div>
+      <div class="card"><h2>Lo que se gana</h2><div id="histProfit"></div></div>
+      <div class="card"><h2>Promedio por día de la semana</h2><p class="muted" style="margin-top:0">Últimos 12 meses, solo días con ventas.</p><div id="histWeek"></div></div>
+      <div class="card"><h2>Platos más vendidos</h2><p class="muted" style="margin-top:0" id="histTopNote"></p><div class="scroll" id="histTop"></div></div>
+      <div class="card"><h2>Ventas por grupo</h2><div class="scroll" id="histGroups"></div></div>
+    </section>
+
+    <!-- Clientes -->
+    <section data-panel="clientes" hidden>
+      <div class="card hidden" id="cliSetup"><p class="muted" style="margin:0">Para ver los clientes, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p></div>
+      <div class="kpis" id="cliKpis"></div>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Clientes</h2><button class="primary" id="addCli">+ Cliente</button></div>
+        <p class="muted">Solo escribe con promociones a quien haya dado su <b>consentimiento</b>; los importados de Syth no lo tienen todavía.</p>
+        <input id="cliSearch" type="search" placeholder="Buscar por nombre, cédula o teléfono" aria-label="Buscar cliente">
+        <div class="scroll" id="cliList" style="margin-top:8px"></div>
       </div>
     </section>
 
@@ -329,7 +369,8 @@
 
   var S = { areas: [], employees: [], expenses: [], ingredients: [], items: [], dishes: [], cats: [],
             pricing: false, suppliers: [], settings: { auto_apply_pct: 5 }, updates: [], history: [],
-            attendance: false, events: [], salesByMonth: {}, itemsByMonth: {}, inventory: false, movsByMonth: {} };
+            attendance: false, events: [], salesByMonth: {}, itemsByMonth: {}, inventory: false, movsByMonth: {},
+            histDays: undefined, histProducts: null, customers: null };
   function supName(i) {
     var x = i.supplier_id && S.suppliers.find(function (y) { return y.id === i.supplier_id; });
     return x ? x.name : (i.supplier || "");
@@ -390,12 +431,12 @@
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
       S.attendance = r[11] !== null; S.inventory = r[12] !== null;
-      return loadPeriods();
+      return Promise.all([loadPeriods(), loadHist()]);
     }).then(renderAll).catch(fail);
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
   function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); }
 
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
@@ -403,6 +444,7 @@
     document.querySelectorAll("#tabs button").forEach(function (x) { x.classList.toggle("on", x === b); });
     document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
     try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
+    if (b.getAttribute("data-tab") === "historico" && S.histDays !== undefined) renderHistorico(); // los gráficos necesitan el ancho visible
   });
   try { var t0 = sessionStorage.getItem("gestion-tab"); if (t0) { var b0 = document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); } } catch (e) {}
   $("month").value = $("expMonth").value = ymNow();
@@ -1210,6 +1252,238 @@
     var max = S.areas.reduce(function (m, a) { return Math.max(m, a.position); }, 0);
     q(sb.from("cost_areas").insert({ name: $("newAreaName").value.trim(), position: max + 1 })).then(function () { $("newAreaName").value = ""; return refresh(); }).catch(fail);
   });
+  // ---------------------------------------------------------------- Histórico (incluye lo importado de Syth Software)
+  var MES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  var MES_L = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  var DOW = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+  var nfc = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  function addMonth(ym, k) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + k; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + "-" + String(m + 1).padStart(2, "0"); }
+  function mLabel(ym, long) { var m = +ym.slice(5, 7) - 1; return long ? MES_L[m] + " " + ym.slice(0, 4) : MES_C[m] + " " + ym.slice(2, 4); }
+  function dmy(s) { return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : ""; }
+  function loadHist() {
+    function all(make) { return pageAll(make).catch(function () { return null; }); }
+    return Promise.all([
+      S.attendance ? all(function () { return sb.from("daily_sales").select("sale_date,total,service_amount,source").order("sale_date"); }) : Promise.resolve(null),
+      all(function () { return sb.from("historic_product_sales").select("*").order("id"); }),
+      all(function () { return sb.from("customers").select("*").order("name"); })
+    ]).then(function (r) { S.histDays = r[0]; S.histProducts = r[1]; S.customers = r[2]; });
+  }
+
+  // Gráfico de barras en SVG: una serie real y, si hay, barras de proyección rayadas.
+  // bars: [{ label, value, proj, sofar, tip }]
+  function niceMax(v) {
+    if (!(v > 0)) return 1;
+    var step = Math.pow(10, Math.floor(Math.log10(v / 4))), m = [1, 2, 2.5, 5, 10].find(function (k) { return k * step * 4 >= v; });
+    return m * step * 4;
+  }
+  function barChart(el, bars, uid) {
+    var W = Math.max(280, el.clientWidth || 640), H = 210, L = 46, B = 22, T = 8, n = bars.length;
+    var max = niceMax(Math.max.apply(null, bars.map(function (b) { return b.value; }))), slot = (W - L) / n;
+    var bw = Math.max(3, Math.min(24, slot - Math.max(2, slot * 0.3))), every = Math.ceil(44 / slot);
+    function y(v) { return T + (H - T - B) * (1 - v / max); }
+    function bar(x, v, cls) {
+      var top = y(v), h = H - B - top; if (h <= 0.5) return "";
+      var r = Math.min(4, bw / 2, h);
+      return '<path class="' + cls + '" d="M' + x + "," + (H - B) + "V" + (top + r) + "Q" + x + "," + top + " " + (x + r) + "," + top + "H" + (x + bw - r) +
+        "Q" + (x + bw) + "," + top + " " + (x + bw) + "," + (top + r) + "V" + (H - B) + 'Z"/>';
+    }
+    var g = "";
+    for (var i = 0; i <= 4; i++) { var v = max * i / 4, yy = y(v);
+      g += '<line class="grid" x1="' + L + '" x2="' + W + '" y1="' + yy + '" y2="' + yy + '"/><text class="axis" x="' + (L - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + nfc.format(v) + "</text>"; }
+    bars.forEach(function (b, i) {
+      var x = L + i * slot + (slot - bw) / 2;
+      g += b.proj ? bar(x, b.value, "proj") + (b.sofar ? bar(x, b.sofar, "real") : "") : bar(x, b.value, "real");
+      if (i % every === 0) g += '<text class="axis" x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(b.label) + "</text>";
+      g += '<rect class="hit" data-i="' + i + '" x="' + (L + i * slot) + '" y="' + T + '" width="' + slot + '" height="' + (H - T - B) + '"/>';
+    });
+    el.innerHTML = '<div class="chart"><svg viewBox="0 0 ' + W + " " + H + '" height="' + H + '" role="img" aria-label="Gráfico de barras; los datos están en la tabla de abajo">' +
+      '<defs><pattern id="hatch' + uid + '" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)"><rect width="2" height="5" style="fill:var(--accent)"/></pattern></defs>' +
+      g + '</svg><div class="tip" hidden></div></div>';
+    el.querySelectorAll(".proj").forEach(function (p) { p.style.fill = "url(#hatch" + uid + ")"; });
+    var svg = el.querySelector("svg"), tip = el.querySelector(".tip"), cur = null;
+    function hide() { tip.hidden = true; if (cur) cur.classList.remove("on"); cur = null; }
+    svg.addEventListener("pointermove", function (e) {
+      var h = e.target.closest(".hit"); if (!h) return hide();
+      if (cur !== h) { if (cur) cur.classList.remove("on"); cur = h; h.classList.add("on"); }
+      var b = bars[+h.dataset.i], k = svg.getBoundingClientRect().width / W;
+      tip.innerHTML = b.tip; tip.hidden = false;
+      var left = (L + (+h.dataset.i + 0.5) * slot) * k, half = tip.offsetWidth / 2, wpx = svg.getBoundingClientRect().width;
+      tip.style.left = Math.min(Math.max(left, half), wpx - half) + "px"; tip.style.top = y(b.value) * k + "px";
+    });
+    svg.addEventListener("pointerleave", hide);
+  }
+
+  function histSeries() {
+    var D = S.histDays || [];
+    if (!D.length) return null;
+    var byM = {};
+    D.forEach(function (d) { var m = d.sale_date.slice(0, 7), x = byM[m] = byM[m] || { total: 0, service: 0, days: 0, syth: 0 };
+      x.total += num(d.total); x.service += num(d.service_amount); x.days++; if (d.source === "syth") x.syth++; });
+    var first = D[0].sale_date, last = D[D.length - 1].sale_date, fM = first.slice(0, 7), lM = last.slice(0, 7), months = [];
+    for (var m = fM; m <= lM; m = addMonth(m, 1)) months.push(m);
+    function complete(m) { return (m > fM || first.slice(8) === "01") && (m < lM || monthBounds(m).to === last); }
+    function val(m) { return byM[m] && complete(m) ? byM[m].total : null; }
+    var C = months.filter(complete), recent = C.slice(-6), prev = recent.map(function (m) { return val(addMonth(m, -12)); });
+    var trend = 1, sr = 0, sp = 0;
+    if (recent.length === 6 && prev.every(function (v) { return v != null; })) {
+      recent.forEach(function (m, i) { sr += val(m); sp += prev[i]; }); if (sp > 0) trend = Math.min(2, Math.max(0.5, sr / sp)); }
+    var last3 = C.slice(-3), avg3 = last3.length ? last3.reduce(function (s, m) { return s + val(m); }, 0) / last3.length : 0;
+    var start = complete(lM) ? addMonth(lM, 1) : lM, proj = [];
+    for (var k = 0; k < 3; k++) { var pm = addMonth(start, k), ly = val(addMonth(pm, -12));
+      proj.push({ m: pm, value: ly != null ? ly * trend : avg3, base: ly != null ? "mismo mes del año pasado × tendencia" : "promedio de los últimos 3 meses" }); }
+    return { byM: byM, months: months, complete: complete, val: val, C: C, trend: trend, trendOk: sp > 0, proj: proj, first: first, last: last, lM: lM };
+  }
+
+  function histFoodPct() {
+    var P = S.histProducts || [], cost = 0, cov = 0, tot = 0;
+    P.forEach(function (p) { tot += num(p.net); var uc = itemUnitCost(p.dish_id, p.variant); if (uc != null) { cost += uc * num(p.qty); cov += num(p.net); } });
+    var share = tot ? cov / tot * 100 : 0;
+    return share >= 25 && cov > 0 ? { pct: cost / cov * 100, note: "según las recetas cargadas (cubren el " + pct(share) + " de lo vendido)", auto: true }
+      : { pct: 40, note: "supuesto: aún faltan recetas para calcularlo (el reporte de costos daba entre 35 % y 55 %)", auto: false };
+  }
+
+  function renderHistorico() {
+    var ok = !!S.histDays;
+    show("histSetup", !ok);
+    var R = ok ? histSeries() : null;
+    if (!R) {
+      $("histKpis").innerHTML = ""; $("histProfit").innerHTML = "";
+      ["histMonths", "histWeek"].forEach(function (id) { $(id).innerHTML = '<div class="empty">Sin ventas registradas todavía.</div>'; });
+    } else {
+      // KPIs
+      var last12 = R.C.slice(-12), t12 = 0, d12 = 0, s12 = 0, cmpA = 0, cmpB = 0, nCmp = 0, best = null;
+      last12.forEach(function (m) { var x = R.byM[m]; t12 += x.total; d12 += x.days; s12 += x.service;
+        var ly = R.val(addMonth(m, -12)); if (ly != null) { cmpA += x.total; cmpB += ly; nCmp++; } });
+      R.C.forEach(function (m) { if (!best || R.byM[m].total > R.byM[best].total) best = m; });
+      var ch = cmpB ? (cmpA / cmpB - 1) * 100 : NaN, p0 = R.proj[0];
+      $("histKpis").innerHTML =
+        '<div class="kpi main"><span>Últimos ' + last12.length + " meses</span><b>" + money(t12) + "</b><span>" + (isFinite(ch) ? (ch >= 0 ? "+" : "") + Math.round(ch) + " % vs. año anterior (" + nCmp + " meses comparables)" : "") + "</span></div>" +
+        '<div class="kpi"><span>Promedio por día abierto</span><b>' + money(d12 ? t12 / d12 : 0) + "</b><span>" + d12 + " días con ventas</span></div>" +
+        '<div class="kpi"><span>Mejor mes</span><b>' + (best ? money(R.byM[best].total) : "—") + "</b><span>" + (best ? mLabel(best, true) : "") + "</span></div>" +
+        '<div class="kpi"><span>Proyección ' + mLabel(p0.m, true) + "</span><b>" + money(p0.value) + "</b><span>" + (R.trendOk ? "tendencia " + (R.trend >= 1 ? "+" : "") + Math.round((R.trend - 1) * 100) + " % interanual" : "estimación simple") + "</span></div>";
+      // Meses + proyección
+      var shown = R.months.filter(R.complete).slice(-24); // los meses incompletos (el primero y el actual) van en la tabla
+      var bars = shown.map(function (m) { var x = R.byM[m];
+        return { label: mLabel(m), value: x.total, tip: "<b>" + mLabel(m, true) + "</b><br>" + money(x.total) + "<br>" + x.days + " días con ventas" }; });
+      R.proj.forEach(function (p) { var x = p.m === R.lM ? R.byM[p.m] : null;
+        bars.push({ label: mLabel(p.m), value: Math.max(p.value, x ? x.total : 0), proj: true, sofar: x ? x.total : 0,
+          tip: "<b>" + mLabel(p.m, true) + " · proyección</b><br>" + money(p.value) + (x ? "<br>Llevas " + money(x.total) + " en " + x.days + " días" : "") }); });
+      $("histMonths").innerHTML = '<div class="legend"><span><i></i>Real</span><span><i class="proj"></i>Proyección</span></div><div id="histMonthsChart"></div>' +
+        '<details class="tview"><summary>Ver tabla</summary><div class="scroll"><table class="tbl"><thead><tr><th>Mes</th><th class="n">Ventas</th><th class="n hide-sm">Servicio cobrado</th><th class="n">Días</th><th class="n hide-sm">Promedio/día</th></tr></thead><tbody>' +
+        R.months.slice().reverse().map(function (m) { var x = R.byM[m] || { total: 0, service: 0, days: 0 };
+          return "<tr><td>" + mLabel(m, true) + (R.complete(m) ? "" : ' <span class="pill">parcial</span>') + '</td><td class="n">' + money(x.total) + '</td><td class="n hide-sm">' + money(x.service) +
+            '</td><td class="n">' + x.days + '</td><td class="n hide-sm">' + money(x.days ? x.total / x.days : 0) + "</td></tr>"; }).join("") +
+        R.proj.map(function (p) { return "<tr><td>" + mLabel(p.m, true) + ' <span class="pill">proyección</span></td><td class="n">' + money(p.value) + '</td><td class="hide-sm"></td><td class="n">—</td><td class="hide-sm"></td></tr>'; }).join("") +
+        "</tbody></table></div></details>" +
+        '<p class="help">Proyección = ventas del mismo mes del año pasado × la tendencia de los últimos 6 meses frente a los mismos meses del año anterior' +
+        (R.trendOk ? " (" + (R.trend >= 1 ? "+" : "") + Math.round((R.trend - 1) * 100) + " %)" : "") + ". Es una guía, no una promesa: eventos, feriados o cambios de precios la mueven.</p>";
+      barChart($("histMonthsChart"), bars, "m");
+      // Lo que se gana (últimos 12 meses completos)
+      var F = histFoodPct(), fc = F.pct;
+      try { var saved = localStorage.getItem("gestion-hist-fc"); if (saved && !F.auto) fc = num(saved) || fc; } catch (e) {}
+      var staffPctV = num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15), MC = monthCosts(ymNow()), n12 = last12.length;
+      var net12 = t12 / ivaF(), food = net12 * fc / 100, fixed = (MC.nom + MC.fix) * n12, servL = s12 * (100 - staffPctV) / 100, gross = net12 - food, res = gross - fixed + servL;
+      function two(label, v, cls, sub) { return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><td>" + label + (sub ? '<div class="muted">' + sub + "</div>" : "") + '</td><td class="n">' + money(v) + '</td><td class="n hide-sm">' + money(n12 ? v / n12 : 0) + "</td></tr>"; }
+      var col = function (v) { return '<b style="color:' + (v >= 0 ? "var(--ok)" : "var(--danger)") + '">'; };
+      $("histProfit").innerHTML = '<div class="row"><label for="histFc" style="margin:0">Costo de insumos (% de la venta neta)</label><input id="histFc" type="number" step="0.5" min="0" max="100" inputmode="decimal" style="width:90px" value="' + nf2.format(fc) + '"' + (F.auto ? " disabled" : "") + '></div>' +
+        '<p class="muted" style="margin:4px 0 8px">' + esc(F.note) + "</p>" +
+        '<div class="scroll"><table class="tbl"><thead><tr><th>Últimos ' + n12 + ' meses</th><th class="n">Total</th><th class="n hide-sm">Por mes</th></tr></thead><tbody>' +
+        two("Ventas (con IVA)", t12) + two("− IVA", t12 - net12) + two("<b>Ventas netas</b>", net12) +
+        two("− Insumos (" + nf2.format(fc) + " %)", food) +
+        "<tr class=\"total\"><td>Utilidad bruta</td><td class=\"n\">" + col(gross) + money(gross) + '</b></td><td class="n hide-sm">' + money(n12 ? gross / n12 : 0) + "</td></tr>" +
+        two("− Nómina y gastos fijos", fixed, "", "Con la nómina y los gastos de hoy (" + money(MC.nom + MC.fix) + " al mes); antes pudieron ser otros.") +
+        two("+ Servicio para el local (" + (100 - staffPctV) + " %)", servL) +
+        "<tr class=\"total\"><td>Utilidad neta estimada" + (net12 ? " (" + pct(res / net12 * 100) + ")" : "") + '</td><td class="n">' + col(res) + money(res) + '</b></td><td class="n hide-sm">' + col(res) + money(n12 ? res / n12 : 0) + "</b></td></tr>" +
+        "</tbody></table></div>" +
+        '<p class="muted">No incluye comisiones del banco, gastos variables, mermas ni impuesto sobre la renta. Para cada mes en detalle, mira la pestaña <b>Ventas</b>.</p>';
+      $("histFc").addEventListener("change", function () { try { localStorage.setItem("gestion-hist-fc", String(num($("histFc").value))); } catch (e) {} renderHistorico(); });
+      // Día de la semana (últimos 12 meses)
+      var since = new Date(Date.parse(R.last + "T00:00:00Z") - 364 * 864e5).toISOString().slice(0, 10), W7 = DOW.map(function () { return { t: 0, n: 0 }; });
+      S.histDays.forEach(function (d) { if (d.sale_date < since || !(num(d.total) > 0)) return;
+        var w = (new Date(d.sale_date + "T12:00:00Z").getUTCDay() + 6) % 7; W7[w].t += num(d.total); W7[w].n++; });
+      var wb = W7.map(function (x, i) { var a = x.n ? x.t / x.n : 0; return { label: DOW[i].slice(0, 3), value: a, tip: "<b>" + DOW[i] + "</b><br>" + money(a) + " de promedio<br>" + x.n + " días" }; });
+      $("histWeek").innerHTML = '<div id="histWeekChart"></div><details class="tview"><summary>Ver tabla</summary><table class="tbl"><thead><tr><th>Día</th><th class="n">Promedio</th><th class="n">Días</th></tr></thead><tbody>' +
+        W7.map(function (x, i) { return "<tr><td>" + DOW[i] + '</td><td class="n">' + money(x.n ? x.t / x.n : 0) + '</td><td class="n">' + x.n + "</td></tr>"; }).join("") + "</tbody></table></details>";
+      barChart($("histWeekChart"), wb, "w");
+    }
+    renderHistTop();
+  }
+
+  var NOT_PRODUCT = /PARA LLEVAR|DELIVERY|RESERVACI|BOLSA|ENVASE/i;
+  function renderHistTop() {
+    var P = S.histProducts;
+    if (!P || !P.length) { $("histTopNote").textContent = ""; $("histTop").innerHTML = '<div class="empty">Sin datos de productos. Se cargan con el archivo del sistema anterior.</div>'; $("histGroups").innerHTML = ""; return; }
+    var from = P.reduce(function (a, p) { return !a || p.period_from < a ? p.period_from : a; }, ""), to = P.reduce(function (a, p) { return p.period_to > a ? p.period_to : a; }, "");
+    var agg = {}, extra = 0, total = 0, groups = {};
+    P.forEach(function (p) {
+      var v = num(p.net) * ivaF();
+      var g = groups[p.group_name || "Otros"] = groups[p.group_name || "Otros"] || { t: 0, q: 0 }; g.t += v; g.q += num(p.qty);
+      if (NOT_PRODUCT.test(p.name)) { extra += v; return; }
+      total += v;
+      var d = p.dish_id && S.dishes.find(function (x) { return x.id === p.dish_id; }), k = d ? "d" + d.id : "n" + p.name;
+      var x = agg[k] = agg[k] || { name: d ? d.name : p.name.toLowerCase().replace(/(^|\s|\()\S/g, function (c) { return c.toUpperCase(); }), inMenu: !!d, qty: 0, amount: 0, parts: {} };
+      x.qty += num(p.qty); x.amount += v; if (d && p.variant) x.parts[p.variant] = (x.parts[p.variant] || 0) + num(p.qty);
+    });
+    var list = Object.keys(agg).map(function (k) { return agg[k]; }).sort(function (a, b) { return b.amount - a.amount; });
+    var top = list[0] ? list[0].amount : 1, showAll = renderHistTop.all;
+    $("histTopNote").textContent = "Del " + dmy(from) + " al " + dmy(to) + " · ventas con IVA. Sumando tamaños y sabores de cada plato." + (extra ? " No incluye envases, delivery ni reservaciones (" + money(extra) + ")." : "");
+    $("histTop").innerHTML = '<table class="tbl"><thead><tr><th class="n">#</th><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
+      list.slice(0, showAll ? list.length : 20).map(function (x, i) { var p = total ? x.amount / total * 100 : 0, parts = Object.keys(x.parts);
+        return '<tr><td class="n muted">' + (i + 1) + "</td><td><b>" + esc(x.name) + "</b>" + (x.inMenu ? "" : ' <span class="pill warn">ya no está en la carta</span>') +
+          (parts.length > 1 ? '<div class="muted">' + parts.map(function (v) { return esc(v) + " " + nf3.format(x.parts[v]); }).join(" · ") + "</div>" : "") +
+          '</td><td class="n">' + nf3.format(x.qty) + '</td><td class="n">' + money(x.amount) + '</td><td class="hide-sm"><div class="row" style="flex-wrap:nowrap"><div class="bar" style="flex:1"><i style="width:' + (x.amount / top * 100).toFixed(1) + '%"></i></div><span class="muted" style="min-width:42px;text-align:right">' + (p < 1 ? nf2.format(p) + " %" : pct(p)) + "</span></div></td></tr>"; }).join("") +
+      "</tbody></table>" + (list.length > 20 ? '<p><button type="button" class="small" id="histTopAll">' + (showAll ? "Ver solo los 20 primeros" : "Ver los " + list.length) + "</button></p>" : "");
+    var b = $("histTopAll"); if (b) b.addEventListener("click", function () { renderHistTop.all = !renderHistTop.all; renderHistTop(); });
+    var gl = Object.keys(groups).map(function (k) { return { name: k, t: groups[k].t, q: groups[k].q }; }).filter(function (g) { return g.t > 0; }).sort(function (a, b2) { return b2.t - a.t; }), gt = gl.reduce(function (s, g) { return s + g.t; }, 0);
+    $("histGroups").innerHTML = '<table class="tbl"><thead><tr><th>Grupo</th><th class="n hide-sm">Unidades</th><th class="n">Ventas</th><th>% del total</th></tr></thead><tbody>' +
+      gl.map(function (g) { var p = gt ? g.t / gt * 100 : 0;
+        return "<tr><td><b>" + esc(g.name) + '</b></td><td class="n hide-sm">' + nf3.format(g.q) + '</td><td class="n">' + money(g.t) + '</td><td><div class="row" style="flex-wrap:nowrap"><div class="bar" style="flex:1"><i style="width:' + (gl[0].t ? g.t / gl[0].t * 100 : 0).toFixed(1) + '%"></i></div><span class="muted" style="min-width:42px;text-align:right">' + pct(p) + "</span></div></td></tr>"; }).join("") +
+      '<tr class="total"><td>Total</td><td class="n hide-sm"></td><td class="n">' + money(gt) + "</td><td></td></tr></tbody></table>";
+  }
+  var histResize;
+  window.addEventListener("resize", function () { clearTimeout(histResize); histResize = setTimeout(function () { if (!document.querySelector('[data-panel="historico"]').hidden) renderHistorico(); }, 200); });
+
+  // ---------------------------------------------------------------- Clientes
+  function renderClientes() {
+    var L = S.customers;
+    show("cliSetup", !L); $("addCli").disabled = !L;
+    if (!L) { $("cliKpis").innerHTML = ""; $("cliList").innerHTML = ""; return; }
+    var tel = L.filter(function (c) { return c.phone; }).length, mail = L.filter(function (c) { return c.email; }).length, ok = L.filter(function (c) { return c.marketing_consent; }).length;
+    var byY = {}; L.forEach(function (c) { if (c.registered_at) { var y = c.registered_at.slice(0, 4); byY[y] = (byY[y] || 0) + 1; } });
+    $("cliKpis").innerHTML = '<div class="kpi main"><span>Clientes</span><b>' + L.length + "</b><span>" + Object.keys(byY).sort().map(function (y) { return y + ": " + byY[y]; }).join(" · ") + "</span></div>" +
+      '<div class="kpi"><span>Con teléfono</span><b>' + tel + '</b></div><div class="kpi"><span>Con correo</span><b>' + mail + '</b></div>' +
+      '<div class="kpi"><span>Aceptan promociones</span><b>' + ok + "</b><span>" + pct(L.length ? ok / L.length * 100 : 0) + "</span></div>";
+    var term = $("cliSearch").value.trim().toLowerCase(), digits = term.replace(/\D/g, "");
+    var f = L.filter(function (c) { return !term || String(c.name).toLowerCase().indexOf(term) >= 0 || (digits && (String(c.doc_id || "").indexOf(digits) >= 0 || String(c.phone).indexOf(digits) >= 0)) || String(c.email).toLowerCase().indexOf(term) >= 0; });
+    $("cliList").innerHTML = f.length ? '<table class="tbl"><thead><tr><th>Nombre</th><th class="hide-sm">Cédula / RIF</th><th>Teléfono</th><th class="hide-sm">Desde</th><th>Promociones</th></tr></thead><tbody>' +
+      f.slice(0, 100).map(function (c) {
+        return '<tr class="click" data-cli="' + c.id + '"><td><b>' + esc(c.name) + "</b>" + (c.email ? '<div class="muted">' + esc(c.email) + "</div>" : "") + '<div class="muted show-sm">' + esc(c.doc_id || "") + '</div></td><td class="hide-sm">' + esc(c.doc_id || "") +
+          "</td><td>" + esc(c.phone || "—") + '</td><td class="hide-sm">' + esc(c.registered_at ? dmy(c.registered_at) : "") + "</td><td>" + (c.marketing_consent ? '<span class="pill ok">sí</span>' : '<span class="pill">no</span>') + "</td></tr>";
+      }).join("") + "</tbody></table>" + (f.length > 100 ? '<p class="muted">Mostrando 100 de ' + f.length + ". Escribe para buscar.</p>" : "")
+      : '<div class="empty">' + (L.length ? "Ningún cliente coincide." : "Aún no hay clientes.") + "</div>";
+  }
+  function cliForm(c) {
+    openForm({ title: c ? "Editar cliente" : "Nuevo cliente", values: c || { registered_at: new Date().toISOString().slice(0, 10) },
+      fields: [
+        { k: "name", label: "Nombre", req: true }, { k: "doc_id", label: "Cédula o RIF", ph: "V12345678" },
+        { k: "phone", label: "Teléfono (WhatsApp)", ph: "04141234567" }, { k: "email", label: "Correo", type: "email" },
+        { k: "registered_at", label: "Cliente desde", type: "date" },
+        { k: "marketing_consent", label: "Aceptó recibir promociones", type: "check", full: true },
+        { k: "notes", label: "Notas (preferencias, alergias…)", type: "area", full: true }
+      ],
+      validate: function (v) {
+        if (!v.name) return "Escribe el nombre.";
+        v.doc_id = v.doc_id.replace(/[\s.\-]/g, "").toUpperCase() || null; v.phone = v.phone.replace(/[^\d+]/g, ""); v.email = v.email.toLowerCase();
+        if (!v.registered_at) v.registered_at = null;
+        if (v.marketing_consent && !(c && c.marketing_consent)) v.consent_at = new Date().toISOString();
+        if (!v.marketing_consent) v.consent_at = null;
+        if (!c) v.source = "manual";
+      },
+      onSave: saver("customers", c && c.id), onDelete: c && deleter("customers", c.id) });
+  }
+  $("addCli").addEventListener("click", function () { cliForm(null); });
+  $("cliSearch").addEventListener("input", renderClientes);
+  $("cliList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-cli]"); if (tr) cliForm(S.customers.find(function (x) { return x.id === Number(tr.dataset.cli); })); });
 })();
 </script>
 </body>

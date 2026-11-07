@@ -558,3 +558,50 @@ create policy "dish photos admin update" on storage.objects for update
 drop policy if exists "dish photos admin delete" on storage.objects;
 create policy "dish photos admin delete" on storage.objects for delete
   to authenticated using (bucket_id = 'dishes' and public.can_manage());
+
+-- ================================================================ Histórico del sistema anterior y clientes
+-- Ventas por producto de un período (p. ej. 2 años del sistema Syth). dish_id/variant enlazan con la
+-- carta actual cuando el producto existe en ella; los demás quedan sin enlazar.
+create table if not exists public.historic_product_sales (
+  id          bigint generated always as identity primary key,
+  source      text not null default 'syth',
+  period_from date not null,
+  period_to   date not null,
+  code        text not null default '',
+  name        text not null,
+  group_name  text not null default '',
+  subgroup    text not null default '',
+  qty         numeric(12,2) not null default 0,
+  net         numeric(14,2) not null default 0,   -- ventas sin IVA
+  dish_id     bigint references public.dishes(id) on delete set null,
+  variant     text not null default '',
+  unique (source, period_from, period_to, code, name)
+);
+
+-- Clientes (base para fidelidad y promociones). Promociones solo con consentimiento (marketing_consent).
+create table if not exists public.customers (
+  id                bigint generated always as identity primary key,
+  doc_id            text unique,                    -- cédula o RIF
+  name              text not null,
+  phone             text not null default '',
+  email             text not null default '',
+  registered_at     date,
+  source            text not null default 'manual',
+  marketing_consent boolean not null default false,
+  consent_at        timestamptz,
+  notes             text not null default '',
+  created_at        timestamptz not null default now()
+);
+
+alter table public.historic_product_sales enable row level security;
+alter table public.customers              enable row level security;
+do $$
+declare t text;
+begin
+  foreach t in array array['historic_product_sales', 'customers'] loop
+    execute format('drop policy if exists "manage %1$s" on public.%1$I', t);
+    execute format('create policy "manage %1$s" on public.%1$I for all to authenticated
+                    using (public.can_manage()) with check (public.can_manage())', t);
+  end loop;
+end $$;
+revoke all on public.historic_product_sales, public.customers from anon;
