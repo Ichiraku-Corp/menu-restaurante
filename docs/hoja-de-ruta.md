@@ -37,7 +37,7 @@ personal y la aprobación del dueño en lo que toca dinero.
 7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
 8. Receta de los fideos caseros (ingredientes por tanda y porciones).
 9. Proveedores: nombre, WhatsApp y qué vende cada uno.
-10. Hoja de autoprueba de las impresoras de **cocina** y **caja** (para su IP).
+10. ✅ Autoprueba de impresoras recibida (ver «Resuelto»). Falta: el `ipconfig` de la laptop de caja.
 11. Modelo **Live2D** de Nex, cuando tenga su apariencia definitiva.
 
 ### ❓ Para averiguar
@@ -71,6 +71,12 @@ personal y la aprobación del dueño en lo que toca dinero.
   cortador, 24 V; USB + red RJ-45 + wifi; **ESC/POS (Epson)**; puerto **9100**; la de arriba parece tener
   IP fija **192.168.0.30** (confirmar al instalar); contraseña de fábrica 12345678, cambiarla. Ya están en
   la red del local (hoy imprime en ellas el sistema de ventas).
+- Autoprueba (7 nov), las dos con DHCP desactivado (IP fija), puerto 9100, ESC/POS, 80 mm:
+  - **Caja:** modelo 80-VI-UL (USB + red), IP **192.168.0.20**, puerta de enlace 192.168.0.1.
+  - **Cocina:** modelo 80-IV-WIFI (USB + red + wifi), IP por cable **192.168.1.100**, puerta de enlace
+    192.168.1.1; el wifi está en su red de fábrica (HF-LPB100), sin usar.
+  - Ojo: están en **redes distintas** (192.168.**0**.x y 192.168.**1**.x). Confirmar con `ipconfig` en la
+    laptop de caja desde qué red se llega a cada una.
 - PC del local: la **laptop de caja con Windows**, queda encendida.
 - QR para la Feria de comida: no hacen falta.
 
