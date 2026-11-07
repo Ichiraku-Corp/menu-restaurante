@@ -12,24 +12,27 @@ personal y la aprobación del dueño en lo que toca dinero.
   asistencia (preparada para el Hikvision DS-K1T321MFWX), ventas diarias, inventario (ventas →
   stock, mermas, conteos, lista de compras) y estado de resultados con utilidad bruta y neta (IVA
   separado).
+- **Histórico y clientes** (Gestión): 2 años de ventas de Syth por mes y por día de la semana,
+  proyección de los próximos meses, ganancia estimada, platos y grupos más vendidos, y base de
+  clientes con buscador y consentimiento para promociones.
 - **Nex, fase 2** (`cocina.html` + función `nex`): asistente por voz para mermas, conteos, stock y
   recetas, con Claude Opus 5.5.
 
 ## Pendientes (actualizado el 7 nov 2026)
 
 ### 🔴 Primero (rápido, 5–10 min cada uno)
-0. **Ejecutar de nuevo `supabase/gestion.sql`** (activa la 2FA obligatoria en la base de datos y cierra la
-   edición de la carta a dueño/admin) y entrar en `/admin.html` para **vincular el teléfono** con el QR.
-1. Entrar en Panel → Gestión de costos y confirmar que se ven los **11 empleados** y los **9 gastos fijos**.
+0. En Supabase → SQL Editor, pegar **`1-gestion.sql`** (nueva versión de `supabase/gestion.sql`: 2FA
+   obligatoria, tablas de histórico y clientes) y después **`4-historico-syth-PRIVADO.sql`** (ventas,
+   productos y clientes de Syth, horarios y Gise). No volver a ejecutar `2-datos-iniciales`.
+   Luego entrar en `/admin.html` y **vincular el teléfono** con el QR.
+1. Entrar en Gestión y confirmar: **12 personas** en Nómina con nombre completo y horario, los
+   **9 gastos fijos**, y las pestañas **Histórico** y **Clientes** con datos.
 2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub (GitHub ✅ en curso).
 3. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
 4. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
 ### 📎 Para enviar
-5. ✅ **Syth Software (2 años) y horarios** — recibidos. Falta pegar en Supabase → SQL Editor la nueva
-   versión de `supabase/gestion.sql` y luego el archivo privado del histórico (no está en el repositorio).
-   Se ven en Gestión → **Histórico** y **Clientes**.
 6. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
 7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
 8. Receta de los fideos caseros (ingredientes por tanda y porciones).
@@ -38,10 +41,11 @@ personal y la aprobación del dueño en lo que toca dinero.
 11. Modelo **Live2D** de Nex, cuando tenga su apariencia definitiva.
 
 ### ❓ Para averiguar
-12. **Syth Software:** ¿emiten la factura digital o quién es el proveedor autorizado? ¿Pueden exportar el
-    historial de ventas?
+12. **Syth Software:** ¿emiten la factura digital o quién es el proveedor autorizado? ¿Pueden exportar las
+    ventas de cada día por plato (para llenar el inventario solo)?
 13. Proveedor de internet: ¿el local tiene IP fija?
-14. Días libres de cada empleado (cuando estén definidos).
+14. ¿El 10 % de servicio que se cobraba en Syth era todo para el personal o una parte para el local?
+    (hoy la gestión supone 15 % personal / 85 % local; se cambia en Ventas → Ajustes).
 
 ### 🤖 Nex
 15. Crear la clave en console.anthropic.com (con límite de gasto), guardarla como secreto
@@ -51,12 +55,15 @@ personal y la aprobación del dueño en lo que toca dinero.
 ### 📝 Documentos
 17. Completar el borrador de **política de privacidad** con razón social, RIF y contacto, y que lo revise
     un abogado o el contador (`docs/borrador-politica-privacidad.md`), antes del registro de clientes.
+17b. **Clientes importados de Syth (338):** pedirles permiso antes de enviarles promociones (por ejemplo,
+    un mensaje único por WhatsApp al publicar la política); marcarlo en Gestión → Clientes.
 
 ### 📦 Cuando llegue
 18. **Equipo Hikvision:** instalación guiada; antes, consentimiento por escrito de cada empleado.
 
 ### ✅ Resuelto
 - SQL de gestión y datos iniciales ejecutados en Supabase (5 nov).
+- Base de datos de Syth (2 años) y horarios recibidos e importados (7 nov); pago de Gise: Ref 240 al mes.
 - Seguridad web: CSP, librerías propias, vista previa al compartir, página 404, copia diaria cifrada (falta
   activarla) y borrador de política de privacidad.
 - Personalidad e historia de Nex: recibida e integrada.
