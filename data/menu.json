@@ -651,6 +651,34 @@
    "photo_url": "assets/dishes/jugo-sakura.webp",
    "available": true,
    "position": 8
+  },
+  {
+   "id": 35,
+   "category_id": 5,
+   "name": "Japan Cake",
+   "subtitle": "ジャパンケーキ",
+   "description": "Bizcocho esponjoso con crema batida y caramelo, en su vasito.",
+   "price": 2.5,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/japan-cake.webp",
+   "available": true,
+   "position": 6
+  },
+  {
+   "id": 36,
+   "category_id": 5,
+   "name": "Mochis",
+   "subtitle": "もち",
+   "description": "Dulce japonés de arroz glutinoso, suave y elástico, en colores.",
+   "price": 4,
+   "variants": [],
+   "options": [],
+   "tags": [],
+   "photo_url": "assets/dishes/mochis.webp",
+   "available": true,
+   "position": 7
   }
  ]
 }
