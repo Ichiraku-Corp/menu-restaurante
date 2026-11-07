@@ -15,7 +15,7 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 2** (`cocina.html` + función `nex`): asistente por voz para mermas, conteos, stock y
   recetas, con Claude Opus 5.5.
 
-## Pendientes (actualizado el 5 nov 2026)
+## Pendientes (actualizado el 7 nov 2026)
 
 ### 🔴 Primero (rápido, 5–10 min cada uno)
 0. **Ejecutar de nuevo `supabase/gestion.sql`** (activa la 2FA obligatoria en la base de datos y cierra la
@@ -27,7 +27,10 @@ personal y la aprobación del dueño en lo que toca dinero.
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
 ### 📎 Para enviar
-5. Reporte de ventas desde la apertura (exportado de Syth Software).
+5. **Base de datos del sistema anterior (Syth Software), últimos 2 años** — anunciada, aún no recibida.
+   Con ella: historial de ventas, platos más vendidos, ganancia por período, proyecciones de ventas y
+   base de clientes (para promociones, solo con su consentimiento).
+5b. **Horarios de los empleados** — anunciados, aún no recibidos.
 6. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
 7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
 8. Receta de los fideos caseros (ingredientes por tanda y porciones).
