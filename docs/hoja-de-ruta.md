@@ -18,6 +18,12 @@ personal y la aprobación del dueño en lo que toca dinero.
 - **Nex, fase 2** (`cocina.html` + función `nex`): asistente por voz para mermas, conteos, stock y
   recetas, con Claude Opus 5.5.
 
+## 🚀 Sistema de ventas propio (sustituye a S&H desde el 9 nov)
+
+Listo en la base de datos (cuentas de sala e impresora creadas, PIN del salón puestos). Falta esta noche,
+al cerrar: Node.js + puente en la laptop de caja, prueba de impresoras, activar tablets y una venta de
+prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la factura electrónica (1 dic).
+
 ## Pendientes (actualizado el 7 nov 2026)
 
 ### 🔴 Primero (rápido, 5–10 min cada uno)
