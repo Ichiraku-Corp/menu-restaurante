@@ -112,11 +112,3 @@ npx serve .
 ```
 
 y abre http://localhost:3000 (menú) y http://localhost:3000/admin.html (panel).
-
-## Pensando en el juego de cartas
-
-Cada plato tiene una columna `attributes` (JSON) que el menú ignora. Sirve para guardar
-datos del futuro juego (rareza, ataque, defensa…) sin tocar el esquema ni romper el menú.
-Las descripciones ya tienen mucho "texto de carta" ("Resistencia a los rayos +1",
-"Elimina pesadillas", "nivel de sabrosura más de 9.000") y las fotos tienen URL estable
-para reutilizarlas como ilustraciones.

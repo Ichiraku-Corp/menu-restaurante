@@ -123,4 +123,3 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la fact
     inventario y utilidades.
   - **Clientes:** registro con consentimiento, historial, fidelidad y captación desde el QR de la carta.
   - **Reportes:** por mesera, hora, plato y tiempos de cocina.
-- **Al final:** juego de cartas con los platos (borrador en `docs/borrador-cartas.html`).
