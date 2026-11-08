@@ -86,6 +86,8 @@ alter table public.pos_orders add column if not exists delivery_fee numeric(10,2
 alter table public.pos_orders add column if not exists precuenta_at timestamptz;
 alter table public.pos_orders add column if not exists day_number   int;   -- número de orden del día (1, 2, 3…)
 alter table public.pos_orders add column if not exists customer_id  bigint references public.customers(id) on delete set null;
+-- Cuenta dividida por persona: {"n": 4, "units": {"<id del plato>": [1, 3]}} (persona de cada unidad; 0 = sin asignar)
+alter table public.pos_orders add column if not exists split        jsonb;
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
 create index if not exists pos_orders_closed_at on public.pos_orders (closed_at);
@@ -126,6 +128,7 @@ create table if not exists public.pos_payments (
   session_id bigint references public.pos_sessions(id) on delete set null
 );
 create index if not exists pos_payments_session on public.pos_payments (session_id);
+alter table public.pos_payments add column if not exists person smallint;   -- persona que pagó (cuenta dividida)
 
 create table if not exists public.pos_print_jobs (
   id         bigint generated always as identity primary key,
@@ -222,6 +225,57 @@ language sql stable security definer set search_path = public as $$
          round(sub - disc, 2) + round((sub - disc) * service_pct / 100, 2) + round(delivery_fee, 2),
          coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order), 0) from b
 $$;
+
+-- Nombre de cada persona en una cuenta dividida (el color es el mismo de la pantalla)
+create or replace function public.pos_person_name(p int) returns text
+language sql immutable as $$
+  select case when p between 1 and 8
+    then 'Persona ' || p || ' - ' || (array['Azul', 'Rojo', 'Verde', 'Naranja', 'Morado', 'Rosado', 'Turquesa', 'Amarillo'])[p]
+    else 'Sin asignar' end
+$$;
+
+-- Unidades de cada plato con su persona (2 Gyozas = 2 unidades que pueden ser de personas distintas)
+create or replace function public.pos_split_units(p_order bigint)
+returns table (item_id bigint, unit int, person int, name text, variant text, price numeric)
+language sql stable security definer set search_path = public as $$
+  select i.id, k, coalesce((o.split -> 'units' -> i.id::text ->> (k - 1))::int, 0),
+         i.name, i.variant, round(i.unit_price * least(1, i.qty - (k - 1)), 2)
+  from public.pos_orders o join public.pos_items i on i.order_id = o.id and i.status <> 'anulado'
+  cross join lateral generate_series(1, ceil(i.qty)::int) k
+  where o.id = p_order
+$$;
+
+-- Cuánto le toca a cada persona: sus platos + su parte del descuento y del servicio (proporcional)
+-- + delivery en partes iguales. Los céntimos de redondeo los absorbe la última persona.
+create or replace function public.pos_split(p_order bigint)
+returns table (person int, subtotal numeric, discount numeric, service numeric, delivery numeric, total numeric, paid numeric)
+language plpgsql stable security definer set search_path = public as $$
+declare o record; t record; n int; r record; acc numeric := 0; lastp int;
+begin
+  select * into o from public.pos_orders where id = p_order;
+  n := coalesce((o.split ->> 'n')::int, 0);
+  if n < 2 then return; end if;
+  select * into t from public.pos_totals(p_order);
+  select max(u.person) into lastp from public.pos_split_units(p_order) u where u.person > 0;
+  for r in
+    select g.p, coalesce(sum(u.price), 0) as sub
+    from (select generate_series(1, n) p union select 0 where exists (select 1 from public.pos_split_units(p_order) x where x.person = 0)) g
+    left join public.pos_split_units(p_order) u on u.person = g.p
+    group by g.p order by case when g.p = 0 then 99 else g.p end
+  loop
+    person := r.p; subtotal := round(r.sub, 2);
+    discount := case when t.subtotal > 0 then round(t.discount * r.sub / t.subtotal, 2) else 0 end;
+    service := round((subtotal - discount) * o.service_pct / 100, 2);
+    delivery := case when r.p > 0 then round(t.delivery / n, 2) else 0 end;
+    total := subtotal - discount + service + delivery;
+    if r.p = lastp and r.p > 0 and not exists (select 1 from public.pos_split_units(p_order) x where x.person = 0) then
+      total := t.total - acc;  -- cuadra los céntimos
+    end if;
+    acc := acc + total;
+    paid := coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order and pos_payments.person = r.p), 0);
+    return next;
+  end loop;
+end $$;
 
 create or replace function public.pos_print(p_printer text, p_body text) returns void
 language sql security definer set search_path = public as $$
@@ -335,8 +389,10 @@ begin
                 'qty', i.qty, 'unit_price', i.unit_price, 'status', i.status, 'void_reason', i.void_reason,
                 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
               from public.pos_items i where i.order_id = o.id),
+    'split', o.split,
+    'split_totals', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from public.pos_split(o.id) x),
     'payments', (select coalesce(jsonb_agg(jsonb_build_object('method', p.method, 'currency', p.currency, 'amount', p.amount,
-                   'amount_ref', p.amount_ref, 'reference', p.reference) order by p.id), '[]'::jsonb)
+                   'amount_ref', p.amount_ref, 'reference', p.reference, 'person', p.person) order by p.id), '[]'::jsonb)
                  from public.pos_payments p where p.order_id = o.id)
   ) into r from public.pos_orders o where o.id = p_order;
   return r;
@@ -450,6 +506,34 @@ begin
   values (p_emp, 'descuento', p_order, jsonb_build_object('monto', p_amount, 'motivo', trim(coalesce(p_reason, ''))));
 end $$;
 
+-- Dividir la cuenta por persona (lo hace caja al cobrar). p_split null o n < 2 = quitar la división.
+create or replace function public.pos_set_split(p_emp bigint, p_pin text, p_order bigint, p_split jsonb)
+returns void language plpgsql security definer set search_path = public as $$
+declare n int; clean jsonb := '{}'::jsonb; it record; arr jsonb; v int; k int;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if not exists (select 1 from public.pos_orders where id = p_order and status = 'abierta') then raise exception 'El pedido ya está cerrado'; end if;
+  n := coalesce((p_split ->> 'n')::int, 0);
+  if n < 2 then
+    update public.pos_orders set split = null where id = p_order;
+    insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'dividir', p_order, jsonb_build_object('personas', 0));
+    return;
+  end if;
+  if n > 8 then raise exception 'Máximo 8 personas'; end if;
+  -- Solo se guardan platos de este pedido y personas válidas
+  for it in select i.id, ceil(i.qty)::int as units from public.pos_items i where i.order_id = p_order and i.status <> 'anulado' loop
+    arr := '[]'::jsonb;
+    for k in 0 .. it.units - 1 loop
+      v := coalesce((p_split -> 'units' -> it.id::text ->> k)::int, 0);
+      if v < 0 or v > n then v := 0; end if;
+      arr := arr || to_jsonb(v);
+    end loop;
+    clean := clean || jsonb_build_object(it.id::text, arr);
+  end loop;
+  update public.pos_orders set split = jsonb_build_object('n', n, 'units', clean) where id = p_order;
+  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'dividir', p_order, jsonb_build_object('personas', n));
+end $$;
+
 create or replace function public.pos_move(p_emp bigint, p_pin text, p_order bigint, p_table bigint)
 returns void language plpgsql security definer set search_path = public as $$
 declare old text;
@@ -468,11 +552,29 @@ language sql stable security definer set search_path = public as $$
   with t as (select * from public.pos_totals(p_order)), o as (select * from public.pos_orders where id = p_order),
        r as (select coalesce(o.rate, public.pos_rate()) as rate from o)
   select E'~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
+    case when coalesce((o.split ->> 'n')::int, 0) < 2 then
     coalesce((select string_agg(public.pos_line(trim(to_char(g.q, 'FM990.##')) || ' ' || g.name ||
                 case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)), E'\n' order by g.first)
               from (select i.name, i.variant, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
                     from public.pos_items i where i.order_id = p_order and i.status <> 'anulado'
-                    group by i.name, i.variant, i.unit_price) g), '') || E'\n=\n' ||
+                    group by i.name, i.variant, i.unit_price) g), '') || E'\n=\n'
+    else
+    -- Cuenta dividida: una sección por persona con sus platos y lo que le toca pagar
+    (select string_agg(
+       '~^' || upper(public.pos_person_name(sp.person)) || E'\n' ||
+       coalesce((select string_agg(public.pos_line(g.q || ' ' || g.name || case when g.variant <> '' then ' ' || g.variant else '' end,
+                   public.pos_money(g.amt)), E'\n' order by g.first)
+                 from (select u.name, u.variant, count(*) q, sum(u.price) amt, min(u.item_id) first
+                       from public.pos_split_units(p_order) u where u.person = sp.person group by u.name, u.variant) g), '') || E'\n' ||
+       case when sp.discount > 0 then public.pos_line('  Descuento', '-' || public.pos_money(sp.discount)) || E'\n' else '' end ||
+       case when sp.service > 0 then public.pos_line('  Servicio ' || trim(to_char(o.service_pct, 'FM990.##')) || '%', public.pos_money(sp.service)) || E'\n' else '' end ||
+       case when sp.delivery > 0 then public.pos_line('  Delivery', public.pos_money(sp.delivery)) || E'\n' else '' end ||
+       '~^Ref ' || public.pos_money(sp.total) || E'\n' ||
+       case when sp.paid >= sp.total - 0.02 and sp.total > 0 then E'~(PAGADO)\n'
+            when r.rate is not null then '~Bs ' || public.pos_money(round((sp.total - sp.paid) * r.rate, 2)) || E'\n' else '' end ||
+       E'=\n', '' order by case when sp.person = 0 then 99 else sp.person end)
+     from public.pos_split(p_order) sp)
+    end ||
     public.pos_line('Subtotal', 'Ref ' || public.pos_money(t.subtotal)) || E'\n' ||
     case when t.discount > 0 then public.pos_line('Descuento', '-Ref ' || public.pos_money(t.discount)) || E'\n' else '' end ||
     case when t.service > 0 then public.pos_line('Servicio ' || trim(to_char(o.service_pct, 'FM990.##')) || '%', 'Ref ' || public.pos_money(t.service)) || E'\n' else '' end ||
@@ -507,7 +609,7 @@ end $$;
 drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text);
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric;
+declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0;
 begin
   perform public.pos_auth(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
@@ -520,40 +622,60 @@ begin
   select * into t from public.pos_totals(p_order);
   due := round(t.total - t.paid, 2);
   rt := public.pos_rate();
-  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text) loop
+  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int) loop
     if coalesce(p.amount, 0) <= 0 then continue; end if;
+    if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
+    who := coalesce(p.person, who);
     cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal') then 'REF' else 'BS' end;
     if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
     ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
-    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id)
-    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess);
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person);
     paid := paid + ref;
   end loop;
   if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
   if paid < due - 0.02 then
     if not coalesce(p_partial, false) then raise exception 'Falta por cobrar Ref %', public.pos_money(due - paid); end if;
-    perform public.pos_print('caja', '^ABONO' || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
+    -- Cuenta dividida: si la persona pagó más de lo que le toca, se le da vuelto
+    if who is not null then
+      select round(x.paid - x.total, 2) into pover from public.pos_split(p_order) x where x.person = who;
+      if coalesce(pover, 0) > 0.02 then
+        if coalesce(p_change_currency, 'REF') = 'BS' and rt is not null then
+          insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+          values (p_order, 'efectivo_bs', 'BS', -round(pover * rt, 2), -pover, rt, 'vuelto', p_emp, sess, who);
+          chg := jsonb_build_object('currency', 'BS', 'amount', round(pover * rt, 2));
+        else
+          insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
+          values (p_order, 'efectivo_usd', 'REF', -pover, -pover, 'vuelto', p_emp, sess, who);
+          chg := jsonb_build_object('currency', 'REF', 'amount', pover);
+        end if;
+        paid := paid - pover;
+      else pover := 0;
+      end if;
+    end if;
+    perform public.pos_print('caja', '^ABONO' || case when who is not null then E'\n^' || upper(public.pos_person_name(who)) else '' end || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
       public.pos_line('Abonado ahora', 'Ref ' || public.pos_money(paid)) || E'\n' ||
+      case when pover > 0 then public.pos_line('Vuelto', case when chg ->> 'currency' = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money((chg ->> 'amount')::numeric)) || E'\n' else '' end ||
       public.pos_line('Total de la cuenta', 'Ref ' || public.pos_money(t.total)) || E'\n^' ||
       public.pos_line('RESTA', 'Ref ' || public.pos_money(due - paid), 24) || E'\n\nNo es factura fiscal.');
     insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'abono', p_order, jsonb_build_object('monto', paid));
-    return jsonb_build_object('total', t.total, 'paid', paid, 'rest', round(due - paid, 2), 'change', null, 'closed', false);
+    return jsonb_build_object('total', t.total, 'paid', paid, 'rest', round(due - paid, 2), 'change', chg, 'closed', false);
   end if;
   over := round(paid - due, 2);
   if over > 0.02 then
     if coalesce(p_change_currency, 'REF') = 'BS' and rt is not null then
-      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id)
-      values (p_order, 'efectivo_bs', 'BS', -round(over * rt, 2), -over, rt, 'vuelto', p_emp, sess);
+      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+      values (p_order, 'efectivo_bs', 'BS', -round(over * rt, 2), -over, rt, 'vuelto', p_emp, sess, who);
       chg := jsonb_build_object('currency', 'BS', 'amount', round(over * rt, 2));
     else
-      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id)
-      values (p_order, 'efectivo_usd', 'REF', -over, -over, 'vuelto', p_emp, sess);
+      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
+      values (p_order, 'efectivo_usd', 'REF', -over, -over, 'vuelto', p_emp, sess, who);
       chg := jsonb_build_object('currency', 'REF', 'amount', over);
     end if;
   end if;
   update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = now(), session_id = sess, rate = rt where id = p_order;
   perform public.pos_print('caja', public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
-    (select string_agg(public.pos_line(case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
+    (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
@@ -962,7 +1084,8 @@ begin
     'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
-    'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)'] loop
+    'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
+    'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

@@ -35,7 +35,8 @@
     x: '<path d="M6 6l12 12M18 6 6 18"/>',
     back: '<path d="M15 5l-7 7 7 7"/>',
     box: '<path d="M4 7h16v13H4zM2 4h20v3H2zM10 11h4"/>',
-    menu: '<path d="M4 6h16M4 12h16M4 18h10"/>'
+    menu: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.6-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.6c2.4.2 4.2 2 5 4.9"/>'
   };
   function icon(n) { return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + "</svg>"; }
   function label(id, n, text) { $(id).innerHTML = icon(n) + "<span>" + esc(text) + "</span>"; }
@@ -399,7 +400,7 @@
       h += '<div class="line ' + cls + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
         (i.option ? "<small>" + esc(i.option) + "</small>" : "") + (i.notes ? "<small>» " + esc(i.notes) + "</small>" : "") +
         (i.status === "anulado" ? "<small>Anulado: " + esc(i.void_reason) + "</small>" : i.status === "pendiente" ? "<small>sin enviar</small>" : "") +
-        '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + "</span></div>";
+        '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + personDots(d, i) + "</span></div>";
     });
     cur.cart.forEach(function (c, ix) {
       h += '<div class="line new" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
@@ -417,6 +418,10 @@
       '<div class="tot big"><span>Total</span><span>' + ref(tot) + "</span></div>" +
       (paid ? '<div class="tot"><span>Abonado</span><span>−' + ref(paid) + '</span></div><div class="tot big"><span>Falta</span><span>' + ref(tot - paid) + "</span></div>" : "") +
       (rate ? '<div class="tot muted"><span>En bolívares</span><span>' + bs(Math.round((tot - paid) * rate * 100) / 100) + "</span></div>" : "") +
+      (splitN(d) ? '<div class="psum">' + (d.split_totals || []).map(function (x) {
+        var okp = x.person > 0 && num(x.paid) >= num(x.total) - 0.02 && num(x.total) > 0;
+        return '<span style="--pc:' + pcol(x.person) + '"><i class="pdot' + (x.person ? "" : " none") + '"></i>' + (x.person ? "P" + x.person : "Sin asignar") + " " + ref(x.total) + (okp ? " ✓" : "") + "</span>";
+      }).join("") + "</div>" : "") +
       (d.precuenta_at ? '<div class="muted">Precuenta impresa a las ' + new Date(d.precuenta_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + "</div>" : "");
     var pending = cur.cart.length + d.items.filter(function (i) { return i.status === "pendiente"; }).length;
     label("send", "send", pending ? "Enviar a cocina (" + pending + ")" : "Enviar a cocina");
@@ -424,6 +429,8 @@
     var hasItems = d.items.some(function (i) { return i.status !== "anulado"; });
     $("pay").disabled = !hasItems || pending > 0; $("precuenta").disabled = !hasItems || pending > 0;
     $("move").classList.toggle("hidden", d.kind !== "mesa");
+    $("splitBtn").disabled = !hasItems || pending > 0;
+    label("splitBtn", "users", splitN(d) ? "Dividida entre " + splitN(d) + " · cambiar" : "Dividir por persona");
     $("cancel").disabled = paid > 0;
     var ed = $("editDeliv"); if (ed) ed.onclick = function () { delivForm(d); };
     syncOrderBar();
@@ -531,29 +538,146 @@
       .then(function (id) { $("delivDlg").close(); return openOrder(id); }).catch(function (e) { $("dErr").textContent = errMsg(e); });
   });
 
+  // ---------------------------------------------------------------- Cuenta dividida por persona (colores)
+  var PCOL = ["#2563eb", "#dc2626", "#16a34a", "#ea580c", "#7c3aed", "#db2777", "#0d9488", "#ca8a04"];
+  var PNAME = ["Azul", "Rojo", "Verde", "Naranja", "Morado", "Rosado", "Turquesa", "Amarillo"];
+  function pcol(p) { return p > 0 ? PCOL[p - 1] : "#888"; }
+  function pname(p) { return p > 0 ? "Persona " + p + " · " + PNAME[p - 1] : "Sin asignar"; }
+  function splitN(d) { return d && d.split && num(d.split.n) >= 2 ? num(d.split.n) : 0; }
+  function unitsOf(d) { // cada unidad de cada plato (2 Gyozas = 2 unidades)
+    var out = [];
+    d.items.forEach(function (i) {
+      if (i.status === "anulado") return;
+      var q2 = num(i.qty), n = Math.ceil(q2), saved = d.split && d.split.units && d.split.units[i.id];
+      for (var k = 0; k < n; k++) out.push({ item: i.id, k: k, name: i.name + (i.variant ? " " + i.variant : ""), price: Math.round(num(i.unit_price) * Math.min(1, q2 - k) * 100) / 100, person: saved ? num(saved[k]) : 0 });
+    });
+    return out;
+  }
+  function personDots(d, i) {
+    var n = splitN(d), u = n && d.split.units && d.split.units[i.id]; if (!u || i.status === "anulado") return "";
+    return '<span class="pdots">' + u.map(function (p) { return '<i class="pdot' + (p ? "" : " none") + '" style="--pc:' + pcol(p) + '" title="' + pname(p) + '"></i>'; }).join("") + "</span>";
+  }
+  function paidBy(d, p) { return (d.payments || []).reduce(function (s2, x) { return s2 + (num(x.person) === p ? num(x.amount_ref) : 0); }, 0); }
+  // Mismo cálculo que el servidor (pos_split): platos + parte proporcional de descuento y servicio + delivery en partes iguales
+  function splitCalc(d, units, n) {
+    var t = d.totals, sub = num(t.subtotal), anyFree = units.some(function (u) { return !u.person; }), rows = [], acc = 0, last = 0;
+    units.forEach(function (u) { if (u.person > last) last = u.person; });
+    var list = []; for (var p = 1; p <= n; p++) list.push(p); if (anyFree) list.push(0);
+    list.forEach(function (p) {
+      var s2 = Math.round(units.reduce(function (a, u) { return a + (u.person === p ? u.price : 0); }, 0) * 100) / 100;
+      var disc = sub > 0 ? Math.round(num(t.discount) * s2 / sub * 100) / 100 : 0, svc = Math.round((s2 - disc) * num(d.service_pct)) / 100,
+        dl = p > 0 ? Math.round(num(t.delivery) / n * 100) / 100 : 0, tot = Math.round((s2 - disc + svc + dl) * 100) / 100;
+      if (p === last && p > 0 && !anyFree) tot = Math.round((num(t.total) - acc) * 100) / 100;
+      acc += tot; rows.push({ person: p, total: tot, paid: paidBy(d, p), count: units.filter(function (u) { return u.person === p; }).length });
+    });
+    return rows;
+  }
+  var sp = { n: 2, sel: 1, units: [], thenPay: false };
+  function openSplit(thenPay) {
+    var d = cur.data; sp.thenPay = !!thenPay; sp.units = unitsOf(d);
+    sp.n = splitN(d) || Math.max(2, Math.min(8, d.kind === "mesa" ? 2 : 2)); sp.sel = 1; $("spErr").textContent = "";
+    drawSplit(); $("splitDlg").showModal();
+  }
+  function lockedP(p) { return p > 0 && paidBy(cur.data, p) > 0.009; } // quien ya pagó no se puede cambiar
+  function drawSplit() {
+    var d = cur.data, rows = splitCalc(d, sp.units, sp.n);
+    $("spN").textContent = sp.n;
+    $("spPersons").innerHTML = rows.filter(function (r) { return r.person > 0; }).map(function (r) {
+      var done = r.paid >= r.total - 0.02 && r.total > 0;
+      return '<button type="button" data-p="' + r.person + '" style="--pc:' + pcol(r.person) + '"' + (r.person === sp.sel ? ' class="on' + (done ? " done" : "") + '"' : done ? ' class="done"' : "") + ">" +
+        '<b><i class="pdot"></i>' + esc(pname(r.person)) + "</b><small>" + r.count + " plato" + (r.count === 1 ? "" : "s") + " · " + ref(r.total) + (done ? " · pagado ✓" : lockedP(r.person) ? " · abonó" : "") + "</small></button>";
+    }).join("");
+    var free = sp.units.filter(function (u) { return !u.person; }).length;
+    $("spLeft").textContent = free ? "Faltan " + free + " plato" + (free === 1 ? "" : "s") + " por asignar" : "Todos los platos tienen dueño ✓";
+    $("spLeft").style.color = free ? "var(--warn)" : "var(--ok)";
+    $("spRest").disabled = !free || lockedP(sp.sel);
+    $("spRest").innerHTML = '<i class="pdot" style="--pc:' + pcol(sp.sel) + '"></i> Lo que falta → ' + esc(pname(sp.sel));
+    $("spUnits").innerHTML = sp.units.map(function (u, ix) {
+      return '<button type="button" data-u="' + ix + '" style="--pc:' + (u.person ? pcol(u.person) : "transparent") + '"' + (u.person ? ' class="set"' : "") + (lockedP(u.person) ? " disabled" : "") + ">" +
+        "<span>" + esc(u.name) + "<small>" + ref(u.price) + "</small></span>" + (u.person ? '<b class="tag">P' + u.person + "</b>" : "") + "</button>";
+    }).join("") || '<p class="muted">No hay platos.</p>';
+    var maxPaid = 0; for (var p = 1; p <= 8; p++) if (lockedP(p)) maxPaid = p;
+    $("spMinus").disabled = sp.n <= Math.max(2, maxPaid); $("spPlus").disabled = sp.n >= 8;
+  }
+  $("spPersons").addEventListener("click", function (e) { var b = e.target.closest("[data-p]"); if (b) { sp.sel = Number(b.dataset.p); drawSplit(); } });
+  $("spUnits").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-u]"); if (!b || b.disabled) return;
+    if (lockedP(sp.sel)) { $("spErr").textContent = pname(sp.sel) + " ya pagó: elige otra persona."; return; }
+    var u = sp.units[Number(b.dataset.u)]; u.person = u.person === sp.sel ? 0 : sp.sel; $("spErr").textContent = ""; drawSplit();
+  });
+  $("spRest").addEventListener("click", function () { sp.units.forEach(function (u) { if (!u.person) u.person = sp.sel; }); drawSplit(); });
+  $("spMinus").addEventListener("click", function () {
+    sp.n = Math.max(2, sp.n - 1); sp.units.forEach(function (u) { if (u.person > sp.n) u.person = 0; }); if (sp.sel > sp.n) sp.sel = sp.n; drawSplit();
+  });
+  $("spPlus").addEventListener("click", function () { sp.n = Math.min(8, sp.n + 1); sp.sel = sp.n; drawSplit(); });
+  $("spCancel").addEventListener("click", function () { $("splitDlg").close(); if (sp.thenPay) $("pay").click(); });
+  function saveSplit(clear) {
+    var units = {}; sp.units.forEach(function (u) { (units[u.item] = units[u.item] || [])[u.k] = u.person; });
+    return rpc("pos_set_split", { p_order: cur.order, p_split: clear ? null : { n: sp.n, units: units } }).then(loadOrder);
+  }
+  $("spClear").addEventListener("click", function () {
+    if (sp.units.some(function (u) { return lockedP(u.person); })) { $("spErr").textContent = "Alguien ya pagó su parte: no se puede quitar la división."; return; }
+    if (!confirm("¿Quitar la división? La cuenta vuelve a ser una sola.")) return;
+    saveSplit(true).then(function () { $("splitDlg").close(); toast("División quitada"); if (sp.thenPay) $("pay").click(); }).catch(function (e) { $("spErr").textContent = errMsg(e); });
+  });
+  $("spSave").addEventListener("click", function () {
+    saveSplit(false).then(function () { $("splitDlg").close(); toast("Cuenta dividida entre " + sp.n); if (sp.thenPay) $("pay").click(); }).catch(function (e) { $("spErr").textContent = errMsg(e); });
+  });
+  $("spPrint").addEventListener("click", function () {
+    var free = sp.units.filter(function (u) { return !u.person; }).length;
+    if (free && !confirm("Quedan " + free + " platos sin asignar. ¿Imprimir igual?")) return;
+    saveSplit(false).then(function () { return rpc("pos_precuenta", { p_order: cur.order }); }).then(function () {
+      $("splitDlg").close(); var t = tableById(cur.data.table_id); toast(t && t.area === "Edo" ? "Precuenta por persona enviada a Edo" : "Precuenta por persona enviada a caja"); return loadOrder();
+    }).catch(function (e) { $("spErr").textContent = errMsg(e); });
+  });
+  $("splitBtn").addEventListener("click", function () { openSplit(false); });
+
   // ---------------------------------------------------------------- Cobro
-  var pays = [], changeCur = "REF";
+  var pays = [], changeCur = "REF", payPerson = 0;
   $("pay").addEventListener("click", function () {
     refreshState().then(function () {
       if (!ST.session) { toast("La caja está cerrada: ábrela en «Caja»", true); return; }
       pays = []; changeCur = "REF"; $("payErr").textContent = "";
+      var sn = splitN(cur.data), rows = sn ? (cur.data.split_totals || []) : [];
+      payPerson = 0;
+      if (sn) { var firstDue = rows.find(function (r) { return r.person > 0 && num(r.total) - num(r.paid) > 0.02; }); payPerson = firstDue ? firstDue.person : 0; }
+      show("payPersonsBox", !!sn); show("paySplit", !sn);
       var t = cur.data.totals;
       $("payTitle").textContent = "Cobrar · " + cur.data.label;
-      var dueNow = num(t.total) - num(t.paid); splitN = 0;
+      var dueNow = num(t.total) - num(t.paid); splitEq = 0;
       $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
       $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
       $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
       $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("");
-      drawPays(); $("payDlg").showModal();
+      drawPayPersons(); drawPays(); $("payDlg").showModal();
     }).catch(fail);
   });
   function payRef(p) { var m = METHODS.find(function (x) { return x[0] === p.method; }); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
-  var splitN = 0;
-  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
+  var splitEq = 0;
+  function personDue(p) { var r = (cur.data.split_totals || []).find(function (x) { return x.person === p; }); return r ? Math.max(0, Math.round((num(r.total) - num(r.paid)) * 100) / 100) : 0; }
+  function drawPayPersons() {
+    var rows = splitN(cur.data) ? (cur.data.split_totals || []).filter(function (r) { return r.person > 0; }) : [];
+    $("payPersons").innerHTML = rows.map(function (r) {
+      var due = Math.max(0, num(r.total) - num(r.paid)), done = due <= 0.02 && num(r.total) > 0;
+      return '<button type="button" data-pp="' + r.person + '" style="--pc:' + pcol(r.person) + '" class="' + (r.person === payPerson ? "on " : "") + (done ? "done" : "") + '"' + (done ? " disabled" : "") + ">" +
+        '<b><i class="pdot' + (r.person ? "" : " none") + '"></i>' + esc(pname(r.person)) + "</b><small>" + (done ? "pagado ✓" : "debe " + ref(due)) + "</small></button>";
+    }).join("") + '<button type="button" data-pp="0"' + (payPerson === 0 ? ' class="on"' : "") + '><b>Toda la mesa</b><small>' + ref(num(cur.data.totals.total) - num(cur.data.totals.paid)) + "</small></button>";
+    var t = cur.data.totals, due0 = payPerson ? personDue(payPerson) : num(t.total) - num(t.paid);
+    $("payTotal").textContent = ref(due0) + (payPerson ? " · " + pname(payPerson) : num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
+    $("payTotalBs").textContent = ST.rate ? bs(Math.round(due0 * ST.rate * 100) / 100) : "";
+    $("payOk").textContent = payPerson ? "Cobrar a " + pname(payPerson) : "Confirmar cobro";
+  }
+  $("payPersons").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-pp]"); if (!b || b.disabled) return;
+    payPerson = Number(b.dataset.pp) || 0;
+    pays = []; drawPayPersons(); drawPays();
+  });
+  $("payByPerson").addEventListener("click", function () { $("payDlg").close(); openSplit(true); });
+  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = payPerson ? personDue(payPerson) : num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
   $("payMethods").addEventListener("click", function (e) {
     var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
     var m = METHODS.find(function (x) { return x[0] === b.dataset.m; }), s = paySums(), rest = Math.max(0, s.rest);
-    if (splitN > 1) rest = Math.min(rest, Math.ceil(s.total / splitN * 100) / 100);
+    if (splitEq > 1) rest = Math.min(rest, Math.ceil(s.total / splitEq * 100) / 100);
     pays.push({ method: m[0], amount: m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2), reference: "" });
     drawPays();
     var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); }
@@ -584,13 +708,13 @@
     } else { $("payRestLbl").textContent = "Completo"; $("payRest").textContent = "✓"; show("changeBox", false); }
     document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = b.dataset.cur === "BS" && !ST.rate; });
     $("payOk").disabled = !pays.length || s.rest > 0.02;
-    show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0);
+    show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson);
     $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
   }
   $("paySplit").addEventListener("click", function () {
     ask({ title: "Dividir la cuenta", help: "¿Entre cuántas personas? Cada método que toques pondrá la parte de una persona.", value: "2", type: "number" }).then(function (v) {
-      if (v === null) return; splitN = Math.max(1, Math.round(num(v)));
-      toast(splitN > 1 ? "Cada parte: " + ref(Math.ceil(paySums().total / splitN * 100) / 100) : "Sin dividir");
+      if (v === null) return; splitEq = Math.max(1, Math.round(num(v)));
+      toast(splitEq > 1 ? "Cada parte: " + ref(Math.ceil(paySums().total / splitEq * 100) / 100) : "Sin dividir");
     });
   });
   $("payPartial").addEventListener("click", function () { doPay(true); });
@@ -612,10 +736,15 @@
   $("payOk").addEventListener("click", function () { doPay(false); });
   function doPay(partial) {
     if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
-    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference }; }).filter(function (p) { return p.amount > 0; });
+    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null }; }).filter(function (p) { return p.amount > 0; });
+    // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
+    if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + payRef(p); }, 0); partial = restAll > 0.02; }
     rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
       $("payDlg").close();
-      if (r && r.closed === false) { toast("Abono de " + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder(); }
+      if (r && r.closed === false) {
+        var chp = r.change; if (chp) alert("Entrega de vuelto: " + (chp.currency === "BS" ? bs(chp.amount) : "$ " + nf2.format(chp.amount)));
+        toast((payPerson ? pname(payPerson) + " pagó " : "Abono de ") + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder();
+      }
       var ch = r && r.change;
       toast("Cobrado " + ref(r.total) + (ch ? " · Vuelto " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)) : ""));
       if (ch) alert("Entrega de vuelto: " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)));
