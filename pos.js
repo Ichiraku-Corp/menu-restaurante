@@ -762,7 +762,7 @@
         '<label class="money eqm"><span>' + (isRef ? "= Bs" : "= Ref") + '</span><input class="eq n" inputmode="decimal" value="' + esc(eqOf(p)) + '" aria-label="Equivalente en ' + (isRef ? "bolívares" : "Ref") + '"' + (ST.rate ? "" : " disabled") + "></label>" +
         (extra !== null ? extra : VERIFY[p.method] ? (p.incoming_id
           ? '<button type="button" class="vbtn ver" data-ver>✓ ' + esc(p.verified.payer || "Verificado") + " · " + nf2.format(p.verified.amount) + " " + esc(p.verified.currency) + "</button>"
-          : '<button type="button" class="vbtn" data-ver>Buscar pago recibido</button>')
+          : '<span class="refbox"><input class="refin" placeholder="Referencia" value="' + esc(p.reference) + '" aria-label="Referencia del pago"><button type="button" class="vbtn" data-ver title="Buscar el pago entre los recibidos">Buscar</button></span>')
         : '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>') +
         '<button type="button" class="danger del" aria-label="Quitar">✕</button></div>';
     }).join("");

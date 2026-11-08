@@ -157,6 +157,9 @@
   .banner.alert ul { margin:6px 0; padding-left:18px; }
   /* Pagos verificados */
   .vbtn { min-height:44px; font-size:14px; padding:6px 10px; }
+  .refbox { display:flex; gap:6px; min-width:0; grid-column:1 / 5; }
+  .refbox .refin { flex:1; min-width:0; }
+  .refbox .vbtn { flex:none; }
   .vbtn.ver { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); font-weight:700; }
   .inclist { display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow:auto; }
   .inclist button { display:flex; justify-content:space-between; align-items:center; gap:10px; text-align:left; padding:12px; border-radius:14px; }
@@ -330,7 +333,7 @@
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=b9274c122e"></script>
-<script src="pos.js?v=dcf6b46673" defer></script>
+<script src="pos.js?v=7544940e9b" defer></script>
 </head>
 <body>
 <header>
