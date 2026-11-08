@@ -12,7 +12,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const ROOT = path.join(__dirname, "..");
-const PAGES = ["index.html", "admin.html", "gestion.html", "cocina.html", "404.html", "docs/borrador-cartas.html"];
+const PAGES = ["index.html", "admin.html", "gestion.html", "cocina.html", "pos.html", "404.html", "docs/borrador-cartas.html"];
 
 const config = fs.readFileSync(path.join(ROOT, "config.js"), "utf8");
 const m = config.match(/SUPABASE_URL:\s*"https:\/\/([^"/]+)/);

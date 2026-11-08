@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-YYO3qwSvQfKVdyj2lW5ecBU4OgcwJiWmOfPBE+Pp2J8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aZugMNVXZLzfHYURI+YO9BhDmQsbQa++Lzwg2PDVcvQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -604,6 +604,7 @@
     $("empList").innerHTML = html;
   }
   function empForm(e) {
+    var pin = "";
     openForm({ title: e ? "Editar empleado" : "Nuevo empleado", values: e || { active: true, area_id: S.areas[0] && S.areas[0].id },
       fields: [
         { k: "name", label: "Nombre", req: true }, { k: "job_title", label: "Cargo", ph: "Cocinero, mesonero…" },
@@ -611,12 +612,21 @@
         { k: "pay_quincena", label: "Pago por quincena (" + PFX + ")", type: "number", step: "0.01" },
         { k: "monthly_extra", label: "Bonos u otros pagos al mes (" + PFX + ")", type: "number", step: "0.01", hint: "Bono de alimentación, transporte, etc." },
         S.attendance ? { k: "device_user_id", label: "Nº de empleado en el equipo facial", ph: "Ej.: 7", hint: "El «Employee No.» con que lo registraste en el equipo." } : null,
+        { k: "pos_pin", label: "PIN del sistema de ventas (4 dígitos)", ph: e && e.pos_pin_hash ? "•••• (déjalo vacío para no cambiarlo)" : "Ej.: 4821", hint: "Para entrar en las tablets y la caja. Escribe «borrar» para quitarlo." },
         { k: "active", label: "Activo (cuenta en la nómina)", type: "check", full: true }, { k: "notes", label: "Notas", type: "area", full: true }
       ].filter(Boolean),
       extra: S.attendance ? scheduleEditor(e && e.schedule) : "",
       validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!v.start_date) v.start_date = null;
-        if (S.attendance) { var sc = readSchedule(); if (typeof sc === "string") return sc; v.schedule = sc; v.device_user_id = v.device_user_id || null; } },
-      onSave: saver("employees", e && e.id), onDelete: e && deleter("employees", e.id) });
+        if (S.attendance) { var sc = readSchedule(); if (typeof sc === "string") return sc; v.schedule = sc; v.device_user_id = v.device_user_id || null; }
+        pin = (v.pos_pin || "").trim(); delete v.pos_pin;
+        if (pin && pin.toLowerCase() !== "borrar" && !/^[0-9]{4}$/.test(pin)) return "El PIN debe tener 4 dígitos."; },
+      onSave: function (v) {
+        return (e ? q(sb.from("employees").update(v).eq("id", e.id).select("id")) : q(sb.from("employees").insert(v).select("id"))).then(function (rows) {
+          var id = e ? e.id : rows && rows[0] && rows[0].id;
+          if (!pin || !id) return;
+          return q(sb.rpc("pos_set_pin", { p_emp: id, p_pin: pin.toLowerCase() === "borrar" ? "" : pin }));
+        });
+      }, onDelete: e && deleter("employees", e.id) });
   }
   $("addEmp").addEventListener("click", function () { empForm(null); });
   $("empList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-emp]"); if (tr) empForm(S.employees.find(function (x) { return x.id === Number(tr.dataset.emp); })); });

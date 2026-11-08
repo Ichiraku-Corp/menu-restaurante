@@ -1,0 +1,14 @@
+{
+  "supabase_url": "https://krjryvtnzgwwhanmbdrn.supabase.co",
+  "anon_key": "sb_publishable_uj5tuhHYTNmJNYaLzQjGjQ_fVJzcHq3",
+  "email": "CORREO-DE-LA-CUENTA-IMPRESORA",
+  "password": "CONTRASEÑA-DE-LA-CUENTA-IMPRESORA",
+  "printers": {
+    "cocina": { "ip": "192.168.1.100", "port": 9100 },
+    "caja":   { "ip": "192.168.0.20",  "port": 9100 }
+  },
+  "width": 48,
+  "poll_ms": 2000,
+  "bcv": true,
+  "bcv_minutes": 30
+}

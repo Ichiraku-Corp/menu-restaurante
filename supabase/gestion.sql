@@ -25,8 +25,11 @@ language sql stable security definer set search_path = public as $$
   );
 $$;
 
+-- Solo la primera vez (tabla vacía): las cuentas que ya existían quedan como dueño.
+-- Las cuentas creadas después (sala, impresora, cocina…) se añaden con su rol a mano.
 insert into public.staff (email)
-select lower(email) from auth.users where email is not null
+select lower(email) from auth.users
+where email is not null and not exists (select 1 from public.staff)
 on conflict (email) do nothing;
 
 -- ---------------------------------------------------------------- Áreas
@@ -481,7 +484,8 @@ create or replace function public.apply_sales_consumption(p_date date)
 returns int language plpgsql security definer set search_path = public as $$
 declare tag text := 'ventas:' || p_date::text; r record; n int := 0; newstock numeric;
 begin
-  if not public.can_manage_or_service() then raise exception 'Sin permiso'; end if;
+  -- También la cuenta «sala» del sistema de ventas, al cerrar caja (pos.sql).
+  if not (public.can_manage_or_service() or coalesce(public.staff_role(), '') = 'sala') then raise exception 'Sin permiso'; end if;
   -- 1) deshacer el consumo anterior de ese día
   for r in select ingredient_id, sum(qty_stock) q from public.inventory_movements
            where source = tag and kind = 'consumo' group by ingredient_id loop
