@@ -75,7 +75,7 @@
     loadMenu();
   }
   function lock() {
-    U = null; pinBuf = ""; selected = null;
+    U = null; pinBuf = ""; selected = null; show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
     ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
     $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + avatar(s.name, s.id) + "<span>" + esc(s.name) + "</span></button>"; }).join("");
     closeDialogs();
@@ -103,7 +103,7 @@
       if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
       U = { id: emp.id, name: r.name || emp.name, pin: pin };
       show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-      touch(); goTables();
+      touch(); keepAwake(); goTables();
     }).catch(fail);
   }
   $("btnUser").addEventListener("click", lock);
@@ -111,6 +111,41 @@
   var idle;
   function touch() { clearTimeout(idle); if (U) idle = setTimeout(function () { toast("Sesión bloqueada por inactividad"); lock(); }, 180000); }
   ["pointerdown", "keydown"].forEach(function (ev) { document.addEventListener(ev, touch, true); });
+
+  // ---------------------------------------------------------------- Teléfono: barras inferiores y pantalla encendida
+  function syncBars() {
+    var inTables = U && !$("tablesView").classList.contains("hidden"), inOrder = U && !$("orderView").classList.contains("hidden");
+    show("bottomNav", !!inTables); show("orderBar", !!inOrder);
+    document.body.classList.toggle("has-bar", !!(inTables || inOrder));
+    document.querySelectorAll("#bottomNav [data-go]").forEach(function (b) {
+      var g = b.dataset.go; b.classList.toggle("on", g === "caja" ? false : g === "mesas" ? AREAS.concat(["Para llevar", "Delivery"]).indexOf(cur.area) >= 0 : cur.area === g);
+    });
+    if (ST) { var n = ST.orders.filter(function (o) { return o.precuenta_at; }).length; $("navDue").textContent = n; show("navDue", n > 0); }
+  }
+  $("bottomNav").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-go]"); if (!b) return; var g = b.dataset.go;
+    if (g === "caja") { openCash(); return; }
+    if (g === "mesas") { var last; try { last = localStorage.getItem("pos-last-area"); } catch (e2) {} cur.area = last || "Tokio"; }
+    else cur.area = g;
+    try { localStorage.setItem("pos-area", cur.area); } catch (e3) {}
+    drawTables(); window.scrollTo(0, 0);
+  });
+  $("obToggle").addEventListener("click", function () { $("toggleMenu").click(); syncOrderBar(); window.scrollTo(0, 0); });
+  $("obSend").addEventListener("click", function () { $("send").click(); });
+  function syncOrderBar() {
+    if (!cur.data) return;
+    var g = $("orderGrid"), showingMenu = g.classList.contains("show-menu"), pending = cur.cart.length + cur.data.items.filter(function (i) { return i.status === "pendiente"; }).length;
+    var count = cur.cart.reduce(function (s2, c) { return s2 + c.qty; }, 0) + cur.data.items.filter(function (i) { return i.status !== "anulado"; }).reduce(function (s2, i) { return s2 + num(i.qty); }, 0);
+    $("obCount").textContent = count + (count === 1 ? " plato" : " platos") + (pending ? " · " + pending + " sin enviar" : "");
+    $("obTotal").textContent = ref(cur.due || 0);
+    $("obToggle").textContent = showingMenu ? "Ver cuenta" : "Ver carta";
+    $("obSend").disabled = !pending; $("obSend").textContent = pending ? "Enviar (" + pending + ")" : "Enviado";
+  }
+  var wake = null;
+  function keepAwake() {
+    try { if (navigator.wakeLock && !wake && document.visibilityState === "visible") navigator.wakeLock.request("screen").then(function (w) { wake = w; w.addEventListener("release", function () { wake = null; }); }).catch(function () {}); } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && U) keepAwake(); });
 
   function rpc(name, args) { return q(sb.rpc(name, Object.assign({ p_emp: U.id, p_pin: U.pin }, args || {}))); }
 
@@ -150,11 +185,13 @@
   // ---------------------------------------------------------------- Mesas
   function goTables() {
     cur.order = null; cur.data = null; cur.cart = [];
-    show("orderView", false); show("tablesView", true);
+    show("orderView", false); show("tablesView", true); syncBars();
     refreshState().then(drawTables).catch(fail);
   }
   function drawTables() {
     if (!ST) return;
+    if (AREAS.indexOf(cur.area) >= 0) { try { localStorage.setItem("pos-last-area", cur.area); } catch (e) {} }
+    setTimeout(syncBars, 0);
     $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar", "Tops"]).map(function (a) {
       var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length
         : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
@@ -252,7 +289,7 @@
   // ---------------------------------------------------------------- Pedido
   function openOrder(id) {
     cur.order = id; cur.cart = []; $("search").value = "";
-    show("tablesView", false); show("orderView", true); $("orderGrid").classList.remove("show-menu");
+    show("tablesView", false); show("orderView", true); syncBars(); $("orderGrid").classList.remove("show-menu");
     if (window.innerWidth <= 820) $("orderGrid").classList.add("show-menu");
     $("toggleMenu").textContent = $("orderGrid").classList.contains("show-menu") ? "Ver cuenta" : "Carta";
     drawMenu(); return loadOrder();
@@ -351,6 +388,7 @@
     $("lines").innerHTML = h || '<p class="emptyline">Sin platos todavía.<br>Elige de la carta.</p>';
     var t = d.totals, cartSum = cur.cart.reduce(function (s, c) { return s + c.qty * priceOf(c.dish, c.variant); }, 0), rate = ST && ST.rate;
     var sub = num(t.subtotal) + cartSum, disc = Math.min(num(t.discount), sub), svc = Math.round((sub - disc) * num(d.service_pct)) / 100, dl = num(t.delivery), tot = sub - disc + svc + dl, paid = num(t.paid);
+    cur.due = tot - paid;
     $("totals").innerHTML = '<div class="tot"><span>Subtotal</span><span>' + ref(sub) + "</span></div>" +
       (disc ? '<div class="tot"><span>Descuento' + (d.discount_reason ? " (" + esc(d.discount_reason) + ")" : "") + "</span><span>−" + ref(disc) + "</span></div>" : "") +
       (svc ? '<div class="tot"><span>Servicio ' + num(d.service_pct) + " %</span><span>" + ref(svc) + "</span></div>" : "") +
@@ -367,6 +405,7 @@
     $("move").classList.toggle("hidden", d.kind !== "mesa");
     $("cancel").disabled = paid > 0;
     var ed = $("editDeliv"); if (ed) ed.onclick = function () { delivForm(d); };
+    syncOrderBar();
   }
   function fmtQ(n) { n = num(n); return n % 1 ? nf2.format(n) : String(n); }
 

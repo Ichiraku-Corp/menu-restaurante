@@ -1,0 +1,16 @@
+{
+  "name": "Ichiraku · Sala y caja",
+  "short_name": "Ichiraku Sala",
+  "description": "Pedidos por mesa, comandas, cobro y caja de Ichiraku Ramen.",
+  "start_url": "pos.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f1ee",
+  "theme_color": "#e5206b",
+  "icons": [
+    { "src": "assets/pos-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/pos-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/pos-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
