@@ -386,15 +386,25 @@ async function reportCheck(source, err) {
   if (msg !== lastErr2[source]) { log(msg ? `ERROR ${source}: ${msg}` : `${source}: conectado y revisando pagos`); lastErr2[source] = msg; }
   try { await rpc("pos_incoming_checked", { p_source: source, p_error: msg }); } catch (e) { /* se reintenta en la próxima vuelta */ }
 }
-async function checkBinance() {
+// Binance exige que la hora de la consulta coincida con la suya: se usa su reloj, no el de la laptop.
+let bnOffset = null;
+async function binanceOffset() {
+  const t0 = Date.now();
+  const r = await fetch("https://api.binance.com/api/v3/time", { signal: AbortSignal.timeout(15000) });
+  const j = await r.json();
+  bnOffset = Number(j.serverTime) - Math.round((t0 + Date.now()) / 2);
+}
+async function checkBinance(retry) {
   const b = cfg.binance; if (!b || !b.api_key || !b.api_secret) return;
   try {
-    const now = Date.now();
+    if (bnOffset === null) await binanceOffset();
+    const now = Date.now() + bnOffset - 500;
     const qs = `startTime=${now - 36 * 3600e3}&endTime=${now}&limit=100&recvWindow=10000&timestamp=${now}`;
     const sig = crypto.createHmac("sha256", b.api_secret).update(qs).digest("hex");
     const r = await fetch(`https://api.binance.com/sapi/v1/pay/transactions?${qs}&signature=${sig}`, { headers: { "X-MBX-APIKEY": b.api_key }, signal: AbortSignal.timeout(30000) });
     const j = await r.json().catch(() => ({}));
     if (VERBOSE) console.log(`Binance respondió ${r.status}: ${(j.data || []).length} movimientos en 36 h (${(j.data || []).filter((t) => Number(t.amount) > 0).length} recibidos)`, j.code && j.code !== "000000" ? j : "");
+    if (j.code === -1021 && !retry) { bnOffset = null; return checkBinance(true); } // reloj desfasado: se recalcula y se reintenta
     if (!r.ok || (j.code && j.code !== "000000" && j.code !== 0)) throw new Error(`${r.status} ${j.msg || j.message || JSON.stringify(j).slice(0, 150)}`);
     const rows = (j.data || []).filter((t) => Number(t.amount) > 0).map((t) => ({
       source: "binance", tx_id: String(t.transactionId || t.orderId), amount: Number(t.amount), currency: t.currency || "",
