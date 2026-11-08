@@ -131,6 +131,30 @@ create index if not exists pos_payments_session on public.pos_payments (session_
 alter table public.pos_payments add column if not exists person smallint;   -- persona que pagó (cuenta dividida)
 alter table public.pos_payments add column if not exists device text not null default '';   -- equipo desde el que se cobró
 alter table public.pos_payments add column if not exists alert_seen boolean not null default false;  -- aviso «cobro fuera de caja» visto
+
+-- Cuentas pendientes del personal: consumos «a cuenta» (método 'cuenta') y abonos en caja (pagos sin pedido).
+-- Saldo = suma de amount_ref de los movimientos (+ consumo, − abono o descuento). Tope por persona.
+alter table public.employees add column if not exists tab_limit numeric(10,2) not null default 100;
+create table if not exists public.pos_tab_moves (
+  id          bigint generated always as identity primary key,
+  employee_id bigint not null references public.employees(id) on delete cascade,
+  kind        text not null check (kind in ('saldo_inicial', 'consumo', 'abono', 'descuento_bono', 'descuento_nomina', 'ajuste')),
+  amount_ref  numeric(12,2) not null,
+  order_id    bigint references public.pos_orders(id) on delete set null,
+  payment_id  bigint,
+  month       date,                       -- liquidación de servicio a la que pertenece (descuentos)
+  note        text not null default '',
+  created_by  text not null default '',
+  created_at  timestamptz not null default now()
+);
+create index if not exists pos_tab_moves_emp on public.pos_tab_moves (employee_id);
+alter table public.pos_tab_moves enable row level security;
+alter table public.pos_payments alter column order_id drop not null;
+alter table public.pos_payments add column if not exists tab_employee_id bigint references public.employees(id) on delete set null;
+alter table public.pos_payments add column if not exists is_tip boolean not null default false;   -- propina (no cuenta para la cuenta del pedido)
+alter table public.pos_payments drop constraint if exists pos_payments_method_check;
+alter table public.pos_payments add constraint pos_payments_method_check check (method in ('efectivo_usd', 'zelle', 'binance', 'paypal',
+  'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta'));
 alter table public.employees add column if not exists pos_can_charge boolean not null default false; -- puede cobrar, descontar, anular y manejar caja
 
 -- Pagos recibidos que el puente lee de Binance / PayPal (y luego Banesco) para verificar los cobros.
@@ -218,6 +242,11 @@ begin
   return p_emp;
 end $$;
 
+create or replace function public.pos_tab_balance(p_emp bigint) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(sum(amount_ref), 0) from public.pos_tab_moves where employee_id = p_emp
+$$;
+
 create or replace function public.pos_emp_name(p_emp bigint) returns text
 language sql stable security definer set search_path = public as $$
   select case when position('·' in e.job_title) > 0 then trim(split_part(e.job_title, '·', 2))
@@ -254,7 +283,7 @@ language sql stable security definer set search_path = public as $$
   ), b as (select sub, least(discount, sub) as disc, service_pct, delivery_fee from s)
   select round(sub, 2), round(disc, 2), round((sub - disc) * service_pct / 100, 2), round(delivery_fee, 2),
          round(sub - disc, 2) + round((sub - disc) * service_pct / 100, 2) + round(delivery_fee, 2),
-         coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order), 0) from b
+         coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order and not is_tip), 0) from b
 $$;
 
 -- Nombre de cada persona en una cuenta dividida (el color es el mismo de la pantalla)
@@ -303,7 +332,7 @@ begin
       total := t.total - acc;  -- cuadra los céntimos
     end if;
     acc := acc + total;
-    paid := coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order and pos_payments.person = r.p), 0);
+    paid := coalesce((select sum(amount_ref) from public.pos_payments where order_id = p_order and pos_payments.person = r.p and not is_tip), 0);
     return next;
   end loop;
 end $$;
@@ -646,7 +675,7 @@ end $$;
 drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text);
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint;
+declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint; tips numeric := 0;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
@@ -659,24 +688,42 @@ begin
   select * into t from public.pos_totals(p_order);
   due := round(t.total - t.paid, 2);
   rt := public.pos_rate();
-  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text) loop
+  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text, tip boolean, tab_employee_id bigint) loop
     if coalesce(p.amount, 0) <= 0 then continue; end if;
+    if p.method = 'cuenta' and coalesce(p.tip, false) then raise exception 'La propina no puede ir a cuenta'; end if;
     if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
     who := coalesce(p.person, who);
-    cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal') then 'REF' else 'BS' end;
+    cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'cuenta') then 'REF' else 'BS' end;
     if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
     ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
+    if p.method = 'cuenta' then
+      -- Consumo a cuenta de un empleado, con tope
+      if p.tab_employee_id is null or not exists (select 1 from public.employees where id = p.tab_employee_id and active) then
+        raise exception 'Elige a qué empleado se carga la cuenta';
+      end if;
+      if public.pos_tab_balance(p.tab_employee_id) + ref > (select tab_limit from public.employees where id = p.tab_employee_id) + 0.009 then
+        raise exception '% llegaría a Ref % de deuda y su tope es Ref %: que abone primero', public.pos_emp_name(p.tab_employee_id),
+          public.pos_money(public.pos_tab_balance(p.tab_employee_id) + ref), public.pos_money((select tab_limit from public.employees where id = p.tab_employee_id));
+      end if;
+    else p.tab_employee_id := null;
+    end if;
     if p.incoming_id is not null then
       select * into inc from public.pos_incoming where id = p.incoming_id for update;
       if inc.id is null or inc.source <> p.method then raise exception 'Ese pago recibido no corresponde a %', p.method; end if;
       if inc.payment_id is not null then raise exception 'Ese pago de % ya se usó en otra cuenta', inc.source; end if;
       p.reference := inc.tx_id;
     end if;
-    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, incoming_id, device, alert_seen)
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, incoming_id, device, alert_seen,
+                                     is_tip, tab_employee_id)
     values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person, p.incoming_id,
-            left(coalesce(nullif(trim(p.device), ''), 'Sin nombre'), 30), coalesce(trim(p.device), '') = 'Caja')
+            left(coalesce(nullif(trim(p.device), ''), 'Sin nombre'), 30), coalesce(trim(p.device), '') = 'Caja', coalesce(p.tip, false), p.tab_employee_id)
     returning id into pid;
     if p.incoming_id is not null then update public.pos_incoming set payment_id = pid where id = p.incoming_id; end if;
+    if p.method = 'cuenta' then
+      insert into public.pos_tab_moves (employee_id, kind, amount_ref, order_id, payment_id, note, created_by)
+      values (p.tab_employee_id, 'consumo', ref, p_order, pid, public.pos_order_label(p_order), coalesce(public.pos_emp_name(p_emp), ''));
+    end if;
+    if coalesce(p.tip, false) then tips := tips + ref; continue; end if;  -- la propina no paga la cuenta
     paid := paid + ref;
   end loop;
   if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
@@ -888,7 +935,9 @@ language sql stable security definer set search_path = public as $$
                  'discount', o.discount, 'delivery', o.delivery, 'void_reason', o.void_reason,
                  'items', (select string_agg(trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name || case when i.variant <> '' then ' ' || i.variant else '' end ||
                             case when i.status = 'anulado' then ' (anulado)' else '' end, ', ' order by i.id) from it i where i.order_id = o.id),
-                 'payments', (select string_agg(p.method || ' ' || p.amount || case when p.reference not in ('', 'vuelto') then ' #' || p.reference
+                 'payments', (select string_agg(p.method || ' ' || p.amount || case when p.is_tip then ' (propina)' else '' end ||
+                               case when p.tab_employee_id is not null then ' (' || public.pos_emp_name(p.tab_employee_id) || ')' else '' end ||
+                               case when p.reference not in ('', 'vuelto') then ' #' || p.reference
                                when p.reference = 'vuelto' then ' (vuelto)' else '' end, ', ' order by p.id) from public.pos_payments p where p.order_id = o.id)
                ) order by o.closed_at), '[]'::jsonb) from o),
     'voids', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(i.order_id), 'item', i.name || case when i.variant <> '' then ' ' || i.variant else '' end,
@@ -904,6 +953,10 @@ language sql stable security definer set search_path = public as $$
     'off_caja', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(p.order_id), 'by', public.pos_emp_name(p.created_by), 'device', p.device,
                    'method', p.method, 'amount', p.amount, 'amount_ref', p.amount_ref, 'at', p.created_at) order by p.created_at), '[]'::jsonb)
                  from public.pos_payments p where p.session_id = p_session and p.device <> 'Caja' and p.amount > 0),
+    'tips', (select coalesce(sum(amount_ref), 0) from public.pos_payments where session_id = p_session and is_tip),
+    'tabs', (select coalesce(jsonb_agg(jsonb_build_object('name', public.pos_emp_name(m.employee_id), 'kind', m.kind, 'amount', m.amount_ref,
+               'note', m.note, 'balance', public.pos_tab_balance(m.employee_id)) order by m.created_at), '[]'::jsonb)
+             from public.pos_tab_moves m, s where m.kind in ('consumo', 'abono') and m.created_at between s.opened_at and coalesce(s.closed_at, now())),
     'tops', (select jsonb_build_object(
                'day', public.pos_ranking(d, d), 'week', public.pos_ranking(date_trunc('week', d)::date, d), 'month', public.pos_ranking(date_trunc('month', d)::date, d))
              from (select (coalesce((select closed_at from s), now()) at time zone 'America/Caracas')::date d) dd)
@@ -929,7 +982,7 @@ create or replace function public.pos_cash_close(p_emp bigint, p_pin text, p_cou
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare s record; sm jsonb; exp jsonb; body text; d date; k text; rcp text;
   names jsonb := '{"efectivo_usd":"Efectivo $","zelle":"Zelle","binance":"Binance","paypal":"PayPal","efectivo_bs":"Efectivo Bs",
-                   "pago_movil":"Pago movil","punto_debito":"Punto debito","punto_credito":"Punto credito"}';
+                   "pago_movil":"Pago movil","punto_debito":"Punto debito","punto_credito":"Punto credito","cuenta":"A cuenta"}';
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into s from public.pos_sessions where status = 'abierta' for update;
@@ -991,6 +1044,40 @@ begin
   perform public.pos_auth_charge(p_emp, p_pin);
   update public.pos_payments set alert_seen = true where not alert_seen;
   insert into public.pos_log (employee_id, action) values (p_emp, 'avisos_vistos');
+end $$;
+
+-- ---- Cuentas del personal en caja
+create or replace function public.pos_tabs_list() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', e.id, 'name', public.pos_emp_name(e.id), 'full_name', e.name,
+           'balance', public.pos_tab_balance(e.id), 'limit', e.tab_limit) order by public.pos_tab_balance(e.id) desc, e.name), '[]'::jsonb)
+  from public.employees e where public.pos_is_device() and (e.active or public.pos_tab_balance(e.id) <> 0)
+$$;
+-- Abono a la cuenta de un empleado: entra a la caja (cuenta en el arqueo) y baja su saldo.
+create or replace function public.pos_tab_pay(p_emp bigint, p_pin text, p_tab bigint, p_payments jsonb, p_device text default '')
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare sess bigint; rt numeric; p record; cur text; ref numeric; tot numeric := 0; pid bigint;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  if not exists (select 1 from public.employees where id = p_tab) then raise exception 'Empleado no encontrado'; end if;
+  select id into sess from public.pos_sessions where status = 'abierta';
+  if sess is null then raise exception 'La caja está cerrada: ábrela antes de recibir abonos'; end if;
+  rt := public.pos_rate();
+  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text) loop
+    if coalesce(p.amount, 0) <= 0 or p.method = 'cuenta' then continue; end if;
+    cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal') then 'REF' else 'BS' end;
+    if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
+    ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, device, alert_seen, tab_employee_id)
+    values (null, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess,
+            left(coalesce(nullif(trim(p_device), ''), 'Sin nombre'), 30), true, p_tab) returning id into pid;
+    insert into public.pos_tab_moves (employee_id, kind, amount_ref, payment_id, note, created_by)
+    values (p_tab, 'abono', -ref, pid, 'Abono en caja', coalesce(public.pos_emp_name(p_emp), ''));
+    tot := tot + ref;
+  end loop;
+  if tot <= 0 then raise exception 'Escribe el monto del abono'; end if;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'abono_cuenta', jsonb_build_object('empleado', p_tab, 'monto', tot));
+  return jsonb_build_object('paid', tot, 'balance', public.pos_tab_balance(p_tab));
 end $$;
 
 -- Vista previa del reporte de cierre (lo mismo que llegará al correo) con lo que la cajera contó.
@@ -1263,7 +1350,8 @@ begin
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
     'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
-    'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)'] loop
+    'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
+    'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

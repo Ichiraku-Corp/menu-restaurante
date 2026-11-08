@@ -24,6 +24,10 @@
   var MNAME = {}; METHODS.forEach(function (m) { MNAME[m[0]] = m[1]; });
   // Logos: Zelle, Binance y PayPal de Simple Icons (CC0; las marcas son de sus dueños); los demás son iconos propios.
   var LOGO = {"efectivo_usd": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#15803d\"/><rect x=\"4.5\" y=\"9\" width=\"23\" height=\"14\" rx=\"2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><text x=\"16\" y=\"19.8\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"9.5\" font-weight=\"800\" fill=\"#fff\">$</text></svg>", "efectivo_bs": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#166534\"/><rect x=\"4.5\" y=\"9\" width=\"23\" height=\"14\" rx=\"2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><text x=\"16\" y=\"19.8\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"7.5\" font-weight=\"800\" fill=\"#fff\">Bs</text></svg>", "pago_movil": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#0f766e\"/><rect x=\"10.5\" y=\"5.5\" width=\"11\" height=\"21\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><circle cx=\"16\" cy=\"22.5\" r=\"1.3\" fill=\"#fff\"/><path d=\"M14 10.5h4.5M16.2 8.5l2.3 2-2.3 2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M18 16.5h-4.5M15.8 14.5l-2.3 2 2.3 2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>", "punto_debito": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#1d4ed8\"/><rect x=\"5\" y=\"9\" width=\"22\" height=\"15\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><path d=\"M5 13.5h22\" stroke=\"#fff\" stroke-width=\"2.6\"/><text x=\"16\" y=\"21.6\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"6.2\" font-weight=\"800\" fill=\"#fff\">DÉB</text></svg>", "punto_credito": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#7c3aed\"/><rect x=\"5\" y=\"9\" width=\"22\" height=\"15\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><path d=\"M5 13.5h22\" stroke=\"#fff\" stroke-width=\"2.6\"/><text x=\"16\" y=\"21.6\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"6.2\" font-weight=\"800\" fill=\"#fff\">CRÉ</text></svg>", "zelle": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#6d1ed4\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#fff\" d=\"M13.559 24h-2.841a.483.483 0 0 1-.483-.483v-2.765H5.638a.667.667 0 0 1-.666-.666v-2.234a.67.67 0 0 1 .142-.412l8.139-10.382h-7.25a.667.667 0 0 1-.667-.667V3.914c0-.367.299-.666.666-.666h4.23V.483c0-.266.217-.483.483-.483h2.841c.266 0 .483.217.483.483v2.765h4.323c.367 0 .666.299.666.666v2.137a.67.67 0 0 1-.141.41l-8.19 10.481h7.665c.367 0 .666.299.666.666v2.477a.667.667 0 0 1-.666.667h-4.32v2.765a.483.483 0 0 1-.483.483Z\"/></g></svg>", "binance": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#181a20\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#f0b90b\" d=\"M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z\"/></g></svg>", "paypal": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#003087\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#fff\" d=\"M7.016 19.198h-4.2a.562.562 0 0 1-.555-.65L5.093.584A.692.692 0 0 1 5.776 0h7.222c3.417 0 5.904 2.488 5.846 5.5-.006.25-.027.5-.066.747A6.794 6.794 0 0 1 12.071 12H8.743a.69.69 0 0 0-.682.583l-.325 2.056-.013.083-.692 4.39-.015.087zM19.79 6.142c-.01.087-.01.175-.023.261a7.76 7.76 0 0 1-7.695 6.598H9.007l-.283 1.795-.013.083-.692 4.39-.134.843-.014.088H6.86l-.497 3.15a.562.562 0 0 0 .555.65h3.612c.34 0 .63-.249.683-.585l.952-6.031a.692.692 0 0 1 .683-.584h2.126a6.793 6.793 0 0 0 6.707-5.752c.306-1.95-.466-3.744-1.89-4.906z\"/></g></svg>"};
+  LOGO.cuenta = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#9a3412"/><circle cx="16" cy="12" r="4.5" fill="none" stroke="#fff" stroke-width="2"/><path d="M8 25c1.3-4.3 4.4-6.5 8-6.5s6.7 2.2 8 6.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>';
+  LOGO.propina = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#be185d"/><path d="M16 24s-7-4.3-7-9.2A3.8 3.8 0 0 1 16 12a3.8 3.8 0 0 1 7 2.8C23 19.7 16 24 16 24z" fill="#fff"/></svg>';
+  var MCUENTA = ["cuenta", "A cuenta (empleado)", "REF"];
+  function minfo(k) { return k === "cuenta" ? MCUENTA : METHODS.find(function (x) { return x[0] === k; }); }
   function logo(k) { return '<span class="logo">' + (LOGO[k] || "") + "</span>"; }
   var AREAS = ["Feria", "Tokio", "Edo"];
   var IC = {
@@ -676,11 +680,14 @@
       $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
       $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
       $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
-      $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("");
+      $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
+        '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>" +
+        '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
+      TABS = []; rpc("pos_tabs_list").then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
       drawPayPersons(); drawPays(); $("payDlg").showModal();
     }).catch(fail);
   });
-  function payRef(p) { var m = METHODS.find(function (x) { return x[0] === p.method; }); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
+  function payRef(p) { var m = minfo(p.method); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
   var splitEq = 0;
   function personDue(p) { var r = (cur.data.split_totals || []).find(function (x) { return x.person === p; }); return r ? Math.max(0, Math.round((num(r.total) - num(r.paid)) * 100) / 100) : 0; }
   function drawPayPersons() {
@@ -701,10 +708,14 @@
     pays = []; drawPayPersons(); drawPays();
   });
   $("payByPerson").addEventListener("click", function () { $("payDlg").close(); openSplit(true); });
-  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = payPerson ? personDue(payPerson) : num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
+  var TABS = [];
+  function tipSum() { return pays.reduce(function (s, p) { return s + (p.tip ? payRef(p) : 0); }, 0); }
+  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = payPerson ? personDue(payPerson) : num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + (p.tip ? 0 : payRef(p)); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
   $("payMethods").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-tip]");
+    if (t) { pays.push({ method: "efectivo_usd", amount: "", reference: "", tip: true }); drawPays(); var ins = document.querySelectorAll("#payLines .amt"); if (ins.length) ins[ins.length - 1].focus(); return; }
     var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
-    var m = METHODS.find(function (x) { return x[0] === b.dataset.m; }), s = paySums(), rest = Math.max(0, s.rest);
+    var m = minfo(b.dataset.m), s = paySums(), rest = Math.max(0, s.rest);
     if (splitEq > 1) rest = Math.min(rest, Math.ceil(s.total / splitEq * 100) / 100);
     pays.push({ method: m[0], amount: m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2), reference: "" });
     drawPays();
@@ -712,12 +723,19 @@
   });
   function drawPays() {
     $("payLines").innerHTML = pays.map(function (p, i) {
-      var m = METHODS.find(function (x) { return x[0] === p.method; }), needRef = ["pago_movil", "zelle", "binance", "paypal", "punto_debito", "punto_credito"].indexOf(p.method) >= 0;
+      var m = minfo(p.method), needRef = ["pago_movil", "zelle", "binance", "paypal", "punto_debito", "punto_credito"].indexOf(p.method) >= 0;
       var isRef = m[2] === "REF";
-      return '<div class="pay" data-i="' + i + '"><b class="mname">' + logo(m[0]) + m[1] + "</b>" +
+      var head = p.tip ? '<b class="mname">' + logo("propina") + 'Propina <select class="tipm" aria-label="Cómo dejó la propina">' + METHODS.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === p.method ? " selected" : "") + ">" + x[1] + "</option>"; }).join("") + "</select></b>"
+        : '<b class="mname">' + logo(m[0]) + m[1] + "</b>";
+      var extra = p.method === "cuenta"
+        ? '<select class="tabsel" aria-label="Empleado"><option value="">¿A quién se carga?</option>' + TABS.filter(function (x) { return x.id; }).map(function (x) {
+            var left = num(x.limit) - num(x.balance);
+            return '<option value="' + x.id + '"' + (Number(p.tab_employee_id) === x.id ? " selected" : "") + (left <= 0 ? " disabled" : "") + ">" + esc(x.name) + " · debe " + ref(x.balance) + (left <= 0 ? " (tope)" : " · le quedan " + ref(left)) + "</option>"; }).join("") + "</select>"
+        : null;
+      return '<div class="pay' + (p.tip ? " tip" : "") + '" data-i="' + i + '">' + head +
         '<label class="money"><span>' + (isRef ? "$ / Ref" : "Bs") + '</span><input class="amt n" inputmode="decimal" value="' + esc(p.amount) + '" aria-label="Monto en ' + (isRef ? "divisas" : "bolívares") + '"></label>' +
         '<label class="money eqm"><span>' + (isRef ? "= Bs" : "= Ref") + '</span><input class="eq n" inputmode="decimal" value="' + esc(eqOf(p)) + '" aria-label="Equivalente en ' + (isRef ? "bolívares" : "Ref") + '"' + (ST.rate ? "" : " disabled") + "></label>" +
-        (VERIFY[p.method] ? (p.incoming_id
+        (extra !== null ? extra : VERIFY[p.method] ? (p.incoming_id
           ? '<button type="button" class="vbtn ver" data-ver>✓ ' + esc(p.verified.payer || "Verificado") + " · " + nf2.format(p.verified.amount) + " " + esc(p.verified.currency) + "</button>"
           : '<button type="button" class="vbtn" data-ver>Buscar pago recibido</button>')
         : '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>') +
@@ -726,11 +744,11 @@
     updatePaySums();
   }
   // Equivalente de cada pago en la otra moneda (para responder «¿cuánto son 13 $ en bolívares?»)
-  function isRefMethod(k) { var m = METHODS.find(function (x) { return x[0] === k; }); return m && m[2] === "REF"; }
+  function isRefMethod(k) { var m = minfo(k); return m && m[2] === "REF"; }
   function eqOf(p) { if (!ST || !ST.rate || String(p.amount).trim() === "") return ""; return (isRefMethod(p.method) ? num(p.amount) * ST.rate : num(p.amount) / ST.rate).toFixed(2); }
   function updatePaySums() {
     var s = paySums();
-    $("payPaid").textContent = ref(s.paid);
+    $("payPaid").textContent = ref(s.paid) + (tipSum() > 0 ? " + propina " + ref(tipSum()) : "");
     if (s.rest > 0.009) { $("payRestLbl").textContent = "Falta"; $("payRest").textContent = ref(s.rest) + (ST.rate ? " · " + bs(Math.round(s.rest * ST.rate * 100) / 100) : ""); show("changeBox", false); }
     else if (s.rest < -0.009) {
       $("payRestLbl").textContent = "Vuelto"; var ch = -s.rest;
@@ -758,6 +776,8 @@
       row.querySelector(".amt").value = p.amount;
     }
     else if (e.target.classList.contains("refin")) p.reference = e.target.value;
+    else if (e.target.classList.contains("tabsel")) p.tab_employee_id = Number(e.target.value) || null;
+    else if (e.target.classList.contains("tipm")) { p.method = e.target.value; drawPays(); return; }
     updatePaySums();
   });
   // ---- Verificación: elegir el pago que de verdad llegó a Binance / PayPal (lo lee la laptop de caja)
@@ -795,9 +815,10 @@
   $("payOk").addEventListener("click", function () { doPay(false); });
   function doPay(partial) {
     if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
-    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null, device: devName() || "Sin nombre" }; }).filter(function (p) { return p.amount > 0; });
+    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null, device: devName() || "Sin nombre", tip: !!p.tip, tab_employee_id: p.tab_employee_id || null }; }).filter(function (p) { return p.amount > 0; });
     // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
-    if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + payRef(p); }, 0); partial = restAll > 0.02; }
+    if (list.some(function (p) { return p.method === "cuenta" && !p.tab_employee_id; })) { $("payErr").textContent = "Elige a qué empleado se carga la cuenta."; paying = false; updatePaySums(); return; }
+    if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + (p.tip ? 0 : payRef(p)); }, 0); partial = restAll > 0.02; }
     rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
       $("payDlg").close();
       if (r && r.closed === false) {
@@ -839,7 +860,8 @@
           '<textarea id="cashNotes" placeholder="Notas del cierre (opcional)" style="margin-top:10px"></textarea>' +
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
-      h += '<div class="card"><div class="row"><button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button></div></div>';
+      h += '<div class="card"><div class="row"><button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
+        (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button>' : "") + "</div></div>";
       $("cashBody").innerHTML = h;
       if (!$("cashDlg").open) $("cashDlg").showModal();
     }).catch(fail);
@@ -852,6 +874,7 @@
       }).catch(fail);
     } else if (id === "openCash") {
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
+    } else if (id === "tabsBtn") { openTabs();
     } else if (id === "soldOut") { openSoldOut();
     } else if (id === "invCount") { openCount();
     } else if (id === "doClose") {
@@ -877,6 +900,32 @@
       refreshState();
     }).catch(function (e) { $("repErr").textContent = errMsg(e); }).then(function () { $("repSend").disabled = false; });
   });
+
+  // ---------------------------------------------------------------- Cuentas del personal
+  var tabSel = null;
+  function openTabs() {
+    rpc("pos_tabs_list").then(function (t) {
+      TABS = t || []; tabSel = null; show("tabPay", false);
+      $("tabBody").innerHTML = TABS.map(function (x) {
+        var over = num(x.balance) >= num(x.limit);
+        return '<button type="button" data-tab="' + x.id + '"><span><b>' + esc(x.name) + "</b><small>" + esc(x.full_name) + " · tope " + ref(x.limit) + '</small></span><b class="n" style="color:' + (over ? "var(--danger)" : num(x.balance) > 0 ? "inherit" : "var(--ok)") + '">' + (num(x.balance) > 0 ? "debe " + ref(x.balance) : "al día") + "</b></button>";
+      }).join("");
+      $("tabMethod").innerHTML = METHODS.map(function (m) { return '<option value="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + m[1] + "</option>"; }).join("");
+      if (!$("tabDlg").open) $("tabDlg").showModal();
+    }).catch(fail);
+  }
+  $("tabBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tab]"); if (!b) return; tabSel = TABS.find(function (x) { return x.id === Number(b.dataset.tab); });
+    $("tabWho").textContent = "Abono de " + tabSel.name + " · debe " + ref(tabSel.balance); $("tabAmt").value = ""; $("tabErr").textContent = "";
+    show("tabPay", true); $("tabAmt").focus();
+  });
+  $("tabOk").addEventListener("click", function () {
+    if (!tabSel) return; var amt = num($("tabAmt").value); if (!(amt > 0)) { $("tabErr").textContent = "Escribe el monto."; return; }
+    rpc("pos_tab_pay", { p_tab: tabSel.id, p_payments: [{ method: $("tabMethod").value, amount: amt, reference: "" }], p_device: devName() || "Sin nombre" }).then(function (r) {
+      toast("Abono registrado · " + tabSel.name + " ahora debe " + ref(r.balance)); openTabs();
+    }).catch(function (e2) { $("tabErr").textContent = errMsg(e2); });
+  });
+  $("tabClose").addEventListener("click", function () { $("tabDlg").close(); });
 
   // ---------------------------------------------------------------- Agotados e inventario
   var listMode = null, invRows = [];

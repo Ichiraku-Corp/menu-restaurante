@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-krmFFE008m/FQdQI6pGduQIgM9hoWqZTkMSkL0dHgBQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-5+J07Z3wY1+rhitwXfx89jlo6Kwuz/vbObMWrOGigQQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -139,6 +139,7 @@
       <button data-tab="ventas">Ventas</button>
       <button data-tab="historico">Histórico</button>
       <button data-tab="clientes">Clientes</button>
+      <button data-tab="servicio">Servicio y bonos</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -232,6 +233,35 @@
     </section>
 
     <!-- Gastos -->
+    <!-- Servicio y bonos -->
+    <section data-panel="servicio" hidden>
+      <div class="card hidden" id="svcSetup"><p class="muted" style="margin:0">Para usar esta sección hay que ejecutar <code>supabase/servicio.sql</code>.</p></div>
+      <div class="card">
+        <h2>Servicio cobrado por mes</h2>
+        <p class="muted">El 10 % de servicio de cada mes: hasta el 7/11 sale del histórico de Syth y desde el 8/11 del sistema de ventas. Toca un mes para liquidarlo.</p>
+        <div class="scroll" id="svcMonths"></div>
+      </div>
+      <div class="card" id="svcLiq">
+        <div class="row between"><h2 style="margin:0" id="svcTitle">Liquidación</h2><input type="month" id="svcMonth" style="width:auto" aria-label="Mes a liquidar"></div>
+        <p class="muted">Cada día 5: define el % de cada gasto y de cada persona según su rendimiento. Las propinas se reparten en partes iguales entre quienes tienen % &gt; 0.
+          Las deudas se descuentan del bono hasta <b>Ref 50</b>; lo que pase de 50 va a la siguiente nómina.</p>
+        <div class="kpis" id="svcKpis"></div>
+        <h3>Gastos que se pagan con el servicio</h3>
+        <div class="scroll" id="svcGastos"></div>
+        <p><button id="svcAddGasto">+ Gasto</button></p>
+        <h3>Bonos del personal</h3>
+        <div class="scroll" id="svcPersonas"></div>
+        <p class="muted" style="font-size:13px">Rendimiento: <b>ventas</b> del mes en el sistema de ventas · <b>días</b> con marca en el equipo de asistencia · velocidad de cocina: próximamente con los cronómetros.</p>
+        <p id="svcErr" class="muted" style="color:var(--danger)"></p>
+        <div class="row between" id="svcActions"></div>
+      </div>
+      <div class="card">
+        <h2>Cuentas del personal</h2>
+        <p class="muted">Consumos a cuenta (se cargan en caja con el método «A cuenta») y abonos. Tope por persona: Ref 100.</p>
+        <div class="scroll" id="svcTabs"></div>
+      </div>
+    </section>
+
     <section data-panel="gastos" hidden>
       <div class="card">
         <div class="row between"><h2 style="margin:0">Gastos</h2><button class="primary" id="addExp">+ Gasto</button></div>
@@ -438,7 +468,134 @@
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
   function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); }
+  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); loadServicio(); }
+
+  // ---------------------------------------------------------------- Servicio y bonos
+  var SV = { months: [], m: null, data: null, tabs: [] };
+  var SV_MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  function svLabel(ym) { return SV_MESES[Number(ym.slice(5, 7)) - 1] + " " + ym.slice(0, 4); }
+  function prevMonth() { var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+  function loadServicio() {
+    if (!$("svcMonth").value) $("svcMonth").value = prevMonth();
+    return Promise.all([q(sb.rpc("svc_monthly")), q(sb.rpc("svc_tabs"))]).then(function (r) {
+      $("svcSetup").classList.add("hidden"); SV.months = r[0] || []; SV.tabs = r[1] || [];
+      drawSvcMonths(); drawSvcTabs(); return openSvcMonth($("svcMonth").value);
+    }).catch(function (e) { if (/svc_|function/.test(e && e.message || "")) $("svcSetup").classList.remove("hidden"); else fail(e); });
+  }
+  function svcOf(x) { return x.service_manual != null ? num(x.service_manual) : num(x.service_hist) + num(x.service_pos); }
+  function drawSvcMonths() {
+    $("svcMonths").innerHTML = '<table class="tbl"><thead><tr><th>Mes</th><th class="n">Ventas</th><th class="n">Servicio</th><th class="n">Propinas</th><th>Liquidación</th></tr></thead><tbody>' +
+      SV.months.slice(0, SV.all ? 999 : 13).map(function (x) {
+        var ym = String(x.month).slice(0, 7), src = x.service_manual != null ? "escrito a mano" : num(x.service_pos) && num(x.service_hist) ? "Syth + sistema" : num(x.service_pos) ? "sistema" : "Syth";
+        return '<tr class="click" data-svm="' + ym + '"><td><b>' + svLabel(ym) + '</b></td><td class="n">' + money(num(x.sales) + num(x.sales_hist)) + '</td><td class="n"><b>' + money(svcOf(x)) +
+          '</b><div class="muted" style="font-size:12px">' + src + '</div></td><td class="n">' + money(x.tips_manual != null ? x.tips_manual : x.tips_pos) + "</td><td>" +
+          (x.status === "liquidado" ? '<span class="pill" style="color:var(--ok)">Liquidado ✓</span>' : x.status === "borrador" ? "Borrador" : '<span class="muted">—</span>') + "</td></tr>";
+      }).join("") + "</tbody></table>" + (SV.months.length > 13 && !SV.all ? '<p><button id="svcAll">Ver los ' + SV.months.length + " meses</button></p>" : "");
+  }
+  $("svcMonths").addEventListener("click", function (e) {
+    if (e.target.id === "svcAll") { SV.all = true; drawSvcMonths(); return; } var tr = e.target.closest("[data-svm]"); if (!tr) return; $("svcMonth").value = tr.dataset.svm; openSvcMonth(tr.dataset.svm); $("svcLiq").scrollIntoView({ behavior: "smooth" }); });
+  $("svcMonth").addEventListener("change", function () { openSvcMonth(this.value); });
+  function openSvcMonth(ym) {
+    if (!ym) return Promise.resolve();
+    return q(sb.rpc("svc_month", { p_month: ym + "-01" })).then(function (d) { SV.data = d; drawSvcLiq(); }).catch(fail);
+  }
+  function svcCalc() {
+    var d = SV.data, i = d.info || {}, closed = i.status === "liquidado";
+    var auto = num(d.service_hist) + num(d.service_pos), svc = i.service_manual != null && i.service_manual !== "" ? num(i.service_manual) : auto;
+    var tipsAuto = num(d.tips_pos), tips = i.tips_manual != null && i.tips_manual !== "" ? num(i.tips_manual) : tipsAuto;
+    var n = d.lines.filter(function (l) { return l.kind === "persona" && num(l.pct) > 0; }).length, cap = num(i.max_from_bonus || 50);
+    d.lines.forEach(function (l) {
+      if (closed && l.bonus_ref != null) { l.c = { bonus: num(l.bonus_ref), tip: num(l.tip_ref), debt: num(l.debt_ref), fb: num(l.from_bonus), tp: num(l.to_payroll), pay: num(l.pay_ref) }; return; }
+      var bonus = Math.round(svc * num(l.pct)) / 100, tip = l.kind === "persona" && num(l.pct) > 0 && n ? Math.round(tips / n * 100) / 100 : 0;
+      var debt = l.kind === "persona" ? Math.max(0, num(l.debt_now)) + num(l.damages) : 0, fb = Math.min(debt, cap, bonus + tip), tp = Math.round((debt - fb) * 100) / 100;
+      l.c = { bonus: bonus, tip: tip, debt: debt, fb: Math.round(fb * 100) / 100, tp: tp, pay: Math.round((bonus + tip - fb) * 100) / 100 };
+    });
+    return { svc: svc, auto: auto, tips: tips, tipsAuto: tipsAuto, closed: closed, rate: num(i.rate),
+             pct: d.lines.reduce(function (a, l) { return a + num(l.pct); }, 0) };
+  }
+  function bsOf(v, rate) { return rate ? "Bs " + nf2.format(Math.round(v * rate * 100) / 100) : "—"; }
+  function drawSvcLiq() {
+    var d = SV.data, i = d.info || {}, k = svcCalc(), dis = k.closed ? " disabled" : "";
+    $("svcTitle").textContent = "Liquidación de " + svLabel(String(d.month)) + (k.closed ? " · liquidado ✓" : "");
+    var left = Math.round((100 - k.pct) * 1000) / 1000;
+    $("svcKpis").innerHTML =
+      '<div class="kpi"><span>Servicio del mes</span><b>' + money(k.svc) + '</b><label class="muted" style="font-size:12px">Corregir a mano (vacío = ' + money(k.auto) + ')<input id="svcManual" class="n" inputmode="decimal" value="' + esc(i.service_manual == null ? "" : i.service_manual) + '"' + dis + "></label></div>" +
+      '<div class="kpi"><span>Propinas del mes</span><b>' + money(k.tips) + '</b><label class="muted" style="font-size:12px">Corregir a mano (vacío = ' + money(k.tipsAuto) + ')<input id="svcTips" class="n" inputmode="decimal" value="' + esc(i.tips_manual == null ? "" : i.tips_manual) + '"' + dis + "></label></div>" +
+      '<div class="kpi"><span>Tasa BCV para pagar</span><b>' + (k.rate ? nf2.format(k.rate) : "—") + '</b><label class="muted" style="font-size:12px">Bs por 1 €<input id="svcRate" class="n" inputmode="decimal" value="' + esc(i.rate || "") + '"' + dis + "></label></div>" +
+      '<div class="kpi"><span>Porcentaje asignado</span><b style="color:' + (k.pct > 100.0001 ? "var(--danger)" : "inherit") + '">' + nf2.format(k.pct) + ' %</b><span>' + (left > 0 ? "Sin asignar: " + nf2.format(left) + " % (" + money(k.svc * left / 100) + ")" : left < 0 ? "¡Pasa del 100 %!" : "Todo asignado") + "</span></div>";
+    var g = d.lines.filter(function (l) { return l.kind === "gasto"; }), pe = d.lines.filter(function (l) { return l.kind === "persona"; });
+    $("svcGastos").innerHTML = '<table class="tbl"><thead><tr><th>Gasto</th><th class="n">%</th><th class="n">Monto</th><th class="n">En Bs</th><th></th></tr></thead><tbody>' +
+      g.map(function (l) { return '<tr data-line="' + d.lines.indexOf(l) + '"><td><input class="lbl" value="' + esc(l.label) + '"' + dis + '></td><td class="n"><input class="pct n" inputmode="decimal" style="width:80px" value="' + esc(num(l.pct)) + '"' + dis +
+        '></td><td class="n">' + money(l.c.bonus) + '</td><td class="n">' + bsOf(l.c.bonus, k.rate) + "</td><td>" + (k.closed ? "" : '<button class="danger delg" title="Quitar">✕</button>') + "</td></tr>"; }).join("") +
+      '<tr class="total"><td>Total gastos</td><td class="n">' + nf2.format(g.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(g.reduce(function (a, l) { return a + l.c.bonus; }, 0)) + "</td><td></td><td></td></tr></tbody></table>";
+    var tot = { bonus: 0, tip: 0, fb: 0, tp: 0, pay: 0 };
+    $("svcPersonas").innerHTML = '<table class="tbl"><thead><tr><th>Persona</th><th class="n">Ventas</th><th class="n">Días</th><th class="n">%</th><th class="n">Bono</th><th class="n">Propina</th><th class="n">Deuda + daños</th><th class="n">Del bono</th><th class="n">A nómina</th><th class="n">A pagar</th><th class="n">En Bs</th></tr></thead><tbody>' +
+      pe.map(function (l) {
+        ["bonus", "tip", "fb", "tp", "pay"].forEach(function (x) { tot[x] += l.c[x]; });
+        return '<tr data-line="' + d.lines.indexOf(l) + '"' + (l.active === false ? ' class="off"' : "") + '><td><b>' + esc(l.alias || l.label) + '</b><div class="muted" style="font-size:12px">' + esc(l.label) + (l.job ? " · " + esc(l.job) : "") + "</div></td>" +
+          '<td class="n">' + (l.sales != null ? money(l.sales) : '<span class="muted">—</span>') + '</td><td class="n">' + (num(l.days) || '<span class="muted">—</span>') + "</td>" +
+          '<td class="n"><input class="pct n" inputmode="decimal" style="width:70px" value="' + esc(num(l.pct)) + '"' + dis + "></td>" +
+          '<td class="n">' + money(l.c.bonus) + '</td><td class="n">' + money(l.c.tip) + '</td>' +
+          '<td class="n">' + money(l.c.debt) + '<div><input class="dmg n" inputmode="decimal" placeholder="daños" title="Daños del mes" style="width:70px;margin-top:4px" value="' + (num(l.damages) ? esc(num(l.damages)) : "") + '"' + dis + "></div></td>" +
+          '<td class="n">' + (l.c.fb ? "−" + money(l.c.fb) : "—") + '</td><td class="n" style="color:' + (l.c.tp ? "var(--danger)" : "inherit") + '">' + (l.c.tp ? money(l.c.tp) : "—") + "</td>" +
+          '<td class="n"><b>' + money(l.c.pay) + '</b></td><td class="n">' + bsOf(l.c.pay, k.rate) + "</td></tr>";
+      }).join("") +
+      '<tr class="total"><td>Total personal</td><td></td><td></td><td class="n">' + nf2.format(pe.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(tot.bonus) + '</td><td class="n">' + money(tot.tip) +
+      '</td><td></td><td class="n">−' + money(tot.fb) + '</td><td class="n">' + money(tot.tp) + '</td><td class="n"><b>' + money(tot.pay) + '</b></td><td class="n">' + bsOf(tot.pay, k.rate) + "</td></tr></tbody></table>";
+    $("svcAddGasto").hidden = k.closed;
+    $("svcActions").innerHTML = k.closed
+      ? '<span class="muted">Liquidado el ' + new Date(i.closed_at).toLocaleString("es-VE") + " por " + esc(i.closed_by) + '</span><span class="row"><button id="svcPrint">Imprimir</button><button class="danger" id="svcReopen">Reabrir (deshace los descuentos)</button></span>'
+      : '<button id="svcSave">Guardar borrador</button><span class="row"><button id="svcPrint">Imprimir</button><button class="primary" id="svcClose">Liquidar y descontar deudas</button></span>';
+  }
+  function svcReadForm() {
+    var d = SV.data, i = d.info || (d.info = {});
+    if ($("svcManual")) { i.service_manual = $("svcManual").value.trim() === "" ? null : num($("svcManual").value); i.tips_manual = $("svcTips").value.trim() === "" ? null : num($("svcTips").value); i.rate = num($("svcRate").value) || i.rate; }
+    document.querySelectorAll("#svcLiq [data-line]").forEach(function (tr) {
+      var l = d.lines[Number(tr.dataset.line)]; var lb = tr.querySelector(".lbl"), pc = tr.querySelector(".pct"), dm = tr.querySelector(".dmg");
+      if (lb) l.label = lb.value; if (pc) l.pct = num(pc.value); if (dm) l.damages = num(dm.value);
+    });
+  }
+  $("svcLiq").addEventListener("change", function (e) { if (e.target.matches("input")) { svcReadForm(); drawSvcLiq(); } });
+  $("svcLiq").addEventListener("click", function (e) {
+    var id = e.target.id, d = SV.data;
+    if (e.target.classList.contains("delg")) { svcReadForm(); d.lines.splice(Number(e.target.closest("[data-line]").dataset.line), 1); drawSvcLiq(); return; }
+    if (id === "svcAddGasto") { svcReadForm(); d.lines.push({ kind: "gasto", label: "Nuevo gasto", pct: 0 }); drawSvcLiq(); return; }
+    if (id === "svcPrint") { window.print(); return; }
+    if (id === "svcSave" || id === "svcClose") {
+      svcReadForm(); $("svcErr").textContent = "";
+      var k = svcCalc(); if (k.pct > 100.0001) { $("svcErr").textContent = "Los porcentajes suman más de 100 %."; return; }
+      var payload = { service_manual: d.info.service_manual == null ? "" : String(d.info.service_manual), tips_manual: d.info.tips_manual == null ? "" : String(d.info.tips_manual), rate: String(d.info.rate || ""),
+        lines: d.lines.map(function (l, ix) { return { kind: l.kind, employee_id: l.employee_id || null, label: l.label, pct: num(l.pct), damages: num(l.damages), note: l.note || "", position: ix }; }) };
+      var p = q(sb.rpc("svc_month_save", { p_month: String(d.month), p_data: payload }));
+      if (id === "svcClose") {
+        if (!confirm("¿Liquidar " + svLabel(String(d.month)) + "? Se descontarán las deudas de las cuentas del personal (hasta Ref 50 del bono; el resto pasa a nómina).")) return;
+        p = p.then(function () { return q(sb.rpc("svc_month_close", { p_month: String(d.month) })); });
+      }
+      p.then(function () { toast(id === "svcClose" ? "Mes liquidado" : "Borrador guardado"); return loadServicio(); }).catch(function (e2) { $("svcErr").textContent = e2.message || String(e2); });
+    }
+    if (id === "svcReopen") {
+      if (!confirm("¿Reabrir? Se deshacen los descuentos que se registraron en las cuentas.")) return;
+      q(sb.rpc("svc_month_reopen", { p_month: String(d.month) })).then(function () { toast("Reabierto"); return loadServicio(); }).catch(fail);
+    }
+  });
+  var SV_KIND = { saldo_inicial: "Saldo inicial", consumo: "Consumo", abono: "Abono", descuento_bono: "Descuento del bono", descuento_nomina: "A nómina", ajuste: "Ajuste" };
+  function drawSvcTabs() {
+    $("svcTabs").innerHTML = '<table class="tbl"><thead><tr><th>Persona</th><th class="n">Saldo</th><th class="n">Tope</th><th>Últimos movimientos</th><th></th></tr></thead><tbody>' +
+      SV.tabs.map(function (t) {
+        return '<tr' + (t.active ? "" : ' class="off"') + '><td><b>' + esc(t.alias) + '</b><div class="muted" style="font-size:12px">' + esc(t.name) + (t.active ? "" : " · inactivo") + '</div></td><td class="n"><b style="color:' + (num(t.balance) > num(t.limit) ? "var(--danger)" : "inherit") + '">' + money(t.balance) +
+          '</b></td><td class="n">' + money(t.limit) + '</td><td style="font-size:12px">' + (t.moves || []).slice(0, 4).map(function (m) {
+            return new Date(m.at).toLocaleDateString("es-VE", { day: "2-digit", month: "2-digit" }) + " · " + SV_KIND[m.kind] + " " + (num(m.amount) > 0 ? "+" : "") + nf2.format(num(m.amount)) + (m.note ? " · " + esc(m.note) : "");
+          }).join("<br>") + '</td><td><button data-tabmove="' + t.id + '">+ Movimiento</button></td></tr>';
+      }).join("") + "</tbody></table>";
+  }
+  $("svcTabs").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-tabmove]"); if (!b) return; var t = SV.tabs.find(function (x) { return x.id === Number(b.dataset.tabmove); });
+    openForm({ title: "Cuenta de " + t.alias + " · saldo " + money(t.balance), values: { kind: "abono" },
+      fields: [{ k: "kind", label: "Tipo", type: "select", options: [["abono", "Abono (pagó)"], ["descuento_nomina", "Descontado en nómina"], ["consumo", "Consumo"], ["saldo_inicial", "Saldo inicial / deuda vieja"], ["ajuste", "Ajuste (+ suma / − resta)"]] },
+               { k: "amount", label: "Monto (" + PFX + ")", type: "number", step: "0.01", req: true }, { k: "note", label: "Nota", full: true }],
+      validate: function (v) { if (!num(v.amount)) return "Escribe el monto."; },
+      onSave: function (v) { return q(sb.rpc("svc_tab_move", { p_emp: t.id, p_kind: v.kind, p_amount: num(v.amount), p_note: v.note || "" })).then(loadServicio); } });
+  });
 
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
