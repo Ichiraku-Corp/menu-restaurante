@@ -328,7 +328,7 @@ if (require.main === module) {
     // Diagnóstico: node puente.js --pagos
     console.log("Archivo de configuración: " + (process.env.PUENTE_CONFIG || path.join(DIR, "config.json")));
     console.log(keysInfo());
-    (async () => { await checkBinance(); await checkPaypal(); console.log("Listo."); process.exit(0); })();
+    setImmediate(async () => { await checkBinance(); await checkPaypal(); console.log("Listo."); process.exit(0); });
   } else if (process.argv.includes("--prueba")) {
     const which = process.argv[process.argv.indexOf("--prueba") + 1] || "cocina";
     const p = cfg.printers[which];
@@ -382,7 +382,7 @@ function keysInfo() {
   return `Claves de pago → Binance: api_key ${m(b.api_key)}, api_secret ${m(b.api_secret)} · PayPal: client_id ${m(p.client_id)}, client_secret ${m(p.client_secret)}`;
 }
 async function reportCheck(source, err) {
-  const msg = err ? String(err.message || err).slice(0, 200) : "";
+  const msg = err ? (String(err.message || err) + (err.cause ? " (" + (err.cause.code || err.cause.message) + ")" : "")).slice(0, 200) : "";
   if (msg !== lastErr2[source]) { log(msg ? `ERROR ${source}: ${msg}` : `${source}: conectado y revisando pagos`); lastErr2[source] = msg; }
   try { await rpc("pos_incoming_checked", { p_source: source, p_error: msg }); } catch (e) { /* se reintenta en la próxima vuelta */ }
 }
