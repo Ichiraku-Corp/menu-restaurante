@@ -84,6 +84,7 @@ alter table public.pos_orders add column if not exists phone        text not nul
 alter table public.pos_orders add column if not exists address      text not null default '';
 alter table public.pos_orders add column if not exists delivery_fee numeric(10,2) not null default 0 check (delivery_fee >= 0);
 alter table public.pos_orders add column if not exists precuenta_at timestamptz;
+alter table public.pos_orders add column if not exists day_number   int;   -- número de orden del día (1, 2, 3…)
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
 create index if not exists pos_orders_closed_at on public.pos_orders (closed_at);
@@ -233,6 +234,13 @@ language sql immutable as $$
          || repeat(' ', greatest(w - least(length(l), greatest(w - length(r) - 1, 1)) - length(r), 1)) || r
 $$;
 
+-- Siguiente número de orden del día (hora de Caracas).
+create or replace function public.pos_next_number() returns int
+language sql volatile security definer set search_path = public as $$
+  select coalesce(max(day_number), 0) + 1 from public.pos_orders
+  where (opened_at at time zone 'America/Caracas')::date = (now() at time zone 'America/Caracas')::date
+$$;
+
 -- ---------------------------------------------------------------- Lectura
 create or replace function public.pos_staff() returns table (id bigint, name text)
 language sql stable security definer set search_path = public as $$
@@ -268,7 +276,7 @@ begin
     'tables', (select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'area', t.area, 'number', t.number) order by t.position), '[]'::jsonb)
                from public.pos_tables t where t.active),
     'orders', (select coalesce(jsonb_agg(jsonb_build_object(
-                 'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id),
+                 'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'day_number', o.day_number,
                  'opened_at', o.opened_at, 'opened_by', public.pos_emp_name(o.opened_by),
                  'total', (select total from public.pos_totals(o.id)),
                  'paid', (select paid from public.pos_totals(o.id)),
@@ -288,7 +296,7 @@ declare r jsonb;
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   select jsonb_build_object(
-    'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'status', o.status,
+    'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'status', o.status, 'day_number', o.day_number,
     'service_pct', o.service_pct, 'discount_reason', o.discount_reason, 'opened_at', o.opened_at,
     'customer', o.label, 'phone', o.phone, 'address', o.address, 'delivery_fee', o.delivery_fee, 'precuenta_at', o.precuenta_at,
     'opened_by', public.pos_emp_name(o.opened_by),
@@ -316,9 +324,9 @@ begin
     if oid is not null then return oid; end if;
     if not exists (select 1 from public.pos_tables where id = p_table and active) then raise exception 'Mesa no encontrada'; end if;
     select coalesce(service_pct, 10) into svc from public.gestion_settings limit 1;
-    insert into public.pos_orders (kind, table_id, service_pct, opened_by) values ('mesa', p_table, coalesce(svc, 10), p_emp) returning id into oid;
+    insert into public.pos_orders (kind, table_id, service_pct, opened_by, day_number) values ('mesa', p_table, coalesce(svc, 10), p_emp, public.pos_next_number()) returning id into oid;
   else
-    insert into public.pos_orders (kind, label, service_pct, opened_by) values ('llevar', left(coalesce(trim(p_label), ''), 40), 0, p_emp) returning id into oid;
+    insert into public.pos_orders (kind, label, service_pct, opened_by, day_number) values ('llevar', left(coalesce(trim(p_label), ''), 40), 0, p_emp, public.pos_next_number()) returning id into oid;
   end if;
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'abrir', oid);
   return oid;
@@ -352,22 +360,26 @@ end $$;
 -- Envía a cocina lo pendiente e imprime la comanda.
 create or replace function public.pos_send(p_emp bigint, p_pin text, p_order bigint)
 returns int language plpgsql security definer set search_path = public as $$
-declare body text; n int;
+declare body text; n int; num int; added boolean; lines text;
 begin
   perform public.pos_auth(p_emp, p_pin);
   select count(*) into n from public.pos_items where order_id = p_order and status = 'pendiente';
   if n = 0 then return 0; end if;
-  select '^' || public.pos_order_label(p_order) || E'\n' ||
-         case when exists (select 1 from public.pos_items x where x.order_id = p_order and x.status in ('enviado', 'anulado'))
-              then E'^+ AGREGADO\n' else '' end ||
-         public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' ||
-         string_agg('^' || trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name ||
+  select day_number into num from public.pos_orders where id = p_order;
+  added := exists (select 1 from public.pos_items x where x.order_id = p_order and x.status in ('enviado', 'anulado'));
+  select string_agg('^' || trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name ||
                     case when i.variant <> '' then ' ' || i.variant else '' end ||
                     case when i.option <> '' then E'\n  ' || i.option else '' end ||
-                    case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id) || E'\n='
-    into body from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
+                    case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id)
+    into lines from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
+  body := '^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
+          coalesce('Orden #' || num || '   ', '') || public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' || lines || E'\n=';
   update public.pos_items set status = 'enviado', sent_at = now() where order_id = p_order and status = 'pendiente';
   perform public.pos_print('cocina', body);
+  -- Copia para la comandera de pedidos de afuera (impresora de caja)
+  perform public.pos_print('caja', '^ORDEN #' || coalesce(num::text, '-') || case when added then ' (+ agregado)' else '' end || E'\n' ||
+    '^' || public.pos_order_label(p_order) || E'\n' || public.pos_line('Hora: ' || to_char(now() at time zone 'America/Caracas', 'HH24:MI'),
+    'Maid: ' || coalesce(public.pos_emp_name(p_emp), '')) || E'\n=\n' || lines || E'\n=');
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'enviar', p_order, jsonb_build_object('platos', n));
   return n;
 end $$;
@@ -792,8 +804,8 @@ declare oid bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
-  insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by)
-  values ('delivery', left(trim(p_name), 40), left(trim(coalesce(p_phone, '')), 30), left(trim(coalesce(p_address, '')), 200), greatest(coalesce(p_fee, 0), 0), 0, p_emp)
+  insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by, day_number)
+  values ('delivery', left(trim(p_name), 40), left(trim(coalesce(p_phone, '')), 30), left(trim(coalesce(p_address, '')), 200), greatest(coalesce(p_fee, 0), 0), 0, p_emp, public.pos_next_number())
   returning id into oid;
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'abrir', oid);
   return oid;
@@ -846,7 +858,7 @@ declare f text;
 begin
   foreach f in array array[
     'pos_is_device()', 'pos_auth(bigint, text)', 'pos_emp_name(bigint)', 'pos_rate()', 'pos_order_label(bigint)', 'pos_totals(bigint)',
-    'pos_print(text, text)', 'pos_staff()', 'pos_check_pin(bigint, text)', 'pos_state()', 'pos_order(bigint)',
+    'pos_print(text, text)', 'pos_next_number()', 'pos_staff()', 'pos_check_pin(bigint, text)', 'pos_state()', 'pos_order(bigint)',
     'pos_open(bigint, text, bigint, text)', 'pos_add(bigint, text, bigint, jsonb)', 'pos_send(bigint, text, bigint)',
     'pos_void(bigint, text, bigint, text)', 'pos_discount(bigint, text, bigint, numeric, text)', 'pos_move(bigint, text, bigint, bigint)',
     'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
@@ -865,3 +877,4 @@ revoke execute on function public.pos_print(text, text) from authenticated;
 revoke execute on function public.pos_sync_day(date) from authenticated;
 revoke execute on function public.pos_bill_text(bigint, text) from authenticated;
 revoke execute on function public.pos_session_report(bigint) from authenticated;
+revoke execute on function public.pos_next_number() from authenticated;

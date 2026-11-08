@@ -274,7 +274,7 @@
 
   function drawTicket() {
     var d = cur.data; if (!d) return;
-    $("orderTitle").textContent = d.label;
+    $("orderTitle").textContent = d.label + (d.day_number ? " · Orden #" + d.day_number : "");
     $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
       ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
       : "Para llevar (sin servicio)";
