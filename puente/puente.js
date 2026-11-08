@@ -144,7 +144,9 @@ async function tick() {
 // ---------------------------------------------------------------- Tasa euro BCV
 const MES = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
 function parseBcv(html) {
-  const m = html.match(/id="euro"[\s\S]*?<strong>\s*([\d.,]+)\s*<\/strong>/i);
+  const m = html.match(/id=["']euro["'][\s\S]{0,800}?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i)
+    || html.match(/>\s*EUR\s*<[\s\S]{0,500}?<strong[^>]*>\s*([\d.,]+)\s*<\/strong>/i)
+    || html.match(/euro[\s\S]{0,500}?(\d{1,4},\d{4,8})/i);
   if (!m) throw new Error("No encontré la tasa del euro en la página del BCV");
   const rate = Number(m[1].replace(/\./g, "").replace(",", "."));
   if (!(rate > 0)) throw new Error("Tasa del BCV no válida: " + m[1]);
@@ -163,7 +165,11 @@ async function updateRate() {
   try {
     const r = await fetch("https://www.bcv.org.ve/", { headers: { "User-Agent": "Ichiraku-puente/1.0" } });
     if (!r.ok) throw new Error("BCV respondió " + r.status);
-    const { rate, date } = parseBcv(await r.text());
+    const html = await r.text();
+    let parsed;
+    try { parsed = parseBcv(html); }
+    catch (e) { try { fs.writeFileSync(path.join(DIR, "bcv-pagina.html"), html); } catch (e2) { /* nada */ } throw new Error(e.message + " (copia guardada en bcv-pagina.html, " + html.length + " caracteres)"); }
+    const { rate, date } = parsed;
     await rpc("pos_set_rate", { p_rate: rate, p_source: "bcv", p_date: date });
     const key = rate + "|" + date;
     if (key !== lastRate) log(`Tasa euro BCV: ${rate} Bs (fecha valor ${date || "hoy"})`);
