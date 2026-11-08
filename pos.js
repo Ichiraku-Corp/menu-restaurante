@@ -388,9 +388,7 @@
     var b = e.target.closest("[data-dish]"); if (!b) return;
     var d = MENU.dishes.find(function (x) { return x.id === Number(b.dataset.dish); });
     if (!d) return;
-    var vs = variantsOf(d), ops = d.options || [];
-    if (!vs && !ops.length) { addToCart({ dish: d, variant: "", option: "", qty: 1, notes: "" }); return; }
-    pickDish(d);
+    pickDish(d); // todos los platos abren la ventanita: cantidad, opciones y nota para cocina
   });
   var pick = null;
   function pickDish(d) {
@@ -398,7 +396,7 @@
     var vs = variantsOf(d), ops = d.options || [];
     $("dishTitle").textContent = d.name;
     $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(num(v.price)) + "</button>"; }).join("") + "</div>" : "";
-    $("dishOptions").innerHTML = ops.length ? '<div class="muted">Sabor</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
+    $("dishOptions").innerHTML = ops.length ? '<div class="muted">Elige una opción</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
     if (vs && vs.length === 1) pick.variant = vs[0].label;
     $("qVal").textContent = "1"; $("dishNote").value = ""; markPick();
     $("dishDlg").showModal();
@@ -414,7 +412,7 @@
   $("dishCancel").addEventListener("click", function () { $("dishDlg").close(); });
   $("dishAdd").addEventListener("click", function () {
     if (variantsOf(pick.dish) && !pick.variant) return toast("Elige el tamaño", true);
-    if ((pick.dish.options || []).length && !pick.option) return toast("Elige el sabor", true);
+    if ((pick.dish.options || []).length && !pick.option) return toast("Elige una opción (" + pick.dish.options.join(" / ") + ")", true);
     pick.notes = $("dishNote").value.trim(); addToCart(pick); $("dishDlg").close();
   });
   function addToCart(p) {
@@ -446,7 +444,7 @@
     });
     cur.cart.forEach(function (c, ix) {
       h += '<div class="line new" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
-        (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + '<small>nuevo, sin enviar</small></span><span class="p">' +
+        (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + '<small>nuevo, sin enviar · toca para ' + (c.notes ? "cambiar la nota" : "agregar nota") + '</small></span><span class="p">' +
         ref(c.qty * priceOf(c.dish, c.variant)) + "</span></div>";
     });
     $("lines").innerHTML = h || '<p class="emptyline">Sin platos todavía.<br>Elige de la carta.</p>';
@@ -487,6 +485,12 @@
       var ci = Number(c.dataset.cart), it0 = cur.cart[ci];
       if (e.target.closest("[data-inc]")) it0.qty = Math.min(50, it0.qty + 1);
       else if (e.target.closest("[data-dec]")) { it0.qty -= 1; if (it0.qty <= 0) cur.cart.splice(ci, 1); }
+      else if (e.target.closest(".t")) { // tocar el nombre: poner o cambiar la nota para cocina
+        ask({ title: "Nota para cocina · " + it0.dish.name, help: "Ej.: sin cebollín, bien cocido, para compartir. Déjalo vacío para quitarla.", value: it0.notes || "" }).then(function (v) {
+          if (v === null) return; it0.notes = String(v).trim().slice(0, 140); drawTicket();
+        });
+        return;
+      }
       drawTicket(); return;
     }
     var l = e.target.closest("[data-item]"); if (!l || l.classList.contains("void")) return;

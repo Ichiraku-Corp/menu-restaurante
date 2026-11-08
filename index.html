@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-nI/gj9SK5+J3mcVNrsMo+OhcO8RYtzL2KwQGAiqqZD8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-MYSYHqMEfNFX0D5jdWzD9Gdzh9r//iWJl5iLqVA0PyI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -521,7 +521,7 @@
         return '<label><input type="radio" name="v" value="' + esc(x.label) + '"' + (i === 0 ? " checked" : "") + "><span>" +
           esc(x.label) + "<small>" + esc(fmt(Number(x.price) || 0)) + "</small></span></label>";
       }).join("") + "</div>" : (v.length === 1 ? '<input type="radio" name="v" value="' + esc(v[0].label) + '" checked hidden>' : "")) +
-      (opts.length ? "<h4>" + (opts.length > 1 ? "Elige sabor" : "Sabor") + "</h4><div class=\"pills\">" + opts.map(function (o) {
+      (opts.length ? "<h4>" + (opts.length > 1 ? "Elige una opción" : "Opción") + "</h4><div class=\"pills\">" + opts.map(function (o) {
         return '<label><input type="radio" name="o" value="' + esc(o) + '"' + (opts.length === 1 ? " checked" : "") + "><span>" + esc(o) + "</span></label>";
       }).join("") + "</div>" : "") +
       (d.available ? '<h4>Nota (opcional)</h4><input class="note" id="dsNote" maxlength="80" placeholder="Ej.: sin cebolla, poco hielo…">' : "") +
@@ -539,7 +539,7 @@
   $("dsAdd").addEventListener("click", function () {
     var d = current; if (!d || !d.available) return;
     var o = chosen("o");
-    if ((d.options || []).length && !o) { $("dsWarn").textContent = "Elige un sabor para continuar."; return; }
+    if ((d.options || []).length && !o) { $("dsWarn").textContent = "Elige una opción para continuar."; return; }
     var note = ($("dsNote") && $("dsNote").value.trim()) || "";
     addLine({ id: d.id, v: chosen("v"), o: o, n: note, q: qty });
     closeSheet($("dishSheet"));
