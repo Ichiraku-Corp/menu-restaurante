@@ -32,4 +32,13 @@ public static class IchirakuRaw {
 }
 "@
 }
+# Protección: si Windows tiene un documento de esta impresora trabado en error (papel, tapa, cable),
+# lo reintenta desde el principio una y otra vez y la impresora imprime lo mismo sin parar.
+# Se quita ese documento y se avisa; el puente vuelve a intentar este ticket más tarde.
+$trabados = @()
+try { $trabados = @(Get-PrintJob -PrinterName $Impresora -ErrorAction Stop | Where-Object { "$($_.JobStatus)" -match 'Error|Restart' }) } catch { }
+if ($trabados.Count -gt 0) {
+  foreach ($j in $trabados) { try { Remove-PrintJob -InputObject $j -ErrorAction Stop } catch { } }
+  throw "La impresora '$Impresora' tenía un documento trabado en error (se quitó). Revisa papel, tapa y cable; se reintenta solo."
+}
 [IchirakuRaw]::Send($Impresora, [System.IO.File]::ReadAllBytes($Archivo))
