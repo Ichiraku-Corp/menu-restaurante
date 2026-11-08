@@ -168,8 +168,14 @@
   .stepper { display:flex; align-items:center; gap:12px; }
   .stepper button { width:56px; height:56px; border-radius:50%; font-size:26px; font-weight:800; }
   .stepper b { font-size:28px; min-width:40px; text-align:center; font-variant-numeric:tabular-nums; }
-  .pay { display:grid; grid-template-columns:1fr 120px 1fr 46px; gap:6px; align-items:center; margin-top:8px; }
-  @media (max-width: 520px) { .pay { grid-template-columns:1fr 1fr; } }
+  .pay { display:grid; grid-template-columns:minmax(0, 1.1fr) 118px 118px minmax(0, 1fr) 46px; gap:6px; align-items:center; margin-top:8px; padding:6px; border-radius:14px; background:var(--raised); }
+  @media (max-width: 640px) { .pay { grid-template-columns:1fr 1fr; } .pay .mname { grid-column:1 / -1; } }
+  .money { position:relative; display:block; }
+  .money span { position:absolute; left:10px; top:5px; font-size:10px; font-weight:800; letter-spacing:.05em; color:var(--muted); text-transform:uppercase; pointer-events:none; }
+  .money input { padding:17px 10px 5px; font-weight:800; text-align:right; }
+  .money.eqm input { background:var(--surface); color:var(--info); }
+  .client-btn { min-height:38px; padding:6px 12px; border-radius:999px; font-size:14px; }
+  .client-btn.has { background:var(--info-soft); border-color:var(--info); color:var(--info); }
   .methods { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
   @media (max-width: 560px) { .methods { grid-template-columns:repeat(2, 1fr); } }
   .methods button { font-size:14px; min-height:58px; display:flex; align-items:center; justify-content:flex-start; gap:8px; text-align:left; padding:8px 10px; }
@@ -296,7 +302,7 @@
   <!-- 4. Pedido -->
   <section id="orderView" class="hidden">
     <div class="orderhead">
-      <div class="row"><button id="back" class="ghost">Mesas</button><h2 id="orderTitle"></h2></div>
+      <div class="row"><button id="back" class="ghost">Mesas</button><h2 id="orderTitle"></h2><button type="button" id="btnClient" class="client-btn">Cliente</button></div>
       <div class="row mobile-only"><button id="toggleMenu">Carta</button></div>
     </div>
     <div class="order" id="orderGrid">
@@ -347,6 +353,19 @@
   <div class="tabs" id="moveAreas"></div>
   <div class="tables" id="moveTables"></div>
   <p style="margin-top:12px"><button type="button" id="moveCancel">Cancelar</button></p>
+</dialog>
+
+<!-- Cliente del pedido -->
+<dialog id="cliDlg">
+  <h2>Datos del cliente</h2>
+  <p class="muted" style="margin-top:0">Para la factura y el registro de clientes. Escribe la cédula o el RIF: si ya vino antes, se llenan solos.</p>
+  <label class="muted" for="cDoc">Cédula o RIF</label><input id="cDoc" placeholder="V12345678 o J123456789" autocomplete="off">
+  <p class="muted" id="cFound" style="margin:4px 0 0;color:var(--ok)"></p>
+  <label class="muted" for="cName" style="display:block;margin-top:8px">Nombre o razón social</label><input id="cName" maxlength="80" autocomplete="off">
+  <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input id="cPhone" placeholder="Teléfono" inputmode="tel" maxlength="20"><input id="cEmail" type="email" placeholder="Correo (opcional)" maxlength="120"></div>
+  <label class="row" style="margin-top:10px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="cConsent" style="width:22px;height:22px;flex:none"> Acepta recibir promociones por WhatsApp o correo</label>
+  <p id="cErr" class="muted" style="color:var(--danger)"></p>
+  <div class="row between"><button type="button" id="cCancel">Cancelar</button><button type="button" class="primary" id="cOk">Guardar en el pedido</button></div>
 </dialog>
 
 <!-- Delivery -->

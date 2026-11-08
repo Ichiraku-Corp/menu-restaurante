@@ -368,6 +368,9 @@
   function drawTicket() {
     var d = cur.data; if (!d) return;
     $("orderTitle").innerHTML = esc(d.label) + (d.day_number ? "<small>Orden #" + d.day_number + "</small>" : "");
+    $("btnClient").innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>' +
+      (d.client ? esc(d.client.name) : "Cliente") + "</span>";
+    $("btnClient").classList.toggle("has", !!d.client);
     $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
       ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
       : "Para llevar (sin servicio)";
@@ -466,6 +469,35 @@
   });
   $("moveCancel").addEventListener("click", function () { $("moveDlg").close(); });
 
+  // ---------------------------------------------------------------- Cliente del pedido (para factura y registro)
+  var cliTimer = null;
+  function clientForm() {
+    var c = (cur.data && cur.data.client) || {};
+    $("cDoc").value = c.doc_id || ""; $("cName").value = c.name || ""; $("cPhone").value = c.phone || ""; $("cEmail").value = c.email || "";
+    $("cConsent").checked = false; $("cErr").textContent = ""; $("cFound").textContent = "";
+    $("cliDlg").showModal(); setTimeout(function () { $("cDoc").focus(); }, 50);
+  }
+  function lookupClient() {
+    var d = $("cDoc").value.replace(/[\s.\-]/g, "");
+    if (d.length < 5) { $("cFound").textContent = ""; return; }
+    rpc("pos_find_customer", { p_doc: d }).then(function (r) {
+      if (!r) { $("cFound").textContent = "Cliente nuevo: se registrará al guardar."; return; }
+      $("cFound").textContent = "Cliente encontrado ✓";
+      if (!$("cName").value) $("cName").value = r.name || ""; if (!$("cPhone").value) $("cPhone").value = r.phone || ""; if (!$("cEmail").value) $("cEmail").value = r.email || "";
+      if (r.marketing_consent) $("cConsent").checked = true;
+    }).catch(function () {});
+  }
+  $("cDoc").addEventListener("input", function () { clearTimeout(cliTimer); cliTimer = setTimeout(lookupClient, 400); });
+  $("cCancel").addEventListener("click", function () { $("cliDlg").close(); });
+  $("cOk").addEventListener("click", function () {
+    var name = $("cName").value.trim();
+    if (name.length < 2) { $("cErr").textContent = "Escribe el nombre o la razón social."; return; }
+    rpc("pos_set_customer", { p_order: cur.order, p_doc: $("cDoc").value, p_name: name, p_phone: $("cPhone").value, p_email: $("cEmail").value, p_consent: $("cConsent").checked })
+      .then(function () { $("cliDlg").close(); toast("Cliente guardado en el pedido"); return loadOrder(); })
+      .catch(function (e) { $("cErr").textContent = errMsg(e); });
+  });
+  $("btnClient").addEventListener("click", clientForm);
+
   // ---------------------------------------------------------------- Delivery
   var delivEdit = null;
   function delivForm(d) {
@@ -511,12 +543,18 @@
   function drawPays() {
     $("payLines").innerHTML = pays.map(function (p, i) {
       var m = METHODS.find(function (x) { return x[0] === p.method; }), needRef = ["pago_movil", "zelle", "binance", "paypal", "punto_debito", "punto_credito"].indexOf(p.method) >= 0;
-      return '<div class="pay" data-i="' + i + '"><b class="mname">' + logo(m[0]) + m[1] + '</b><input class="amt n" inputmode="decimal" value="' + esc(p.amount) + '" aria-label="Monto en ' + (m[2] === "REF" ? "dólares" : "bolívares") + '">' +
+      var isRef = m[2] === "REF";
+      return '<div class="pay" data-i="' + i + '"><b class="mname">' + logo(m[0]) + m[1] + "</b>" +
+        '<label class="money"><span>' + (isRef ? "$ / Ref" : "Bs") + '</span><input class="amt n" inputmode="decimal" value="' + esc(p.amount) + '" aria-label="Monto en ' + (isRef ? "divisas" : "bolívares") + '"></label>' +
+        '<label class="money eqm"><span>' + (isRef ? "= Bs" : "= Ref") + '</span><input class="eq n" inputmode="decimal" value="' + esc(eqOf(p)) + '" aria-label="Equivalente en ' + (isRef ? "bolívares" : "Ref") + '"' + (ST.rate ? "" : " disabled") + "></label>" +
         '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>' +
-        '<button type="button" class="danger del" aria-label="Quitar">✕</button><span class="muted" style="grid-column:1/-1;margin-top:-4px">' + (m[2] === "REF" ? "en divisas" : "en bolívares") + "</span></div>";
+        '<button type="button" class="danger del" aria-label="Quitar">✕</button></div>';
     }).join("");
     updatePaySums();
   }
+  // Equivalente de cada pago en la otra moneda (para responder «¿cuánto son 13 $ en bolívares?»)
+  function isRefMethod(k) { var m = METHODS.find(function (x) { return x[0] === k; }); return m && m[2] === "REF"; }
+  function eqOf(p) { if (!ST || !ST.rate || String(p.amount).trim() === "") return ""; return (isRefMethod(p.method) ? num(p.amount) * ST.rate : num(p.amount) / ST.rate).toFixed(2); }
   function updatePaySums() {
     var s = paySums();
     $("payPaid").textContent = ref(s.paid);
@@ -540,7 +578,13 @@
   $("payPartial").addEventListener("click", function () { doPay(true); });
   $("payLines").addEventListener("input", function (e) {
     var row = e.target.closest("[data-i]"); if (!row) return; var p = pays[Number(row.dataset.i)];
-    if (e.target.classList.contains("amt")) p.amount = e.target.value; else if (e.target.classList.contains("refin")) p.reference = e.target.value;
+    if (e.target.classList.contains("amt")) { p.amount = e.target.value; row.querySelector(".eq").value = eqOf(p); }
+    else if (e.target.classList.contains("eq")) {
+      var v = e.target.value.trim();
+      p.amount = v === "" || !ST.rate ? "" : (isRefMethod(p.method) ? num(v) / ST.rate : num(v) * ST.rate).toFixed(2);
+      row.querySelector(".amt").value = p.amount;
+    }
+    else if (e.target.classList.contains("refin")) p.reference = e.target.value;
     updatePaySums();
   });
   $("payLines").addEventListener("click", function (e) { var b = e.target.closest(".del"); if (!b) return; pays.splice(Number(b.closest("[data-i]").dataset.i), 1); drawPays(); });

@@ -85,6 +85,7 @@ alter table public.pos_orders add column if not exists address      text not nul
 alter table public.pos_orders add column if not exists delivery_fee numeric(10,2) not null default 0 check (delivery_fee >= 0);
 alter table public.pos_orders add column if not exists precuenta_at timestamptz;
 alter table public.pos_orders add column if not exists day_number   int;   -- número de orden del día (1, 2, 3…)
+alter table public.pos_orders add column if not exists customer_id  bigint references public.customers(id) on delete set null;
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
 create index if not exists pos_orders_closed_at on public.pos_orders (closed_at);
@@ -326,6 +327,7 @@ begin
     'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'status', o.status, 'day_number', o.day_number,
     'service_pct', o.service_pct, 'discount_reason', o.discount_reason, 'opened_at', o.opened_at,
     'customer', o.label, 'phone', o.phone, 'address', o.address, 'delivery_fee', o.delivery_fee, 'precuenta_at', o.precuenta_at,
+    'client', (select jsonb_build_object('id', c.id, 'name', c.name, 'doc_id', c.doc_id, 'phone', c.phone, 'email', c.email) from public.customers c where c.id = o.customer_id),
     'opened_by', public.pos_emp_name(o.opened_by),
     'totals', (select to_jsonb(x) from public.pos_totals(o.id) x),
     'items', (select coalesce(jsonb_agg(jsonb_build_object(
@@ -479,6 +481,8 @@ language sql stable security definer set search_path = public as $$
     case when r.rate is not null then public.pos_line('Total Bs (tasa ' || public.pos_money(r.rate) || ')', 'Bs ' || public.pos_money(round(t.total * r.rate, 2))) || E'\n' else '' end ||
     case when t.paid > 0 and t.paid < t.total - 0.02 then public.pos_line('Pagado', 'Ref ' || public.pos_money(t.paid)) || E'\n' ||
       '^' || public.pos_line('RESTA', 'Ref ' || public.pos_money(t.total - t.paid), 24) || E'\n' else '' end ||
+    coalesce((select 'Cliente: ' || c.name || case when coalesce(c.doc_id, '') <> '' then '  CI/RIF: ' || c.doc_id else '' end || E'\n'
+              from public.customers c where c.id = o.customer_id and o.kind <> 'delivery'), '') ||
     case when o.kind = 'delivery' then 'Cliente: ' || o.label || case when o.phone <> '' then '  Tel: ' || o.phone else '' end ||
       case when o.address <> '' then E'\nDireccion: ' || o.address else '' end || E'\n' else '' end ||
     'Precios con IVA incluido.'
@@ -712,6 +716,7 @@ language sql stable security definer set search_path = public as $$
               from (select extract(hour from closed_at at time zone 'America/Caracas')::int h, count(*) c, sum(total) tt from o where status = 'cobrada' group by 1) x),
     'orders', (select coalesce(jsonb_agg(jsonb_build_object('label', public.pos_order_label(o.id), 'status', o.status, 'opened_at', o.opened_at, 'closed_at', o.closed_at,
                  'waiter', public.pos_emp_name(o.opened_by), 'cashier', public.pos_emp_name(o.closed_by), 'total', o.total, 'service', o.service,
+                 'client', (select c.name || coalesce(' (' || c.doc_id || ')', '') from public.customers c where c.id = o.customer_id),
                  'discount', o.discount, 'delivery', o.delivery, 'void_reason', o.void_reason,
                  'items', (select string_agg(trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name || case when i.variant <> '' then ' ' || i.variant else '' end ||
                             case when i.status = 'anulado' then ' (anulado)' else '' end, ', ' order by i.id) from it i where i.order_id = o.id),
@@ -860,6 +865,56 @@ begin
   if not found then raise exception 'No se puede cambiar este pedido'; end if;
 end $$;
 
+-- ---------------------------------------------------------------- Datos del cliente (al cobrar)
+create or replace function public.pos_doc(p text) returns text
+language sql immutable as $$ select nullif(upper(regexp_replace(coalesce(p, ''), '[\s.\-]', '', 'g')), '') $$;
+
+create or replace function public.pos_customer_id(d text) returns bigint
+language sql stable security definer set search_path = public as $$
+  select id from public.customers
+  where d is not null and regexp_replace(doc_id, '^[VEJGP]', '') = regexp_replace(d, '^[VEJGP]', '')
+  order by (doc_id = d) desc, id limit 1
+$$;
+
+-- Busca un cliente por cédula o RIF exactos (para autocompletar).
+create or replace function public.pos_find_customer(p_emp bigint, p_pin text, p_doc text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare d text := public.pos_doc(p_doc); r jsonb;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if d is null or length(d) < 5 then return null; end if;
+  select jsonb_build_object('id', id, 'name', name, 'doc_id', doc_id, 'phone', phone, 'email', email, 'marketing_consent', marketing_consent)
+    into r from public.customers where id = public.pos_customer_id(d);
+  return r;
+end $$;
+
+-- Guarda (o actualiza) el cliente y lo une al pedido.
+create or replace function public.pos_set_customer(p_emp bigint, p_pin text, p_order bigint, p_doc text, p_name text,
+  p_phone text default '', p_email text default '', p_consent boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare d text := public.pos_doc(p_doc); cid bigint;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
+  cid := public.pos_customer_id(d);
+  if cid is null then
+    insert into public.customers (doc_id, name, phone, email, registered_at, source, marketing_consent, consent_at)
+    values (d, left(trim(p_name), 80), left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), left(lower(trim(coalesce(p_email, ''))), 120),
+            (now() at time zone 'America/Caracas')::date, 'pos', coalesce(p_consent, false), case when p_consent then now() end)
+    returning id into cid;
+  else
+    update public.customers set name = left(trim(p_name), 80),
+      phone = coalesce(nullif(left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), ''), phone),
+      email = coalesce(nullif(left(lower(trim(coalesce(p_email, ''))), 120), ''), email),
+      marketing_consent = marketing_consent or coalesce(p_consent, false),
+      consent_at = case when p_consent and not marketing_consent then now() else consent_at end
+    where id = cid;
+  end if;
+  update public.pos_orders set customer_id = cid where id = p_order;
+  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'cliente', p_order, jsonb_build_object('cliente', cid));
+  return jsonb_build_object('id', cid);
+end $$;
+
 -- ---------------------------------------------------------------- Agotados (desde la caja)
 create or replace function public.pos_set_available(p_emp bigint, p_pin text, p_dish bigint, p_available boolean)
 returns void language plpgsql security definer set search_path = public as $$
@@ -902,7 +957,8 @@ begin
     'pos_void(bigint, text, bigint, text)', 'pos_discount(bigint, text, bigint, numeric, text)', 'pos_move(bigint, text, bigint, bigint)',
     'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
     'pos_open_delivery(bigint, text, text, text, text, numeric)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric)',
-    'pos_set_available(bigint, text, bigint, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
+    'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
+    'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
     'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
@@ -918,3 +974,4 @@ revoke execute on function public.pos_bill_text(bigint, text) from authenticated
 revoke execute on function public.pos_session_report(bigint) from authenticated;
 revoke execute on function public.pos_next_number() from authenticated;
 revoke execute on function public.pos_ranking(date, date) from authenticated;
+revoke execute on function public.pos_customer_id(text) from anon, public, authenticated;
