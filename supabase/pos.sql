@@ -358,6 +358,8 @@ begin
   select count(*) into n from public.pos_items where order_id = p_order and status = 'pendiente';
   if n = 0 then return 0; end if;
   select '^' || public.pos_order_label(p_order) || E'\n' ||
+         case when exists (select 1 from public.pos_items x where x.order_id = p_order and x.status in ('enviado', 'anulado'))
+              then E'^+ AGREGADO\n' else '' end ||
          public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' ||
          string_agg('^' || trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name ||
                     case when i.variant <> '' then ' ' || i.variant else '' end ||
