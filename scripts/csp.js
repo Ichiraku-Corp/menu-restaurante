@@ -35,17 +35,29 @@ function policy(hashes) {
   ].join("; ");
 }
 
+// Huella de versión en los scripts propios (pos.js?v=abcd1234): así ningún navegador ni tablet se queda
+// con una copia vieja después de una actualización.
+function stampVersions(html) {
+  return html.replace(/(<script src=")((?:pos|reporte-cierre|mfa)\.js)(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
+    const f = path.join(ROOT, file);
+    if (!fs.existsSync(f)) return all;
+    const v = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 10);
+    return a + file + "?v=" + v + b;
+  });
+}
+
 const META_RE = /\n?<meta http-equiv="Content-Security-Policy" content="[^"]*">/;
 let stale = 0;
 for (const rel of PAGES) {
   const file = path.join(ROOT, rel);
   const html = fs.readFileSync(file, "utf8");
+  const stamped = stampVersions(html);
   const hashes = [];
   for (const [, body] of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
     hashes.push(crypto.createHash("sha256").update(body, "utf8").digest("base64"));
   }
   const meta = `<meta http-equiv="Content-Security-Policy" content="${policy(hashes)}">`;
-  const without = html.replace(META_RE, "");
+  const without = stamped.replace(META_RE, "");
   const updated = without.replace(/(<meta charset="utf-8">)/, `$1\n${meta}`);
   if (updated === without) throw new Error(`${rel}: falta <meta charset="utf-8">`);
   if (updated !== html) {
