@@ -695,7 +695,7 @@
       $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
         '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>" +
         '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
-      TABS = []; rpc("pos_tabs_list").then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
+      TABS = []; q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
       drawPayPersons(); drawPays(); $("payDlg").showModal();
     }).catch(fail);
   });
@@ -798,7 +798,7 @@
   function openIncoming(ix) {
     incFor = ix; var p = pays[ix], name = VERIFY[p.method];
     $("incTitle").textContent = "Pagos recibidos en " + name; $("incHelp").textContent = "Buscando…"; $("incBody").innerHTML = ""; $("incDlg").showModal();
-    rpc("pos_incoming_list", { p_source: p.method }).then(function (r) {
+    q(sb.rpc("pos_incoming_list", { p_source: p.method })).then(function (r) {
       var used = pays.map(function (x, j) { return j !== ix && x.incoming_id; }).filter(Boolean);
       incRows = (r.rows || []).filter(function (x) { return used.indexOf(x.id) < 0; });
       var help = !r.checked_at ? "La laptop de caja todavía no está revisando " + name + " (faltan las claves en el puente)."
@@ -924,7 +924,7 @@
   // ---------------------------------------------------------------- Cuentas del personal
   var tabSel = null;
   function openTabs() {
-    rpc("pos_tabs_list").then(function (t) {
+    q(sb.rpc("pos_tabs_list")).then(function (t) {
       TABS = t || []; tabSel = null; show("tabPay", false);
       $("tabBody").innerHTML = TABS.map(function (x) {
         var over = num(x.balance) >= num(x.limit);
