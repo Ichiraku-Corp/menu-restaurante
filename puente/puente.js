@@ -302,7 +302,31 @@ if (require.main === module) {
     lock.listen(47811, "127.0.0.1", () => startBridge());
   }
 }
+// ---------------------------------------------------------------- App de sala servida desde la laptop
+// Para tablets cuya red no abre GitHub: http://IP-DE-LA-LAPTOP:8080/pos.html (archivos en la carpeta «app»).
+const http = require("http");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css", ".json": "application/json",
+  ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".ico": "image/x-icon" };
+function serveApp() {
+  const root = path.join(DIR, "app");
+  if (cfg.app_port === false || !fs.existsSync(path.join(root, "pos.html"))) return;
+  const port = cfg.app_port || 8080;
+  http.createServer((req, res) => {
+    let rel = decodeURIComponent((req.url || "/").split("?")[0]);
+    if (rel === "/" || rel === "") rel = "/pos.html";
+    const file = path.normalize(path.join(root, rel));
+    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end("No encontrado"); return; }
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(file).toLowerCase()] || "application/octet-stream", "Cache-Control": "no-cache" });
+    fs.createReadStream(file).pipe(res);
+  }).on("error", (e) => log("ERROR al servir la app: " + e.message))
+    .listen(port, "0.0.0.0", () => {
+      const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === "IPv4" && !i.internal).map((i) => i.address);
+      log("App de sala para las tablets: " + ips.map((ip) => `http://${ip}:${port}/pos.html`).join("  ·  "));
+    });
+}
+
 function startBridge() {
+  serveApp();
   {
     const desc = (p) => (p ? (p.windows ? "USB «" + p.windows + "»" : p.ip) : "sin configurar");
     log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)} · Edo ${desc(cfg.printers.edo)}`);
