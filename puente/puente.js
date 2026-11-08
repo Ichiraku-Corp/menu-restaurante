@@ -467,12 +467,29 @@ async function checkBinance(retry) {
   } catch (e) { await reportCheck("binance", e); }
 }
 let ppToken = null, ppExp = 0, ppRetry = null;
+// HTTPS con más paciencia (45 s) y por IPv4: en la red del local la conexión a PayPal a veces tarda
+// más de los 10 s que espera fetch y fallaba con UND_ERR_CONNECT_TIMEOUT.
+function httpsJson(url, o) {
+  o = o || {};
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: o.method || "GET", headers: o.headers || {}, family: 4, timeout: 45000 }, (res) => {
+      const ch = []; res.on("data", (c) => ch.push(c));
+      res.on("end", () => { let j = {}; try { j = JSON.parse(Buffer.concat(ch).toString("utf8")); } catch (e) { /* no es JSON */ }
+        resolve({ ok: res.statusCode < 300, status: res.statusCode, json: async () => j }); });
+    });
+    req.on("timeout", () => req.destroy(Object.assign(new Error("no respondió a tiempo"), { name: "TimeoutError" })));
+    req.on("error", reject);
+    if (o.body) req.write(o.body);
+    req.end();
+  });
+}
 async function checkPaypal() {
   const p = cfg.paypal; if (!p || !p.client_id || !p.client_secret) return;
   try {
     const base = p.sandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com";
     if (!ppToken || Date.now() > ppExp - 60e3) {
-      const r = await fetch(`${base}/v1/oauth2/token`, { method: "POST", body: "grant_type=client_credentials", signal: AbortSignal.timeout(30000),
+      const r = await httpsJson(`${base}/v1/oauth2/token`, { method: "POST", body: "grant_type=client_credentials",
         headers: { Authorization: "Basic " + Buffer.from(`${p.client_id}:${p.client_secret}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" } });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(`clave rechazada (${r.status} ${j.error_description || j.error || ""})`);
@@ -480,7 +497,7 @@ async function checkPaypal() {
     }
     const iso = (d) => new Date(d).toISOString().replace(/\.\d{3}Z$/, "Z");
     const url = `${base}/v1/reporting/transactions?start_date=${iso(Date.now() - 3 * 86400e3)}&end_date=${iso(Date.now())}&fields=transaction_info,payer_info&page_size=200`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${ppToken}` }, signal: AbortSignal.timeout(30000) });
+    const r = await httpsJson(url, { headers: { Authorization: `Bearer ${ppToken}` } });
     const j = await r.json().catch(() => ({}));
     if (VERBOSE) console.log(`PayPal respondió ${r.status}: ${(j.transaction_details || []).length} movimientos en 3 días`, r.ok ? "" : j);
     if (r.status === 401) ppToken = null;
