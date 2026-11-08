@@ -90,6 +90,21 @@ function render(body) {
   parts.push(Buffer.from([GS, 0x56, 0x42, 0x00]));   // cortar el papel
   return Buffer.concat(parts);
 }
+// Impresora instalada en Windows (por USB): se manda el ticket tal cual con imprimir-usb.ps1.
+const { execFile } = require("child_process");
+const os = require("os");
+function sendWindows(name, data) {
+  return new Promise((resolve, reject) => {
+    const tmp = path.join(os.tmpdir(), `ichiraku-${Date.now()}-${Math.random().toString(36).slice(2)}.bin`);
+    fs.writeFileSync(tmp, data);
+    execFile("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(DIR, "imprimir-usb.ps1"), "-Impresora", name, "-Archivo", tmp],
+      { timeout: 30000, windowsHide: true }, (err, stdout, stderr) => {
+        try { fs.unlinkSync(tmp); } catch (e) { /* nada */ }
+        if (err) reject(new Error(`Impresora «${name}»: ${(stderr || err.message).toString().trim().split("\n").pop()}`)); else resolve();
+      });
+  });
+}
+function sendTo(p, data) { return p.windows ? sendWindows(p.windows, data) : send(p.ip, p.port, data); }
 function send(ip, port, data) {
   return new Promise((resolve, reject) => {
     const s = net.createConnection({ host: ip, port: port || 9100 });
@@ -110,7 +125,7 @@ async function tick() {
       const p = (cfg.printers || {})[j.printer];
       if (!p) { await rpc("pos_print_done", { p_id: j.id, p_ok: false, p_error: `No hay impresora «${j.printer}» en config.json` }); continue; }
       try {
-        await send(p.ip, p.port, render(j.body));
+        await sendTo(p, render(j.body));
         await rpc("pos_print_done", { p_id: j.id, p_ok: true });
         log(`Impreso #${j.id} en ${j.printer}`);
       } catch (e) {
@@ -271,11 +286,12 @@ if (require.main === module) {
   if (process.argv.includes("--prueba")) {
     const which = process.argv[process.argv.indexOf("--prueba") + 1] || "cocina";
     const p = cfg.printers[which];
-    send(p.ip, p.port, render(`^PRUEBA ${which.toUpperCase()}\nPuente de impresion Ichiraku\n${new Date().toLocaleString("es-VE")}\n=\nSi lees esto, la impresora funciona.`))
-      .then(() => { console.log("Enviado a " + which + " (" + p.ip + ")"); process.exit(0); })
+    sendTo(p, render(`^PRUEBA ${which.toUpperCase()}\nPuente de impresion Ichiraku\n${new Date().toLocaleString("es-VE")}\n=\nSi lees esto, la impresora funciona.`))
+      .then(() => { console.log("Enviado a " + which + " (" + (p.windows || p.ip) + ")"); process.exit(0); })
       .catch((e) => { console.error(e.message); process.exit(1); });
   } else {
-    log(`Puente iniciado. Cocina ${cfg.printers.cocina && cfg.printers.cocina.ip} · Caja ${cfg.printers.caja && cfg.printers.caja.ip}`);
+    const desc = (p) => (p ? (p.windows ? "USB «" + p.windows + "»" : p.ip) : "sin configurar");
+    log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)}`);
     tick(); setInterval(tick, POLL_MS);
     updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
     sendReports(); setInterval(sendReports, 60e3);
