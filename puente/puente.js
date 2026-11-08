@@ -198,11 +198,50 @@ let lastRate = "";
 // Fecha en Caracas (UTC-4) y siguiente día hábil (el BCV publica en la tarde la tasa del próximo día hábil)
 function ccsDate(ms) { return new Date(ms - 4 * 3600e3).toISOString().slice(0, 10); }
 function nextBusinessDay(ymd) { const d = new Date(ymd + "T12:00:00Z"); do d.setUTCDate(d.getUTCDate() + 1); while ([0, 6].includes(d.getUTCDay())); return d.toISOString().slice(0, 10); }
-// Fuente 1: la página del BCV
+// Fuente 1: la página del BCV. Su certificado viene incompleto (le falta el intermedio), así que el puente
+// descarga ese intermedio desde la dirección que trae el propio certificado (AIA) y lo guarda; la conexión sigue verificada.
+const https = require("https"), httpMod = require("http");
+const BCV_CA = path.join(DIR, "bcv-intermedio.pem");
+function getUrl(url, opts) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https:") ? https : httpMod;
+    const req = mod.get(url, Object.assign({ headers: { "User-Agent": "Mozilla/5.0 (Ichiraku-puente)" }, timeout: 40000 }, opts || {}), (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve(getUrl(new URL(res.headers.location, url).href, opts)); }
+      const chunks = []; res.on("data", (c) => chunks.push(c)); res.on("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks) }));
+    });
+    req.on("timeout", () => req.destroy(Object.assign(new Error("no respondió a tiempo"), { name: "TimeoutError" })));
+    req.on("error", reject);
+  });
+}
+function toPem(der) {
+  if (der.toString("latin1").includes("-----BEGIN CERTIFICATE-----")) return der.toString("latin1");
+  return "-----BEGIN CERTIFICATE-----\n" + der.toString("base64").match(/.{1,64}/g).join("\n") + "\n-----END CERTIFICATE-----\n";
+}
+async function fetchBcvIntermediate() {
+  const leaf = await new Promise((resolve, reject) => {
+    const s = tls.connect({ host: "www.bcv.org.ve", port: 443, servername: "www.bcv.org.ve", rejectUnauthorized: false }, () => { const c = s.getPeerCertificate(); s.end(); resolve(c); });
+    s.setTimeout(30000, () => s.destroy(new Error("no respondió a tiempo"))); s.on("error", reject);
+  });
+  const m = String(leaf.infoAccess && leaf.infoAccess["CA Issuers - URI"] || "").match(/https?:\/\/\S+/);
+  if (!m) throw new Error("el certificado del BCV no indica dónde está su intermedio");
+  const r = await getUrl(m[0]);
+  if (r.status !== 200) throw new Error("no se pudo bajar el intermedio (" + r.status + ")");
+  fs.writeFileSync(BCV_CA, toPem(r.body));
+  log("Certificado intermedio del BCV descargado y guardado");
+}
+async function bcvGet() {
+  const ca = () => tls.rootCertificates.concat(fs.existsSync(BCV_CA) ? [fs.readFileSync(BCV_CA, "utf8")] : []);
+  try { return await getUrl("https://www.bcv.org.ve/", { ca: ca() }); }
+  catch (e) {
+    if (!/UNABLE_TO_VERIFY_LEAF_SIGNATURE|UNABLE_TO_GET_ISSUER_CERT/.test(e.code || e.message)) throw e;
+    await fetchBcvIntermediate();
+    return await getUrl("https://www.bcv.org.ve/", { ca: ca() });
+  }
+}
 async function rateFromBcv() {
-  const r = await fetch("https://www.bcv.org.ve/", { headers: { "User-Agent": "Mozilla/5.0 (Ichiraku-puente)" }, signal: AbortSignal.timeout(40000) });
-  if (!r.ok) throw new Error("respondió " + r.status);
-  const html = await r.text();
+  const r = await bcvGet();
+  if (r.status !== 200) throw new Error("respondió " + r.status);
+  const html = r.body.toString("utf8");
   try { return parseBcv(html); }
   catch (e) { try { fs.writeFileSync(path.join(DIR, "bcv-pagina.html"), html); } catch (e2) { /* nada */ } throw new Error(e.message + " (copia guardada en bcv-pagina.html)"); }
 }
@@ -220,7 +259,7 @@ async function rateFromDolarApi() {
     date = hour >= 15 || dow === 0 || dow === 6 ? nextBusinessDay(day) : day; }
   return { rate: Math.round(rate * 10000) / 10000, date };
 }
-function errText(e) { return e.cause ? e.cause.code || e.cause.message : e.name === "TimeoutError" ? "no respondió a tiempo" : e.message; }
+function errText(e) { return e.cause ? e.cause.code || e.cause.message : e.name === "TimeoutError" ? "no respondió a tiempo" : e.code || e.message; }
 let rateTimer = null;
 async function updateRate() {
   clearTimeout(rateTimer);
