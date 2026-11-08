@@ -316,7 +316,13 @@ function serveApp() {
     if (rel === "/" || rel === "") rel = "/pos.html";
     const file = path.normalize(path.join(root, rel));
     if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end("No encontrado"); return; }
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file).toLowerCase()] || "application/octet-stream", "Cache-Control": "no-cache" });
+    const ext = path.extname(file).toLowerCase();
+    res.writeHead(200, { "Content-Type": TYPES[ext] || "application/octet-stream", "Cache-Control": "no-cache" });
+    if (ext === ".html") {
+      // En la red local se sirve por http: se quita «upgrade-insecure-requests», que obligaría a pedir todo por https.
+      res.end(fs.readFileSync(file, "utf8").replace(/;\s*upgrade-insecure-requests/g, ""));
+      return;
+    }
     fs.createReadStream(file).pipe(res);
   }).on("error", (e) => log("ERROR al servir la app: " + e.message))
     .listen(port, "0.0.0.0", () => {
