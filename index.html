@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-+gL952uMqivD76ucNhnbM0w2af7/YLj+G9ZaHS+p7r4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-nI/gj9SK5+J3mcVNrsMo+OhcO8RYtzL2KwQGAiqqZD8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -585,7 +585,12 @@
     return Promise.all([
       fetchJson(base + "categories?select=id,name,subtitle,position&order=position", h),
       fetchJson(base + "dishes?select=id,category_id,name,subtitle,description,price,variants,options,photo_url,tags,available,position&order=position", h)
-    ]).then(function (r) { return { categories: r[0], dishes: r[1] }; });
+    ]).then(function (r) {
+      // Los productos «solo-caja» (envases y bolsa para llevar) no salen en la carta pública
+      var dishes = r[1].filter(function (d) { return (d.tags || []).indexOf("solo-caja") < 0; });
+      var cats = r[0].filter(function (c) { return dishes.some(function (d) { return d.category_id === c.id; }); });
+      return { categories: cats, dishes: dishes };
+    });
   }
 
   // 1) Pinta al instante lo último que vio este móvil; 2) actualiza en segundo plano.
