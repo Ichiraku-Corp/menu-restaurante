@@ -26,6 +26,23 @@
   var LOGO = {"efectivo_usd": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#15803d\"/><rect x=\"4.5\" y=\"9\" width=\"23\" height=\"14\" rx=\"2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><text x=\"16\" y=\"19.8\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"9.5\" font-weight=\"800\" fill=\"#fff\">$</text></svg>", "efectivo_bs": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#166534\"/><rect x=\"4.5\" y=\"9\" width=\"23\" height=\"14\" rx=\"2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><text x=\"16\" y=\"19.8\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"7.5\" font-weight=\"800\" fill=\"#fff\">Bs</text></svg>", "pago_movil": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#0f766e\"/><rect x=\"10.5\" y=\"5.5\" width=\"11\" height=\"21\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><circle cx=\"16\" cy=\"22.5\" r=\"1.3\" fill=\"#fff\"/><path d=\"M14 10.5h4.5M16.2 8.5l2.3 2-2.3 2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M18 16.5h-4.5M15.8 14.5l-2.3 2 2.3 2\" fill=\"none\" stroke=\"#fff\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>", "punto_debito": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#1d4ed8\"/><rect x=\"5\" y=\"9\" width=\"22\" height=\"15\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><path d=\"M5 13.5h22\" stroke=\"#fff\" stroke-width=\"2.6\"/><text x=\"16\" y=\"21.6\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"6.2\" font-weight=\"800\" fill=\"#fff\">DÉB</text></svg>", "punto_credito": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#7c3aed\"/><rect x=\"5\" y=\"9\" width=\"22\" height=\"15\" rx=\"2.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2\"/><path d=\"M5 13.5h22\" stroke=\"#fff\" stroke-width=\"2.6\"/><text x=\"16\" y=\"21.6\" text-anchor=\"middle\" font-family=\"system-ui,sans-serif\" font-size=\"6.2\" font-weight=\"800\" fill=\"#fff\">CRÉ</text></svg>", "zelle": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#6d1ed4\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#fff\" d=\"M13.559 24h-2.841a.483.483 0 0 1-.483-.483v-2.765H5.638a.667.667 0 0 1-.666-.666v-2.234a.67.67 0 0 1 .142-.412l8.139-10.382h-7.25a.667.667 0 0 1-.667-.667V3.914c0-.367.299-.666.666-.666h4.23V.483c0-.266.217-.483.483-.483h2.841c.266 0 .483.217.483.483v2.765h4.323c.367 0 .666.299.666.666v2.137a.67.67 0 0 1-.141.41l-8.19 10.481h7.665c.367 0 .666.299.666.666v2.477a.667.667 0 0 1-.666.667h-4.32v2.765a.483.483 0 0 1-.483.483Z\"/></g></svg>", "binance": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#181a20\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#f0b90b\" d=\"M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z\"/></g></svg>", "paypal": "<svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><rect width=\"32\" height=\"32\" rx=\"8\" fill=\"#003087\"/><g transform=\"translate(6 6) scale(.8333)\"><path fill=\"#fff\" d=\"M7.016 19.198h-4.2a.562.562 0 0 1-.555-.65L5.093.584A.692.692 0 0 1 5.776 0h7.222c3.417 0 5.904 2.488 5.846 5.5-.006.25-.027.5-.066.747A6.794 6.794 0 0 1 12.071 12H8.743a.69.69 0 0 0-.682.583l-.325 2.056-.013.083-.692 4.39-.015.087zM19.79 6.142c-.01.087-.01.175-.023.261a7.76 7.76 0 0 1-7.695 6.598H9.007l-.283 1.795-.013.083-.692 4.39-.134.843-.014.088H6.86l-.497 3.15a.562.562 0 0 0 .555.65h3.612c.34 0 .63-.249.683-.585l.952-6.031a.692.692 0 0 1 .683-.584h2.126a6.793 6.793 0 0 0 6.707-5.752c.306-1.95-.466-3.744-1.89-4.906z\"/></g></svg>"};
   function logo(k) { return '<span class="logo">' + (LOGO[k] || "") + "</span>"; }
   var AREAS = ["Feria", "Tokio", "Edo"];
+  var IC = {
+    send: '<path d="M4 12 20 4l-4 16-4-7-8-1z"/><path d="m12 13 8-9"/>',
+    receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+    cash: '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v.01M18 15v.01"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+    move: '<path d="M7 7h11l-3-3M17 17H6l3 3"/>',
+    x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    back: '<path d="M15 5l-7 7 7 7"/>',
+    box: '<path d="M4 7h16v13H4zM2 4h20v3H2zM10 11h4"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h10"/>'
+  };
+  function icon(n) { return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + "</svg>"; }
+  function label(id, n, text) { $(id).innerHTML = icon(n) + "<span>" + esc(text) + "</span>"; }
+  var AV = ["#e5206b", "#2563c4", "#22784a", "#a85a00", "#7c3aed", "#0f766e", "#b3261e", "#4b5563"];
+  function avatar(name, id) { var t = String(name || "?").trim(); return '<span class="avatar" style="background:' + AV[(Number(id) || t.length) % AV.length] + '">' + esc(t.charAt(0).toUpperCase()) + "</span>"; }
+  label("precuenta", "receipt", "Precuenta"); label("pay", "cash", "Cobrar"); label("discount", "percent", "Descuento");
+  label("move", "move", "Mover"); label("cancel", "x", "Anular pedido"); label("back", "back", "Mesas"); label("btnCaja", "box", "Caja");
 
   var U = null;              // { id, name, pin } persona que está usando el dispositivo
   var ST = null;             // estado de sala (pos_state)
@@ -60,7 +77,7 @@
   function lock() {
     U = null; pinBuf = ""; selected = null;
     ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
-    $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + esc(s.name) + "</button>"; }).join("");
+    $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + avatar(s.name, s.id) + "<span>" + esc(s.name) + "</span></button>"; }).join("");
     closeDialogs();
   }
   var selected = null, pinBuf = "";
@@ -85,7 +102,7 @@
     q(sb.rpc("pos_check_pin", { p_emp: emp.id, p_pin: pin })).then(function (r) {
       if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
       U = { id: emp.id, name: r.name || emp.name, pin: pin };
-      show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").textContent = U.name + " · Salir";
+      show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
       touch(); goTables();
     }).catch(fail);
   }
@@ -101,7 +118,7 @@
   function loadMenu() {
     return Promise.all([
       q(sb.from("categories").select("id,name,position").order("position")),
-      q(sb.from("dishes").select("id,category_id,name,price,variants,options,available,position").order("position"))
+      q(sb.from("dishes").select("id,category_id,name,price,variants,options,available,position,photo_url").order("position"))
     ]).then(function (r) { MENU.cats = r[0]; MENU.dishes = r[1]; if (!cur.cat && MENU.cats[0]) cur.cat = MENU.cats[0].id; if (cur.order) drawMenu(); }).catch(fail);
   }
   setInterval(function () { if (U) loadMenu(); }, 60000);
@@ -113,6 +130,7 @@
   function refreshState() {
     return q(sb.rpc("pos_state")).then(function (s) {
       ST = s;
+      $("rate").classList.toggle("bad", !s.rate);
       $("rate").textContent = s.rate ? "€ BCV " + nf2.format(s.rate) + (s.rate_date && s.rate_date !== today() ? " (de " + s.rate_date.slice(8, 10) + "/" + s.rate_date.slice(5, 7) + ")" : "") : "Sin tasa del día";
       if (!$("tablesView").classList.contains("hidden")) drawTables();
       drawBanners();
@@ -142,13 +160,16 @@
         : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
         : a === "Por cobrar" ? ST.orders.length
         : ST.orders.filter(function (o) { var t = tableById(o.table_id); return t && t.area === a; }).length;
-      return '<button type="button" data-area="' + esc(a) + '"' + (cur.area === a ? ' class="on"' : "") + ">" + esc(a) + (n ? " · " + n : "") + "</button>";
+      return '<button type="button" data-area="' + esc(a) + '"' + (cur.area === a ? ' class="on"' : "") + ">" + esc(a) + (n ? ' <span class="cnt">' + n + "</span>" : "") + "</button>";
     }).join("");
+    var due = ST.orders.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = ST.orders.filter(function (o) { return o.precuenta_at; }).length,
+      busyT = ST.orders.filter(function (o) { return o.kind === "mesa"; }).length;
+    $("summary").innerHTML = '<div class="s"><span>Mesas ocupadas</span><b>' + busyT + " / " + ST.tables.length + '</b></div><div class="s"><span>Por cobrar</span><b>' + ref(due) + "</b></div>" +
+      '<div class="s"><span>Pidieron la cuenta</span><b>' + asked + "</b></div>" + '<div class="s"><span>Caja</span><b style="color:' + (ST.session ? "var(--ok)" : "var(--warn)") + '">' + (ST.session ? "Abierta" : "Cerrada") + "</b></div>";
     if (cur.area === "Para llevar" || cur.area === "Delivery") {
       var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; });
-      $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="busy" style="border-style:dashed">+ Nuevo<small>' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +
-        list.map(function (o) { return '<button type="button" class="busy" data-order="' + o.id + '">' + esc(o.label.replace(/^(Para llevar|Delivery): /, "") || cur.area) +
-          "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small>" + badges(o) + "</button>"; }).join("") + "</div>";
+      $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="new"><span class="num">+</span><small>Nuevo ' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +
+        list.map(function (o) { return tableCard(o, esc(o.label.replace(/^(Para llevar|Delivery): /, "") || cur.area), 'data-order="' + o.id + '"'); }).join("") + "</div>";
       return;
     }
     if (cur.area === "Por cobrar") {
@@ -157,21 +178,26 @@
       $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + " pedidos abiertos · " + ref(due) + " por cobrar</b>" +
         '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length ? '<table class="tbl" style="margin-top:8px"><thead><tr><th>Pedido</th><th>Tiempo</th><th>Estado</th><th class="r">Total</th><th class="r">Falta</th></tr></thead><tbody>' +
         all.map(function (o) { return '<tr data-order="' + o.id + '" style="cursor:pointer"><td><b>' + esc(o.label) + '</b><div class="muted">' + esc(o.opened_by || "") + "</div></td><td>" + mins(o.opened_at) + "</td><td>" +
-          (o.precuenta_at ? '<span class="pend" style="background:var(--accent);color:#fff;border-radius:999px;padding:1px 8px;font-size:12px">pidió la cuenta</span>' : '<span class="muted">comiendo</span>') +
-          (num(o.paid) > 0 ? ' <span class="muted">abonó ' + ref(num(o.paid)) + "</span>" : "") + '</td><td class="r">' + ref(o.total) + '</td><td class="r"><b>' + ref(num(o.total) - num(o.paid)) + "</b></td></tr>"; }).join("") +
+          (o.precuenta_at ? '<span class="pill bill">pidió la cuenta</span>' : '<span class="pill eat">comiendo</span>') +
+          (num(o.paid) > 0 ? ' <span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "") + '</td><td class="r">' + ref(o.total) + '</td><td class="r"><b>' + ref(num(o.total) - num(o.paid)) + "</b></td></tr>"; }).join("") +
         "</tbody></table>" : '<p class="muted">No hay mesas por cobrar.</p>') + "</div>";
       return;
     }
     var tables = ST.tables.filter(function (t) { return t.area === cur.area; });
-    $("areaBody").innerHTML = '<div class="tables">' + tables.map(function (t) {
+    $("areaBody").innerHTML = '<div class="legend"><span><i></i>Libre</span><span><i class="busy"></i>Comiendo</span><span><i class="bill"></i>Pidió la cuenta</span><span><i class="pend"></i>Platos sin enviar</span><span>Tiempo en naranja: más de 1 hora</span></div>' +
+      '<div class="tables">' + tables.map(function (t) {
       var o = ST.orders.find(function (x) { return x.table_id === t.id; });
-      return '<button type="button" data-table="' + t.id + '"' + (o ? ' class="busy"' : "") + ">" + t.number +
-        (o ? "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small><small>" + esc(o.opened_by || "") + "</small>" + badges(o) : "<small>libre</small>") + "</button>";
+      return o ? tableCard(o, String(t.number), 'data-table="' + t.id + '"')
+        : '<button type="button" data-table="' + t.id + '"><span class="st">Libre</span><span class="num">' + t.number + "</span><small>&nbsp;</small></button>";
     }).join("") + "</div>";
   }
+  function tableCard(o, title, attr) {
+    var m = Math.round((Date.now() - new Date(o.opened_at).getTime()) / 60000), cls = (o.precuenta_at ? "bill" : "busy") + (o.pending ? " has-pend" : "");
+    return '<button type="button" class="' + cls + '" ' + attr + '><span class="st">' + (o.precuenta_at ? "Pidió la cuenta" : o.items ? "Comiendo" : "Abierta") + '</span><span class="num">' + title + "</span>" +
+      '<span class="amt">' + ref(num(o.total) - num(o.paid)) + "</span><small>" + esc(o.opened_by || "") + ' · <span class="' + (m >= 60 ? "late" : "") + '">' + mins(o.opened_at) + "</span></small>" + badges(o) + "</button>";
+  }
   function badges(o) {
-    return (o.pending ? '<span class="pend">sin enviar</span>' : "") + (o.precuenta_at ? '<span class="pend" style="background:var(--accent)">pidió la cuenta</span>' : "") +
-      (num(o.paid) > 0 ? '<span class="pend" style="background:var(--ok)">abonó ' + ref(num(o.paid)) + "</span>" : "");
+    return (o.pending ? '<span class="pend">sin enviar</span>' : "") + (num(o.paid) > 0 ? '<span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "");
   }
   function tableById(id) { return ST && ST.tables.find(function (t) { return t.id === id; }); }
   function mins(ts) { var m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; }
@@ -226,8 +252,9 @@
     $("cats").innerHTML = MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
     var list = MENU.dishes.filter(function (d) { return term ? d.name.toLowerCase().indexOf(term) >= 0 : d.category_id === cur.cat; });
     $("dishes").innerHTML = list.map(function (d) {
-      return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + ">" + esc(d.name) +
-        "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span></button>";
+      var img = d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>";
+      return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
+        "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span></span></button>";
     }).join("") || '<p class="muted">Sin resultados.</p>';
   }
   $("search").addEventListener("input", drawMenu);
@@ -269,12 +296,14 @@
     var same = cur.cart.find(function (c) { return c.dish.id === p.dish.id && c.variant === p.variant && c.option === p.option && c.notes === p.notes && !p.notes; });
     if (same) same.qty += p.qty; else cur.cart.push({ dish: p.dish, variant: p.variant, option: p.option, qty: p.qty, notes: p.notes || "" });
     toast("+" + p.qty + " " + p.dish.name + (p.variant ? " " + p.variant : ""));
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+    var btn = document.querySelector('#dishes [data-dish="' + p.dish.id + '"]'); if (btn) { btn.classList.remove("flash"); void btn.offsetWidth; btn.classList.add("flash"); }
     drawTicket();
   }
 
   function drawTicket() {
     var d = cur.data; if (!d) return;
-    $("orderTitle").textContent = d.label + (d.day_number ? " · Orden #" + d.day_number : "");
+    $("orderTitle").innerHTML = esc(d.label) + (d.day_number ? "<small>Orden #" + d.day_number + "</small>" : "");
     $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
       ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
       : "Para llevar (sin servicio)";
@@ -288,11 +317,11 @@
         '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + "</span></div>";
     });
     cur.cart.forEach(function (c, ix) {
-      h += '<div class="line new click" data-cart="' + ix + '"><span class="q">' + c.qty + '</span><span class="t">' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") +
-        (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + '<small>nuevo · toca para quitar</small></span><span class="p">' +
+      h += '<div class="line new" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
+        (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + '<small>nuevo, sin enviar</small></span><span class="p">' +
         ref(c.qty * priceOf(c.dish, c.variant)) + "</span></div>";
     });
-    $("lines").innerHTML = h || '<p class="muted" style="padding:8px">Sin platos todavía. Elige de la carta.</p>';
+    $("lines").innerHTML = h || '<p class="emptyline">Sin platos todavía.<br>Elige de la carta.</p>';
     var t = d.totals, cartSum = cur.cart.reduce(function (s, c) { return s + c.qty * priceOf(c.dish, c.variant); }, 0), rate = ST && ST.rate;
     var sub = num(t.subtotal) + cartSum, disc = Math.min(num(t.discount), sub), svc = Math.round((sub - disc) * num(d.service_pct)) / 100, dl = num(t.delivery), tot = sub - disc + svc + dl, paid = num(t.paid);
     $("totals").innerHTML = '<div class="tot"><span>Subtotal</span><span>' + ref(sub) + "</span></div>" +
@@ -304,7 +333,7 @@
       (rate ? '<div class="tot muted"><span>En bolívares</span><span>' + bs(Math.round((tot - paid) * rate * 100) / 100) + "</span></div>" : "") +
       (d.precuenta_at ? '<div class="muted">Precuenta impresa a las ' + new Date(d.precuenta_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + "</div>" : "");
     var pending = cur.cart.length + d.items.filter(function (i) { return i.status === "pendiente"; }).length;
-    $("send").textContent = pending ? "Enviar a cocina (" + pending + ")" : "Enviar a cocina";
+    label("send", "send", pending ? "Enviar a cocina (" + pending + ")" : "Enviar a cocina");
     $("send").disabled = !pending;
     var hasItems = d.items.some(function (i) { return i.status !== "anulado"; });
     $("pay").disabled = !hasItems || pending > 0; $("precuenta").disabled = !hasItems || pending > 0;
@@ -316,7 +345,12 @@
 
   $("lines").addEventListener("click", function (e) {
     var c = e.target.closest("[data-cart]");
-    if (c) { cur.cart.splice(Number(c.dataset.cart), 1); drawTicket(); return; }
+    if (c) {
+      var ci = Number(c.dataset.cart), it0 = cur.cart[ci];
+      if (e.target.closest("[data-inc]")) it0.qty = Math.min(50, it0.qty + 1);
+      else if (e.target.closest("[data-dec]")) { it0.qty -= 1; if (it0.qty <= 0) cur.cart.splice(ci, 1); }
+      drawTicket(); return;
+    }
     var l = e.target.closest("[data-item]"); if (!l || l.classList.contains("void")) return;
     var it = cur.data.items.find(function (i) { return i.id === Number(l.dataset.item); });
     if (it.status === "pendiente") { rpc("pos_void", { p_item: it.id, p_reason: "" }).then(loadOrder).catch(fail); return; }
