@@ -130,6 +130,23 @@ create table if not exists public.pos_payments (
 create index if not exists pos_payments_session on public.pos_payments (session_id);
 alter table public.pos_payments add column if not exists person smallint;   -- persona que pagó (cuenta dividida)
 
+-- Pagos recibidos que el puente lee de Binance / PayPal (y luego Banesco) para verificar los cobros.
+create table if not exists public.pos_incoming (
+  id          bigint generated always as identity primary key,
+  source      text not null check (source in ('binance', 'paypal', 'banesco')),
+  tx_id       text not null,
+  amount      numeric(14,2) not null,
+  currency    text not null default '',
+  payer       text not null default '',
+  note        text not null default '',
+  received_at timestamptz not null,
+  created_at  timestamptz not null default now(),
+  payment_id  bigint references public.pos_payments(id) on delete set null,
+  unique (source, tx_id)
+);
+alter table public.pos_incoming enable row level security;
+alter table public.pos_payments add column if not exists incoming_id bigint references public.pos_incoming(id) on delete set null;
+
 create table if not exists public.pos_print_jobs (
   id         bigint generated always as identity primary key,
   printer    text not null check (printer in ('cocina', 'caja', 'edo')),
@@ -609,7 +626,7 @@ end $$;
 drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text);
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0;
+declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
@@ -622,15 +639,23 @@ begin
   select * into t from public.pos_totals(p_order);
   due := round(t.total - t.paid, 2);
   rt := public.pos_rate();
-  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int) loop
+  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint) loop
     if coalesce(p.amount, 0) <= 0 then continue; end if;
     if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
     who := coalesce(p.person, who);
     cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal') then 'REF' else 'BS' end;
     if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
     ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
-    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
-    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person);
+    if p.incoming_id is not null then
+      select * into inc from public.pos_incoming where id = p.incoming_id for update;
+      if inc.id is null or inc.source <> p.method then raise exception 'Ese pago recibido no corresponde a %', p.method; end if;
+      if inc.payment_id is not null then raise exception 'Ese pago de % ya se usó en otra cuenta', inc.source; end if;
+      p.reference := inc.tx_id;
+    end if;
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, incoming_id)
+    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person, p.incoming_id)
+    returning id into pid;
+    if p.incoming_id is not null then update public.pos_incoming set payment_id = pid where id = p.incoming_id; end if;
     paid := paid + ref;
   end loop;
   if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
@@ -1068,6 +1093,50 @@ begin
   return n;
 end $$;
 
+-- ---------------------------------------------------------------- Pagos recibidos (verificación)
+create table if not exists public.pos_kv (key text primary key, value jsonb, updated_at timestamptz not null default now());
+alter table public.pos_kv enable row level security;
+
+-- El puente sube lo que llegó a Binance / PayPal; se ignoran los que ya estaban.
+create or replace function public.pos_incoming_push(p_rows jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  insert into public.pos_incoming (source, tx_id, amount, currency, payer, note, received_at)
+  select x.source, x.tx_id, round(x.amount, 2), coalesce(x.currency, ''), left(coalesce(x.payer, ''), 80), left(coalesce(x.note, ''), 120), x.received_at
+  from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb)) as x(source text, tx_id text, amount numeric, currency text, payer text, note text, received_at timestamptz)
+  where x.source in ('binance', 'paypal', 'banesco') and coalesce(x.tx_id, '') <> '' and x.amount > 0
+  on conflict (source, tx_id) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- Lo que llegó en las últimas 36 h y todavía no se ha usado en ninguna cuenta.
+create or replace function public.pos_incoming_list(p_source text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  return jsonb_build_object(
+    'rows', (select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'tx_id', i.tx_id, 'amount', i.amount, 'currency', i.currency,
+               'payer', i.payer, 'note', i.note, 'received_at', i.received_at) order by i.received_at desc), '[]'::jsonb)
+             from public.pos_incoming i where i.source = p_source and i.payment_id is null and i.received_at > now() - interval '36 hours'),
+    'last_sync', (select max(created_at) from public.pos_incoming where source = p_source),
+    'checked_at', (select (value #>> '{}')::timestamptz from public.pos_kv where key = 'incoming_checked_' || p_source),
+    'error', (select value #>> '{}' from public.pos_kv where key = 'incoming_error_' || p_source));
+end $$;
+
+-- El puente avisa cuándo revisó por última vez (aunque no haya llegado nada nuevo).
+create or replace function public.pos_incoming_checked(p_source text, p_error text default '')
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  insert into public.pos_kv (key, value) values ('incoming_checked_' || p_source, to_jsonb(now()))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into public.pos_kv (key, value) values ('incoming_error_' || p_source, to_jsonb(coalesce(p_error, '')))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+end $$;
+
 -- ---------------------------------------------------------------- Permisos de las funciones
 do $$
 declare f text;
@@ -1085,7 +1154,8 @@ begin
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
-    'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)'] loop
+    'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
+    'pos_incoming_checked(text, text)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

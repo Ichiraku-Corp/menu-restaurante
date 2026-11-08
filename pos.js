@@ -689,7 +689,10 @@
       return '<div class="pay" data-i="' + i + '"><b class="mname">' + logo(m[0]) + m[1] + "</b>" +
         '<label class="money"><span>' + (isRef ? "$ / Ref" : "Bs") + '</span><input class="amt n" inputmode="decimal" value="' + esc(p.amount) + '" aria-label="Monto en ' + (isRef ? "divisas" : "bolívares") + '"></label>' +
         '<label class="money eqm"><span>' + (isRef ? "= Bs" : "= Ref") + '</span><input class="eq n" inputmode="decimal" value="' + esc(eqOf(p)) + '" aria-label="Equivalente en ' + (isRef ? "bolívares" : "Ref") + '"' + (ST.rate ? "" : " disabled") + "></label>" +
-        '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>' +
+        (VERIFY[p.method] ? (p.incoming_id
+          ? '<button type="button" class="vbtn ver" data-ver>✓ ' + esc(p.verified.payer || "Verificado") + " · " + nf2.format(p.verified.amount) + " " + esc(p.verified.currency) + "</button>"
+          : '<button type="button" class="vbtn" data-ver>Buscar pago recibido</button>')
+        : '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>') +
         '<button type="button" class="danger del" aria-label="Quitar">✕</button></div>';
     }).join("");
     updatePaySums();
@@ -729,6 +732,34 @@
     else if (e.target.classList.contains("refin")) p.reference = e.target.value;
     updatePaySums();
   });
+  // ---- Verificación: elegir el pago que de verdad llegó a Binance / PayPal (lo lee la laptop de caja)
+  var VERIFY = { binance: "Binance", paypal: "PayPal" }, incFor = null, incRows = [];
+  function ago(ts) { var m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000)); return m < 1 ? "ahora" : m < 60 ? "hace " + m + " min" : "hace " + Math.floor(m / 60) + " h " + (m % 60) + " min"; }
+  function openIncoming(ix) {
+    incFor = ix; var p = pays[ix], name = VERIFY[p.method];
+    $("incTitle").textContent = "Pagos recibidos en " + name; $("incHelp").textContent = "Buscando…"; $("incBody").innerHTML = ""; $("incDlg").showModal();
+    rpc("pos_incoming_list", { p_source: p.method }).then(function (r) {
+      var used = pays.map(function (x, j) { return j !== ix && x.incoming_id; }).filter(Boolean);
+      incRows = (r.rows || []).filter(function (x) { return used.indexOf(x.id) < 0; });
+      var help = !r.checked_at ? "La laptop de caja todavía no está revisando " + name + " (faltan las claves en el puente)."
+        : r.error ? "⚠ La laptop no pudo revisar " + name + ": " + r.error
+        : "Revisado " + ago(r.checked_at) + ". Toca el pago de este cliente." + (p.method === "paypal" ? " PayPal puede tardar hasta 3 horas en mostrar un pago." : "");
+      $("incHelp").textContent = help;
+      $("incBody").innerHTML = incRows.map(function (x, k) {
+        return '<button type="button" data-k="' + k + '"><span><b>' + esc(x.payer || "Sin nombre") + "</b><small>" + ago(x.received_at) + (x.note ? " · " + esc(x.note) : "") + " · Ref. " + esc(String(x.tx_id).slice(-8)) + "</small></span>" +
+          '<b class="n">' + nf2.format(x.amount) + " " + esc(x.currency) + "</b></button>";
+      }).join("") || '<p class="muted">No hay pagos nuevos sin usar en las últimas 36 horas.</p>';
+    }).catch(function (e) { $("incHelp").textContent = errMsg(e); });
+  }
+  $("incBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-k]"); if (!b || incFor === null) return; var x = incRows[Number(b.dataset.k)], p = pays[incFor];
+    p.incoming_id = x.id; p.reference = x.tx_id; p.amount = num(x.amount).toFixed(2); p.verified = { payer: x.payer, amount: num(x.amount), currency: x.currency };
+    $("incDlg").close(); drawPays();
+  });
+  $("incClose").addEventListener("click", function () { $("incDlg").close(); });
+  $("payLines").addEventListener("click", function (e) {
+    var v = e.target.closest("[data-ver]"); if (v) { var ix = Number(v.closest("[data-i]").dataset.i);
+      if (pays[ix].incoming_id) { pays[ix].incoming_id = null; pays[ix].verified = null; pays[ix].reference = ""; drawPays(); } else openIncoming(ix); return; } });
   $("payLines").addEventListener("click", function (e) { var b = e.target.closest(".del"); if (!b) return; pays.splice(Number(b.closest("[data-i]").dataset.i), 1); drawPays(); });
   $("changeCur").addEventListener("click", function (e) { var b = e.target.closest("[data-cur]"); if (!b || b.disabled) return; changeCur = b.dataset.cur; updatePaySums(); });
   $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
@@ -736,7 +767,7 @@
   $("payOk").addEventListener("click", function () { doPay(false); });
   function doPay(partial) {
     if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
-    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null }; }).filter(function (p) { return p.amount > 0; });
+    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null }; }).filter(function (p) { return p.amount > 0; });
     // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
     if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + payRef(p); }, 0); partial = restAll > 0.02; }
     rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {

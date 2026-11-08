@@ -149,6 +149,13 @@
   .line.new { background:var(--warn-soft); }
   .line.new .q { background:var(--surface); }
   .line.click { cursor:pointer; }
+  /* Pagos verificados */
+  .vbtn { min-height:44px; font-size:14px; padding:6px 10px; }
+  .vbtn.ver { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); font-weight:700; }
+  .inclist { display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow:auto; }
+  .inclist button { display:flex; justify-content:space-between; align-items:center; gap:10px; text-align:left; padding:12px; border-radius:14px; }
+  .inclist b.n { font-size:18px; white-space:nowrap; }
+  .inclist small { display:block; color:var(--muted); font-weight:500; }
   /* Cuenta dividida por persona */
   .persons { display:flex; gap:8px; flex-wrap:wrap; }
   .persons button { --pc:#888; display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:118px; padding:8px 12px; border:2px solid color-mix(in srgb, var(--pc) 45%, transparent);
@@ -434,6 +441,13 @@
   <p id="payErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
     <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
+</dialog>
+
+<!-- Pagos recibidos en Binance / PayPal (verificados por la laptop de caja) -->
+<dialog id="incDlg">
+  <div class="row between"><h2 style="margin:0" id="incTitle">Pagos recibidos</h2><button type="button" id="incClose">Cerrar</button></div>
+  <p class="muted" id="incHelp"></p>
+  <div id="incBody" class="inclist"></div>
 </dialog>
 
 <!-- Dividir la cuenta por persona -->

@@ -23,5 +23,13 @@
     "user": "CORREO-GMAIL-QUE-ENVIA",
     "password": "CONTRASEÑA-DE-APLICACION-DE-GMAIL",
     "from_name": "Ichiraku Ramen"
+  },
+  "binance": {
+    "api_key": "",
+    "api_secret": ""
+  },
+  "paypal": {
+    "client_id": "",
+    "client_secret": ""
   }
 }

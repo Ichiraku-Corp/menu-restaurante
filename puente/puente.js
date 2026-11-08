@@ -366,6 +366,63 @@ function serveApp() {
     });
 }
 
+// ---------------------------------------------------------------- Pagos recibidos: Binance Pay y PayPal
+// Lee lo que entró a las cuentas y lo sube a Supabase para que caja lo elija al cobrar (verificado).
+// Claves en config.json: "binance": {"api_key", "api_secret"} (solo lectura) y "paypal": {"client_id", "client_secret"}.
+const crypto = require("crypto");
+const lastErr2 = {};
+async function reportCheck(source, err) {
+  const msg = err ? String(err.message || err).slice(0, 200) : "";
+  if (msg !== lastErr2[source]) { log(msg ? `ERROR ${source}: ${msg}` : `${source}: conectado y revisando pagos`); lastErr2[source] = msg; }
+  try { await rpc("pos_incoming_checked", { p_source: source, p_error: msg }); } catch (e) { /* se reintenta en la próxima vuelta */ }
+}
+async function checkBinance() {
+  const b = cfg.binance; if (!b || !b.api_key || !b.api_secret) return;
+  try {
+    const now = Date.now();
+    const qs = `startTime=${now - 36 * 3600e3}&endTime=${now}&limit=100&recvWindow=10000&timestamp=${now}`;
+    const sig = crypto.createHmac("sha256", b.api_secret).update(qs).digest("hex");
+    const r = await fetch(`https://api.binance.com/sapi/v1/pay/transactions?${qs}&signature=${sig}`, { headers: { "X-MBX-APIKEY": b.api_key } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || (j.code && j.code !== "000000" && j.code !== 0)) throw new Error(`${r.status} ${j.msg || j.message || JSON.stringify(j).slice(0, 150)}`);
+    const rows = (j.data || []).filter((t) => Number(t.amount) > 0).map((t) => ({
+      source: "binance", tx_id: String(t.transactionId || t.orderId), amount: Number(t.amount), currency: t.currency || "",
+      payer: (t.payerInfo && (t.payerInfo.name || t.payerInfo.binanceId)) ? String(t.payerInfo.name || t.payerInfo.binanceId) : "",
+      note: t.note || t.remark || "", received_at: new Date(Number(t.transactionTime)).toISOString(),
+    }));
+    if (rows.length) { const n = await rpc("pos_incoming_push", { p_rows: rows }); if (n) log(`Binance: ${n} pago(s) nuevo(s) recibido(s)`); }
+    await reportCheck("binance", null);
+  } catch (e) { await reportCheck("binance", e); }
+}
+let ppToken = null, ppExp = 0;
+async function checkPaypal() {
+  const p = cfg.paypal; if (!p || !p.client_id || !p.client_secret) return;
+  try {
+    const base = p.sandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com";
+    if (!ppToken || Date.now() > ppExp - 60e3) {
+      const r = await fetch(`${base}/v1/oauth2/token`, { method: "POST", body: "grant_type=client_credentials",
+        headers: { Authorization: "Basic " + Buffer.from(`${p.client_id}:${p.client_secret}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(`clave rechazada (${r.status} ${j.error_description || j.error || ""})`);
+      ppToken = j.access_token; ppExp = Date.now() + (j.expires_in || 3000) * 1000;
+    }
+    const iso = (d) => new Date(d).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const url = `${base}/v1/reporting/transactions?start_date=${iso(Date.now() - 3 * 86400e3)}&end_date=${iso(Date.now())}&fields=transaction_info,payer_info&page_size=200`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${ppToken}` } });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 401) ppToken = null;
+    if (!r.ok) throw new Error(`${r.status} ${j.message || j.name || ""}${/PERMISSION|AUTHORIZ/i.test(j.name || "") ? " (activa «Transaction search» en la app de PayPal)" : ""}`);
+    const rows = (j.transaction_details || []).map((d) => {
+      const t = d.transaction_info || {}, pi = d.payer_info || {}, a = t.transaction_amount || {};
+      return { source: "paypal", tx_id: t.transaction_id, amount: Number(a.value), currency: a.currency_code || "",
+        payer: (pi.payer_name && (pi.payer_name.alternate_full_name || [pi.payer_name.given_name, pi.payer_name.surname].filter(Boolean).join(" "))) || pi.email_address || "",
+        note: t.transaction_note || t.transaction_subject || "", received_at: t.transaction_initiation_date, status: t.transaction_status };
+    }).filter((x) => x.amount > 0 && x.tx_id && x.status === "S");
+    if (rows.length) { const n = await rpc("pos_incoming_push", { p_rows: rows }); if (n) log(`PayPal: ${n} pago(s) nuevo(s) recibido(s)`); }
+    await reportCheck("paypal", null);
+  } catch (e) { await reportCheck("paypal", e); }
+}
+
 function startBridge() {
   serveApp();
   {
@@ -374,6 +431,8 @@ function startBridge() {
     tick(); setInterval(tick, POLL_MS);
     updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
     sendReports(); setInterval(sendReports, 60e3);
+    checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
+    checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { render, parseBcv, ascii, wrap, smtpSend, reportHtml };
+module.exports = { render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
