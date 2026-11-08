@@ -466,7 +466,7 @@ async function checkBinance(retry) {
     await reportCheck("binance", null);
   } catch (e) { await reportCheck("binance", e); }
 }
-let ppToken = null, ppExp = 0;
+let ppToken = null, ppExp = 0, ppRetry = null;
 async function checkPaypal() {
   const p = cfg.paypal; if (!p || !p.client_id || !p.client_secret) return;
   try {
@@ -493,7 +493,11 @@ async function checkPaypal() {
     }).filter((x) => x.amount > 0 && x.tx_id && x.status === "S");
     if (rows.length) { const n = await rpc("pos_incoming_push", { p_rows: rows }); if (n) log(`PayPal: ${n} pago(s) nuevo(s) recibido(s)`); }
     await reportCheck("paypal", null);
-  } catch (e) { await reportCheck("paypal", e); }
+  } catch (e) {
+    await reportCheck("paypal", e);
+    // internet lento o caído un momento: se reintenta en 1 minuto en vez de esperar 5
+    if (!ppRetry) ppRetry = setTimeout(() => { ppRetry = null; checkPaypal(); }, 60e3);
+  }
 }
 
 // ---------------------------------------------------------------- Actualizaciones automáticas
