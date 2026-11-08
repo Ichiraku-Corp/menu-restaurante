@@ -128,7 +128,7 @@ create index if not exists pos_payments_session on public.pos_payments (session_
 
 create table if not exists public.pos_print_jobs (
   id         bigint generated always as identity primary key,
-  printer    text not null check (printer in ('cocina', 'caja')),
+  printer    text not null check (printer in ('cocina', 'caja', 'edo')),
   body       text not null,
   status     text not null default 'pendiente' check (status in ('pendiente', 'impreso', 'error')),
   attempts   int  not null default 0,
@@ -136,6 +136,8 @@ create table if not exists public.pos_print_jobs (
   created_at timestamptz not null default now(),
   printed_at timestamptz
 );
+alter table public.pos_print_jobs drop constraint if exists pos_print_jobs_printer_check;
+alter table public.pos_print_jobs add constraint pos_print_jobs_printer_check check (printer in ('cocina', 'caja', 'edo'));
 create index if not exists pos_print_jobs_pending on public.pos_print_jobs (id) where status <> 'impreso';
 
 create table if not exists public.pos_log (
@@ -488,7 +490,10 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
   update public.pos_orders set precuenta_at = now() where id = p_order;
-  perform public.pos_print('caja', public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\nGracias por tu visita!');
+  -- Las mesas de Edo (arriba) imprimen la precuenta en su propia impresora.
+  perform public.pos_print(case when exists (select 1 from public.pos_orders o join public.pos_tables t on t.id = o.table_id where o.id = p_order and t.area = 'Edo')
+                                then 'edo' else 'caja' end,
+                           public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\nGracias por tu visita!');
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'precuenta', p_order);
 end $$;
 

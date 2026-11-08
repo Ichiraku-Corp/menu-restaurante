@@ -433,7 +433,7 @@
       .then(function (n) { toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar"); return loadOrder(); })
       .catch(fail).then(function () { sending = false; drawTicket(); });
   });
-  $("precuenta").addEventListener("click", function () { rpc("pos_precuenta", { p_order: cur.order }).then(function () { toast("Precuenta enviada a caja"); }).catch(fail); });
+  $("precuenta").addEventListener("click", function () { rpc("pos_precuenta", { p_order: cur.order }).then(function () { var t = tableById(cur.data.table_id); toast(t && t.area === "Edo" ? "Precuenta enviada a la impresora de Edo" : "Precuenta enviada a caja"); }).catch(fail); });
   $("discount").addEventListener("click", function () {
     ask({ title: "Descuento (Ref)", help: "Monto en Ref sobre el subtotal. 0 para quitarlo.", value: cur.data.totals.discount || "", type: "number" }).then(function (a) {
       if (a === null) return;
