@@ -76,15 +76,50 @@ function wrap(text, width) {
   return out;
 }
 // Marcas del texto que llega de la base de datos:  «^texto» = grande y en negrita · «=» = línea separadora.
+// Logo del ticket (perro de Ichiraku) en blanco y negro: archivo PBM binario (P4) junto al puente.
+// Se convierte una sola vez a la orden de imagen de las impresoras (GS v 0), en franjas de 64 líneas.
+let LOGO = null;
+function logoBytes() {
+  if (LOGO !== null) return LOGO;
+  LOGO = Buffer.alloc(0);
+  try {
+    const f = fs.readFileSync(path.join(DIR, "logo.pbm"));
+    let pos = 0; const tok = [];
+    while (tok.length < 3) { // cabecera: P4 ancho alto (con posibles comentarios)
+      while (/\s/.test(String.fromCharCode(f[pos]))) pos++;
+      if (f[pos] === 0x23) { while (f[pos] !== 0x0a) pos++; continue; }
+      let t = ""; while (!/\s/.test(String.fromCharCode(f[pos]))) t += String.fromCharCode(f[pos++]);
+      tok.push(t);
+    }
+    pos++;
+    const w = +tok[1], h = +tok[2], bw = Math.ceil(w / 8);
+    if (tok[0] !== "P4" || !w || !h) throw new Error("formato");
+    const out = [Buffer.from([ESC, 0x61, 0x01])]; // centrado
+    for (let y = 0; y < h; y += 64) {
+      const rows = Math.min(64, h - y);
+      out.push(Buffer.from([GS, 0x76, 0x30, 0x00, bw & 0xff, bw >> 8, rows & 0xff, rows >> 8]));
+      out.push(f.subarray(pos + y * bw, pos + (y + rows) * bw));
+    }
+    out.push(Buffer.from([ESC, 0x61, 0x00]));
+    LOGO = Buffer.concat(out);
+  } catch (e) { log("Sin logo para los tickets: " + e.message); }
+  return LOGO;
+}
+
+// Marcas en el texto de los tickets:  "=" línea  ·  "@logo" imagen  ·  "^" grande  ·  "~" centrado (se pueden combinar: "~^")
 function render(body) {
   const parts = [Buffer.from([ESC, 0x40])]; // reiniciar
   for (const raw of String(body).split("\n")) {
     if (raw === "=") { parts.push(Buffer.from("-".repeat(WIDTH) + "\n", "ascii")); continue; }
-    const big = raw.startsWith("^");
-    const text = ascii(big ? raw.slice(1) : raw);
+    if (raw.trim() === "@logo") { parts.push(logoBytes()); continue; }
+    let s = raw, big = false, center = false;
+    while (s[0] === "^" || s[0] === "~") { if (s[0] === "^") big = true; else center = true; s = s.slice(1); }
+    const text = ascii(s);
+    if (center) parts.push(Buffer.from([ESC, 0x61, 0x01]));
     if (big) parts.push(Buffer.from([ESC, 0x21, 0x38])); // doble alto y ancho, negrita
-    for (const l of wrap(text, big ? Math.floor(WIDTH / 2) : WIDTH)) parts.push(Buffer.from(l + "\n", "ascii"));
+    for (const l of wrap(text, big ? Math.floor(WIDTH / 2) : WIDTH)) parts.push(Buffer.from((center ? l.trim() : l) + "\n", "ascii"));
     if (big) parts.push(Buffer.from([ESC, 0x21, 0x00]));
+    if (center) parts.push(Buffer.from([ESC, 0x61, 0x00]));
   }
   parts.push(Buffer.from([ESC, 0x64, 0x04]));       // avanzar 4 líneas
   parts.push(Buffer.from([GS, 0x56, 0x42, 0x00]));   // cortar el papel
@@ -292,7 +327,7 @@ if (require.main === module) {
   if (process.argv.includes("--prueba")) {
     const which = process.argv[process.argv.indexOf("--prueba") + 1] || "cocina";
     const p = cfg.printers[which];
-    sendTo(p, render(`^PRUEBA ${which.toUpperCase()}\nPuente de impresion Ichiraku\n${new Date().toLocaleString("es-VE")}\n=\nSi lees esto, la impresora funciona.`))
+    sendTo(p, render(`@logo\n~^PRUEBA ${which.toUpperCase()}\n~Puente de impresion Ichiraku\n${new Date().toLocaleString("es-VE")}\n=\nSi lees esto, la impresora funciona.`))
       .then(() => { console.log("Enviado a " + which + " (" + (p.windows || p.ip) + ")"); process.exit(0); })
       .catch((e) => { console.error(e.message); process.exit(1); });
   } else {

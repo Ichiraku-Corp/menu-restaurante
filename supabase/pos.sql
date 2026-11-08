@@ -401,7 +401,7 @@ begin
                     case when i.option <> '' then E'\n  ' || i.option else '' end ||
                     case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id)
     into lines from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
-  body := '^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
+  body := E'@logo\n^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
           coalesce('Orden #' || num || '   ', '') || public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' || lines || E'\n=';
   update public.pos_items set status = 'enviado', sent_at = now() where order_id = p_order and status = 'pendiente';
   perform public.pos_print('cocina', body);
@@ -467,7 +467,7 @@ create or replace function public.pos_bill_text(p_order bigint, p_title text) re
 language sql stable security definer set search_path = public as $$
   with t as (select * from public.pos_totals(p_order)), o as (select * from public.pos_orders where id = p_order),
        r as (select coalesce(o.rate, public.pos_rate()) as rate from o)
-  select '^ICHIRAKU RAMEN' || E'\n' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
+  select E'@logo\n~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
     coalesce((select string_agg(public.pos_line(trim(to_char(g.q, 'FM990.##')) || ' ' || g.name ||
                 case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)), E'\n' order by g.first)
               from (select i.name, i.variant, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
@@ -477,15 +477,15 @@ language sql stable security definer set search_path = public as $$
     case when t.discount > 0 then public.pos_line('Descuento', '-Ref ' || public.pos_money(t.discount)) || E'\n' else '' end ||
     case when t.service > 0 then public.pos_line('Servicio ' || trim(to_char(o.service_pct, 'FM990.##')) || '%', 'Ref ' || public.pos_money(t.service)) || E'\n' else '' end ||
     case when t.delivery > 0 then public.pos_line('Delivery', 'Ref ' || public.pos_money(t.delivery)) || E'\n' else '' end ||
-    '^' || public.pos_line('TOTAL', 'Ref ' || public.pos_money(t.total), 24) || E'\n' ||
-    case when r.rate is not null then public.pos_line('Total Bs (tasa ' || public.pos_money(r.rate) || ')', 'Bs ' || public.pos_money(round(t.total * r.rate, 2))) || E'\n' else '' end ||
+    E'=\n~^TOTAL  Ref ' || public.pos_money(t.total) || E'\n' ||
+    case when r.rate is not null then E'~^Bs ' || public.pos_money(round(t.total * r.rate, 2)) || E'\n~(tasa ' || public.pos_money(r.rate) || E')\n=\n' else E'=\n' end ||
     case when t.paid > 0 and t.paid < t.total - 0.02 then public.pos_line('Pagado', 'Ref ' || public.pos_money(t.paid)) || E'\n' ||
-      '^' || public.pos_line('RESTA', 'Ref ' || public.pos_money(t.total - t.paid), 24) || E'\n' else '' end ||
+      E'~^RESTA  Ref ' || public.pos_money(t.total - t.paid) || E'\n' else '' end ||
     coalesce((select 'Cliente: ' || c.name || case when coalesce(c.doc_id, '') <> '' then '  CI/RIF: ' || c.doc_id else '' end || E'\n'
               from public.customers c where c.id = o.customer_id and o.kind <> 'delivery'), '') ||
     case when o.kind = 'delivery' then 'Cliente: ' || o.label || case when o.phone <> '' then '  Tel: ' || o.phone else '' end ||
       case when o.address <> '' then E'\nDireccion: ' || o.address else '' end || E'\n' else '' end ||
-    'Precios con IVA incluido.'
+    '~Precios con IVA incluido.'
   from t, o, r
 $$;
 
@@ -497,7 +497,7 @@ begin
   -- Las mesas de Edo (arriba) imprimen la precuenta en su propia impresora.
   perform public.pos_print(case when exists (select 1 from public.pos_orders o join public.pos_tables t on t.id = o.table_id where o.id = p_order and t.area = 'Edo')
                                 then 'edo' else 'caja' end,
-                           public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\nGracias por tu visita!');
+                           public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\n~Gracias por tu visita!');
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'precuenta', p_order);
 end $$;
 
@@ -557,7 +557,7 @@ begin
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
-     from public.pos_payments p2 where p2.order_id = p_order) || E'\n\nGracias por tu visita!');
+     from public.pos_payments p2 where p2.order_id = p_order) || E'\n\n~Gracias por tu visita!');
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'cobrar', p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);
 end $$;
