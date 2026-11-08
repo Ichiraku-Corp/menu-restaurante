@@ -195,23 +195,48 @@ function parseBcv(html) {
   return { rate, date };
 }
 let lastRate = "";
+// Fecha en Caracas (UTC-4) y siguiente día hábil (el BCV publica en la tarde la tasa del próximo día hábil)
+function ccsDate(ms) { return new Date(ms - 4 * 3600e3).toISOString().slice(0, 10); }
+function nextBusinessDay(ymd) { const d = new Date(ymd + "T12:00:00Z"); do d.setUTCDate(d.getUTCDate() + 1); while ([0, 6].includes(d.getUTCDay())); return d.toISOString().slice(0, 10); }
+// Fuente 1: la página del BCV
+async function rateFromBcv() {
+  const r = await fetch("https://www.bcv.org.ve/", { headers: { "User-Agent": "Mozilla/5.0 (Ichiraku-puente)" }, signal: AbortSignal.timeout(40000) });
+  if (!r.ok) throw new Error("respondió " + r.status);
+  const html = await r.text();
+  try { return parseBcv(html); }
+  catch (e) { try { fs.writeFileSync(path.join(DIR, "bcv-pagina.html"), html); } catch (e2) { /* nada */ } throw new Error(e.message + " (copia guardada en bcv-pagina.html)"); }
+}
+// Fuente 2 (respaldo): DolarAPI, que copia el euro oficial del BCV
+async function rateFromDolarApi() {
+  const r = await fetch("https://ve.dolarapi.com/v1/euros/oficial", { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error("respondió " + r.status);
+  const j = await r.json();
+  const rate = Number(j.promedio || j.venta || j.compra);
+  if (!(rate > 0)) throw new Error("sin tasa en la respuesta");
+  // Si se actualizó después de las 3 p. m. (hora de Caracas) es la tasa publicada para el próximo día hábil
+  let date = null;
+  const t = Date.parse(j.fechaActualizacion);
+  if (t) { const day = ccsDate(t), hour = new Date(t - 4 * 3600e3).getUTCHours(), dow = new Date(day + "T12:00:00Z").getUTCDay();
+    date = hour >= 15 || dow === 0 || dow === 6 ? nextBusinessDay(day) : day; }
+  return { rate: Math.round(rate * 10000) / 10000, date };
+}
+function errText(e) { return e.cause ? e.cause.code || e.cause.message : e.name === "TimeoutError" ? "no respondió a tiempo" : e.message; }
+let rateTimer = null;
 async function updateRate() {
+  clearTimeout(rateTimer);
   if (cfg.bcv === false) return;
-  try {
-    const r = await fetch("https://www.bcv.org.ve/", { headers: { "User-Agent": "Ichiraku-puente/1.0" } });
-    if (!r.ok) throw new Error("BCV respondió " + r.status);
-    const html = await r.text();
-    let parsed;
-    try { parsed = parseBcv(html); }
-    catch (e) { try { fs.writeFileSync(path.join(DIR, "bcv-pagina.html"), html); } catch (e2) { /* nada */ } throw new Error(e.message + " (copia guardada en bcv-pagina.html, " + html.length + " caracteres)"); }
-    const { rate, date } = parsed;
-    await rpc("pos_set_rate", { p_rate: rate, p_source: "bcv", p_date: date });
-    const key = rate + "|" + date;
-    if (key !== lastRate) log(`Tasa euro BCV: ${rate} Bs (fecha valor ${date || "hoy"})`);
-    lastRate = key;
-  } catch (e) {
-    log("No se pudo leer la tasa del BCV (la caja puede escribirla a mano): " + (e.cause ? e.cause.code || e.cause.message : e.message));
+  let ok = false; const fails = [];
+  for (const [name, fn] of [["BCV", rateFromBcv], ["DolarAPI", rateFromDolarApi]]) {
+    try {
+      const { rate, date } = await fn();
+      await rpc("pos_set_rate", { p_rate: rate, p_source: name === "BCV" ? "bcv" : "bcv-dolarapi", p_date: date });
+      const key = rate + "|" + date;
+      if (key !== lastRate) log(`Tasa euro BCV: ${rate} Bs (fecha valor ${date || "hoy"}, leída de ${name})`);
+      lastRate = key; ok = true; break;
+    } catch (e) { fails.push(`${name}: ${errText(e)}`); }
   }
+  if (!ok) log("No se pudo leer la tasa del BCV, se reintenta en 5 min (la caja puede escribirla a mano): " + fails.join(" · "));
+  rateTimer = setTimeout(updateRate, ok ? (cfg.bcv_minutes || 30) * 60e3 : 5 * 60e3);
 }
 
 // ---------------------------------------------------------------- Correo del cierre de caja
@@ -328,7 +353,13 @@ if (require.main === module) {
     // Diagnóstico: node puente.js --pagos
     console.log("Archivo de configuración: " + (process.env.PUENTE_CONFIG || path.join(DIR, "config.json")));
     console.log(keysInfo());
-    setImmediate(async () => { await checkBinance(); await checkPaypal(); console.log("Listo."); process.exit(0); });
+    setImmediate(async () => {
+      await checkBinance(); await checkPaypal();
+      for (const [n, fn] of [["BCV", rateFromBcv], ["DolarAPI", rateFromDolarApi]]) {
+        try { const x = await fn(); console.log(`Tasa ${n}: ${x.rate} (fecha valor ${x.date || "hoy"})`); } catch (e) { console.log(`Tasa ${n}: ERROR ${errText(e)}`); }
+      }
+      console.log("Listo."); process.exit(0);
+    });
   } else if (process.argv.includes("--prueba")) {
     const which = process.argv[process.argv.indexOf("--prueba") + 1] || "cocina";
     const p = cfg.printers[which];
@@ -451,7 +482,7 @@ function startBridge() {
     const desc = (p) => (p ? (p.windows ? "USB «" + p.windows + "»" : p.ip) : "sin configurar");
     log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)} · Edo ${desc(cfg.printers.edo)}`);
     tick(); setInterval(tick, POLL_MS);
-    updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
+    updateRate();
     sendReports(); setInterval(sendReports, 60e3);
     log(keysInfo());
     checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
