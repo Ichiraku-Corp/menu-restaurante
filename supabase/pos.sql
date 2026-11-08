@@ -1192,6 +1192,30 @@ begin
   on conflict (key) do update set value = excluded.value, updated_at = now();
 end $$;
 
+-- ---------------------------------------------------------------- Equipos (caja y tablets)
+-- Cada equipo guarda un identificador al azar y se reporta; el nombre («Caja», «Tablet 1»…) se asigna
+-- desde administración y cada equipo lo toma solo. Va en cada cobro para detectar cobros fuera de la caja.
+create table if not exists public.pos_devices (
+  id         text primary key,
+  name       text not null default '',
+  user_agent text not null default '',
+  first_seen timestamptz not null default now(),
+  last_seen  timestamptz not null default now()
+);
+alter table public.pos_devices enable row level security;
+create or replace function public.pos_device_hello(p_id text, p_ua text default '', p_local_name text default '')
+returns text language plpgsql security definer set search_path = public as $$
+declare n text;
+begin
+  if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  if coalesce(p_id, '') !~ '^[a-z0-9]{8,40}$' then raise exception 'Identificador de equipo no válido'; end if;
+  insert into public.pos_devices (id, name, user_agent) values (p_id, left(coalesce(trim(p_local_name), ''), 30), left(coalesce(p_ua, ''), 200))
+  on conflict (id) do update set last_seen = now(), user_agent = excluded.user_agent,
+     name = case when pos_devices.name = '' then excluded.name else pos_devices.name end
+  returning name into n;
+  return n;
+end $$;
+
 -- ---------------------------------------------------------------- Actualizaciones automáticas del puente
 -- Cada versión trae solo los archivos que cambian (contenido en base64 + sha256). Solo se escribe con la
 -- llave de servicio (sin políticas RLS); el puente la lee con su cuenta «impresora» y avisa qué versión tiene.
@@ -1239,7 +1263,7 @@ begin
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
     'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
-    'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)'] loop
+    'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

@@ -60,6 +60,16 @@
   }
   // Nombre de este equipo («Caja», «Tablet Edo»…): se guarda en el equipo y va en cada cobro
   function devName() { try { return localStorage.getItem("pos-equipo") || ""; } catch (e) { return ""; } }
+  function devId() {
+    var id = ""; try { id = localStorage.getItem("pos-equipo-id") || ""; } catch (e) {}
+    if (!/^[a-z0-9]{8,40}$/.test(id)) { id = Array.from(crypto.getRandomValues(new Uint8Array(12)), function (b) { return (b % 36).toString(36); }).join(""); try { localStorage.setItem("pos-equipo-id", id); } catch (e) {} }
+    return id;
+  }
+  // El nombre lo asigna administración: cada equipo se reporta y toma el nombre que tenga en el sistema
+  function deviceHello() {
+    q(sb.rpc("pos_device_hello", { p_id: devId(), p_ua: navigator.userAgent, p_local_name: devName() })).then(function (n) { if (n && n !== devName()) setDevName(n); }).catch(function () {});
+  }
+  setInterval(function () { if (U) deviceHello(); }, 300000);
   function setDevName(n) { try { localStorage.setItem("pos-equipo", n); } catch (e) {} $("devNameTxt").textContent = n || "sin nombre"; }
   setDevName(devName());
   $("devRename").addEventListener("click", function () {
@@ -77,7 +87,7 @@
 
   var staffList = [];
   function startDevice() {
-    show("device", false);
+    show("device", false); deviceHello();
     q(sb.rpc("pos_staff")).then(function (list) {
       staffList = list || [];
       if (!staffList.length) { $("people").innerHTML = '<p class="muted">Esta cuenta no está autorizada como dispositivo de sala, o nadie tiene PIN todavía (Gestión → Nómina).</p>'; }
