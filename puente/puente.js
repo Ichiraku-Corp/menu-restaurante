@@ -324,7 +324,12 @@ async function sendReports() {
 
 // ---------------------------------------------------------------- Inicio
 if (require.main === module) {
-  if (process.argv.includes("--prueba")) {
+  if (process.argv.includes("--pagos")) {
+    // Diagnóstico: node puente.js --pagos
+    console.log("Archivo de configuración: " + (process.env.PUENTE_CONFIG || path.join(DIR, "config.json")));
+    console.log(keysInfo());
+    (async () => { await checkBinance(); await checkPaypal(); console.log("Listo."); process.exit(0); })();
+  } else if (process.argv.includes("--prueba")) {
     const which = process.argv[process.argv.indexOf("--prueba") + 1] || "cocina";
     const p = cfg.printers[which];
     sendTo(p, render(`@logo\n~^PRUEBA ${which.toUpperCase()}\n~Puente de impresion Ichiraku\n${new Date().toLocaleString("es-VE")}\n=\nSi lees esto, la impresora funciona.`))
@@ -371,6 +376,11 @@ function serveApp() {
 // Claves en config.json: "binance": {"api_key", "api_secret"} (solo lectura) y "paypal": {"client_id", "client_secret"}.
 const crypto = require("crypto");
 const lastErr2 = {};
+const VERBOSE = process.argv.includes("--pagos");
+function keysInfo() {
+  const b = cfg.binance || {}, p = cfg.paypal || {}, m = (v) => (v ? `sí (${String(v).trim().length} letras)` : "NO");
+  return `Claves de pago → Binance: api_key ${m(b.api_key)}, api_secret ${m(b.api_secret)} · PayPal: client_id ${m(p.client_id)}, client_secret ${m(p.client_secret)}`;
+}
 async function reportCheck(source, err) {
   const msg = err ? String(err.message || err).slice(0, 200) : "";
   if (msg !== lastErr2[source]) { log(msg ? `ERROR ${source}: ${msg}` : `${source}: conectado y revisando pagos`); lastErr2[source] = msg; }
@@ -382,8 +392,9 @@ async function checkBinance() {
     const now = Date.now();
     const qs = `startTime=${now - 36 * 3600e3}&endTime=${now}&limit=100&recvWindow=10000&timestamp=${now}`;
     const sig = crypto.createHmac("sha256", b.api_secret).update(qs).digest("hex");
-    const r = await fetch(`https://api.binance.com/sapi/v1/pay/transactions?${qs}&signature=${sig}`, { headers: { "X-MBX-APIKEY": b.api_key } });
+    const r = await fetch(`https://api.binance.com/sapi/v1/pay/transactions?${qs}&signature=${sig}`, { headers: { "X-MBX-APIKEY": b.api_key }, signal: AbortSignal.timeout(30000) });
     const j = await r.json().catch(() => ({}));
+    if (VERBOSE) console.log(`Binance respondió ${r.status}: ${(j.data || []).length} movimientos en 36 h (${(j.data || []).filter((t) => Number(t.amount) > 0).length} recibidos)`, j.code && j.code !== "000000" ? j : "");
     if (!r.ok || (j.code && j.code !== "000000" && j.code !== 0)) throw new Error(`${r.status} ${j.msg || j.message || JSON.stringify(j).slice(0, 150)}`);
     const rows = (j.data || []).filter((t) => Number(t.amount) > 0).map((t) => ({
       source: "binance", tx_id: String(t.transactionId || t.orderId), amount: Number(t.amount), currency: t.currency || "",
@@ -400,7 +411,7 @@ async function checkPaypal() {
   try {
     const base = p.sandbox ? "https://api-m.sandbox.paypal.com" : "https://api-m.paypal.com";
     if (!ppToken || Date.now() > ppExp - 60e3) {
-      const r = await fetch(`${base}/v1/oauth2/token`, { method: "POST", body: "grant_type=client_credentials",
+      const r = await fetch(`${base}/v1/oauth2/token`, { method: "POST", body: "grant_type=client_credentials", signal: AbortSignal.timeout(30000),
         headers: { Authorization: "Basic " + Buffer.from(`${p.client_id}:${p.client_secret}`).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" } });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(`clave rechazada (${r.status} ${j.error_description || j.error || ""})`);
@@ -408,8 +419,9 @@ async function checkPaypal() {
     }
     const iso = (d) => new Date(d).toISOString().replace(/\.\d{3}Z$/, "Z");
     const url = `${base}/v1/reporting/transactions?start_date=${iso(Date.now() - 3 * 86400e3)}&end_date=${iso(Date.now())}&fields=transaction_info,payer_info&page_size=200`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${ppToken}` } });
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${ppToken}` }, signal: AbortSignal.timeout(30000) });
     const j = await r.json().catch(() => ({}));
+    if (VERBOSE) console.log(`PayPal respondió ${r.status}: ${(j.transaction_details || []).length} movimientos en 3 días`, r.ok ? "" : j);
     if (r.status === 401) ppToken = null;
     if (!r.ok) throw new Error(`${r.status} ${j.message || j.name || ""}${/PERMISSION|AUTHORIZ/i.test(j.name || "") ? " (activa «Transaction search» en la app de PayPal)" : ""}`);
     const rows = (j.transaction_details || []).map((d) => {
@@ -431,6 +443,7 @@ function startBridge() {
     tick(); setInterval(tick, POLL_MS);
     updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
     sendReports(); setInterval(sendReports, 60e3);
+    log(keysInfo());
     checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
