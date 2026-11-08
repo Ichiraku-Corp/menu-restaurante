@@ -1,7 +1,8 @@
 @echo off
 cd /d "%~dp0"
 echo Instalando el puente de impresion como tarea de Windows...
-schtasks /Create /TN "Ichiraku Puente" /TR "wscript.exe \"%~dp0iniciar-oculto.vbs\"" /SC MINUTE /MO 5 /F
+echo (Hay que abrir este archivo con clic derecho, Ejecutar como administrador)
+schtasks /Create /TN "IchirakuPuenteRevision" /TR "wscript.exe \"%~dp0iniciar-oculto.vbs\"" /SC MINUTE /MO 5 /F
 schtasks /Create /TN "Ichiraku Puente al entrar" /TR "wscript.exe \"%~dp0iniciar-oculto.vbs\"" /SC ONLOGON /F
 wscript.exe "%~dp0iniciar-oculto.vbs"
 echo.
