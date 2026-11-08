@@ -158,6 +158,109 @@ async function updateRate() {
   }
 }
 
+// ---------------------------------------------------------------- Correo del cierre de caja
+// Envía por SMTP (por ejemplo Gmail con «contraseña de aplicación») el reporte detallado de cada cierre
+// a los correos que define administración (Gestión → Ventas → Ajustes).
+const tls = require("tls");
+function smtpSend(o, to, subject, html) {
+  return new Promise((resolve, reject) => {
+    const sock = o.secure === false ? net.connect(o.port || 25, o.host) : tls.connect({ host: o.host, port: o.port || 465, servername: o.host });
+    let buf = "", waiters = [];
+    const timer = setTimeout(() => { sock.destroy(); reject(new Error("El servidor de correo no responde")); }, 30000);
+    sock.setEncoding("utf8");
+    sock.on("data", (d) => {
+      buf += d; let m;
+      while ((m = buf.match(/^(\d{3})([ -])(.*)\r?\n/m)) && buf.indexOf(m[0]) === 0) {
+        buf = buf.slice(m[0].length);
+        if (m[2] === " " && waiters.length) waiters.shift()(Number(m[1]), m[3]);
+      }
+    });
+    sock.on("error", (e) => { clearTimeout(timer); reject(e); });
+    const step = (cmd, ok) => new Promise((res, rej) => {
+      waiters.push((code, text) => (ok.includes(code) ? res(code) : rej(new Error(`Correo: ${code} ${text}`))));
+      if (cmd !== null) sock.write(cmd + "\r\n");
+    });
+    const b64 = (x) => Buffer.from(x, "utf8").toString("base64");
+    const from = o.from || o.user;
+    const msg = [
+      `From: =?UTF-8?B?${b64(o.from_name || "Ichiraku Ramen")}?= <${from}>`, `To: ${to.join(", ")}`,
+      `Subject: =?UTF-8?B?${b64(subject)}?=`, `Date: ${new Date().toUTCString()}`, "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: base64", "",
+      b64(html).replace(/.{76}/g, "$&\r\n"), "",
+    ].join("\r\n");
+    (async () => {
+      await step(null, [220]);
+      await step("EHLO ichiraku-caja", [250]);
+      if (o.user) { await step("AUTH LOGIN", [334]); await step(b64(o.user), [334]); await step(b64(o.password), [235]); }
+      await step(`MAIL FROM:<${from}>`, [250]);
+      for (const r of to) await step(`RCPT TO:<${r}>`, [250, 251]);
+      await step("DATA", [354]);
+      await step(msg + "\r\n.", [250]);
+      sock.write("QUIT\r\n"); sock.end(); clearTimeout(timer); resolve();
+    })().catch((e) => { clearTimeout(timer); sock.destroy(); reject(e); });
+  });
+}
+
+const MNAMES = { efectivo_usd: "Efectivo $", efectivo_bs: "Efectivo Bs", pago_movil: "Pago móvil", punto_debito: "Punto débito",
+  punto_credito: "Punto crédito", zelle: "Zelle", binance: "Binance", paypal: "PayPal" };
+const BS = new Set(["efectivo_bs", "pago_movil", "punto_debito", "punto_credito"]);
+const fm = (n) => Number(n || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fq = (n) => Number(n || 0).toLocaleString("es-VE", { maximumFractionDigits: 2 });
+const hh = (t) => (t ? new Date(t).toLocaleString("es-VE", { timeZone: "America/Caracas", hour12: false, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
+const he = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function table(head, rows, right) {
+  const th = head.map((h, i) => `<th style="text-align:${right.includes(i) ? "right" : "left"};padding:6px 8px;border-bottom:2px solid #333;font-size:12px;text-transform:uppercase;color:#555">${h}</th>`).join("");
+  const tr = rows.map((r) => "<tr>" + r.map((c, i) => `<td style="text-align:${right.includes(i) ? "right" : "left"};padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top">${c}</td>`).join("") + "</tr>").join("");
+  return `<table style="border-collapse:collapse;width:100%;font-size:14px;margin:6px 0 18px">${th ? "<thead><tr>" + th + "</tr></thead>" : ""}<tbody>${tr || `<tr><td style="padding:6px 8px;color:#777">Ninguno</td></tr>`}</tbody></table>`;
+}
+function reportHtml(d) {
+  const s = d.session || {}, t = d.totals || {}, exp = s.expected || {}, cnt = s.counted || {};
+  const H = (x) => `<h2 style="font-size:17px;margin:22px 0 4px;color:#e5206b">${x}</h2>`;
+  const methods = Object.keys(MNAMES).filter((k) => Number(exp[k] || 0) !== 0 || k in cnt).map((k) => {
+    const cur = BS.has(k) ? "Bs " : "$ ", m = (d.methods || []).find((x) => x.method === k) || {};
+    const diff = k in cnt ? Number(cnt[k]) - Number(exp[k] || 0) : null;
+    return [MNAMES[k], m.count || 0, cur + fm(m.amount), "Ref " + fm(m.amount_ref), cur + fm(exp[k]), k in cnt ? cur + fm(cnt[k]) : "sin contar",
+      diff === null ? "" : `<b style="color:${Math.abs(diff) < 0.01 ? "#2f7d4f" : "#b3261e"}">${cur + fm(diff)}</b>`];
+  });
+  return `<div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:900px;color:#1f1a17">
+<h1 style="font-size:22px;margin:0">Cierre de caja · Ichiraku Ramen</h1>
+<p style="color:#555;margin:4px 0 0">Apertura ${hh(s.opened_at)} (${he(s.opened_by)}) · Cierre ${hh(s.closed_at)} (${he(s.closed_by)}) · Tasa € BCV ${fm(d.rate)}</p>
+${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulados", fq(t.cancelled)], ["Ventas con IVA (sin servicio)", "Ref " + fm(t.sales)],
+    ["Descuentos", "Ref " + fm(t.discounts)], ["Servicio 10 %", "Ref " + fm(t.service)], ["Delivery", "Ref " + fm(t.delivery)], ["<b>Total cobrado</b>", "<b>Ref " + fm(t.total) + "</b>"],
+    ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
+${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
+${H("Por área")}${table(["Área", "Pedidos", "Total"], (d.by_kind || []).map((x) => [he(x.kind), x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Por mesera (quien abrió la mesa)")}${table(["Persona", "Pedidos", "Total"], (d.staff || []).map((x) => [he(x.name), x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Por hora")}${table(["Hora", "Pedidos", "Total"], (d.hours || []).map((x) => [String(x.hour).padStart(2, "0") + ":00", x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Platos vendidos")}${table(["Plato", "Cantidad", "Ventas"], (d.dishes || []).map((x) => [he(x.name + (x.variant ? " " + x.variant : "")), fq(x.qty), "Ref " + fm(x.amount)]), [1, 2])}
+${H("Anulaciones de platos")}${table(["Pedido", "Plato", "Monto", "Quién", "Motivo"], (d.voids || []).map((x) => [he(x.order), fq(x.qty) + " " + he(x.item), "Ref " + fm(x.amount), he(x.by), he(x.reason)]), [2])}
+${H("Descuentos")}${table(["Pedido", "Monto", "Quién", "Motivo"], (d.discounts || []).map((x) => [he(x.order), "Ref " + fm(x.amount), he(x.by), he(x.reason)]), [1])}
+${H("Pedidos anulados")}${table(["Pedido", "Quién", "Motivo"], (d.cancelled || []).map((x) => [he(x.order), he(x.by), he(x.reason)]), [])}
+${H("Detalle de cada pedido")}${table(["Pedido", "Hora", "Mesera / Caja", "Platos", "Pagos", "Total"], (d.orders || []).map((x) => [he(x.label) + (x.status === "anulada" ? " <i>(anulado)</i>" : ""),
+    hh(x.opened_at) + " → " + hh(x.closed_at), he(x.waiter) + " / " + he(x.cashier), he(x.items), he(x.payments), "Ref " + fm(x.total)]), [5])}
+${s.notes ? H("Notas de la cajera") + "<p>" + he(s.notes) + "</p>" : ""}
+<p style="color:#777;font-size:12px;margin-top:24px">Enviado automáticamente por el sistema de ventas de Ichiraku. Precios con IVA incluido.</p></div>`;
+}
+async function sendReports() {
+  if (!cfg.correo || !cfg.correo.host) return;
+  try {
+    const list = await rpc("pos_report_next");
+    for (const r of list || []) {
+      const to = String(r.recipients).split(/[,;\s]+/).filter((x) => /@/.test(x));
+      const s = (r.data && r.data.session) || {};
+      try {
+        if (!to.length) throw new Error("Sin destinatarios");
+        await smtpSend(cfg.correo, to, `Cierre de caja ${hh(s.closed_at)} · Ref ${fm(r.data.totals && r.data.totals.total)}`, reportHtml(r.data));
+        await rpc("pos_report_done", { p_id: r.id, p_ok: true });
+        log(`Cierre enviado por correo a ${to.join(", ")}`);
+      } catch (e) {
+        await rpc("pos_report_done", { p_id: r.id, p_ok: false, p_error: e.message }).catch(() => {});
+        log("ERROR al enviar el cierre por correo: " + e.message);
+      }
+    }
+  } catch (e) { log("ERROR (correo): " + e.message); }
+}
+
 // ---------------------------------------------------------------- Inicio
 if (require.main === module) {
   if (process.argv.includes("--prueba")) {
@@ -170,6 +273,7 @@ if (require.main === module) {
     log(`Puente iniciado. Cocina ${cfg.printers.cocina && cfg.printers.cocina.ip} · Caja ${cfg.printers.caja && cfg.printers.caja.ip}`);
     tick(); setInterval(tick, POLL_MS);
     updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
+    sendReports(); setInterval(sendReports, 60e3);
   }
 }
-module.exports = { render, parseBcv, ascii, wrap };
+module.exports = { render, parseBcv, ascii, wrap, smtpSend, reportHtml };

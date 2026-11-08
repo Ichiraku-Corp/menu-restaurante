@@ -199,6 +199,26 @@
   <p style="margin-top:12px"><button type="button" id="moveCancel">Cancelar</button></p>
 </dialog>
 
+<!-- Delivery -->
+<dialog id="delivDlg">
+  <h2 id="delivTitle">Nuevo delivery</h2>
+  <input id="dName" placeholder="Nombre del cliente" maxlength="40">
+  <input id="dPhone" placeholder="Teléfono" inputmode="tel" maxlength="30" style="margin-top:8px">
+  <textarea id="dAddr" placeholder="Dirección" maxlength="200" style="margin-top:8px"></textarea>
+  <label class="muted" style="display:block;margin-top:8px">Costo del delivery (Ref)<input id="dFee" inputmode="decimal" value="0"></label>
+  <p id="dErr" class="muted" style="color:var(--danger)"></p>
+  <div class="row between"><button type="button" id="dCancel">Cancelar</button><button type="button" class="primary" id="dOk">Guardar</button></div>
+</dialog>
+
+<!-- Lista con casillas (agotados) o cantidades (inventario) -->
+<dialog id="listDlg" style="width:min(720px, calc(100vw - 20px))">
+  <div class="row between"><h2 style="margin:0" id="listTitle"></h2><button type="button" id="listClose">Cerrar</button></div>
+  <p class="muted" id="listHelp"></p>
+  <input id="listSearch" type="search" placeholder="Buscar…">
+  <div id="listBody" style="margin-top:8px"></div>
+  <p id="listFoot"></p>
+</dialog>
+
 <!-- Cobrar -->
 <dialog id="payDlg" style="width:min(720px, calc(100vw - 20px))">
   <h2 id="payTitle">Cobrar</h2>
@@ -216,7 +236,8 @@
     </div>
   </div>
   <p id="payErr" class="muted" style="color:var(--danger)"></p>
-  <div class="row between"><button type="button" id="payCancel">Cancelar</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div>
+  <div class="row between"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Dividir cuenta</button></div>
+    <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
 </dialog>
 
 <!-- Caja -->

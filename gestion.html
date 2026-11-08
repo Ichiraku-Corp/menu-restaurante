@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aZugMNVXZLzfHYURI+YO9BhDmQsbQa++Lzwg2PDVcvQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-m0/WR3TM8Ch8bk4Vr9+4p8TY3wUHo5vLYUmVVIUaX3Q='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -200,6 +200,8 @@
           <div><label for="sPm">Comisión pago móvil (%)</label><input id="sPm" type="number" step="0.01" min="0" inputmode="decimal"></div>
           <div><label for="sTol">Tolerancia de llegada (min)</label><input id="sTol" type="number" step="1" min="0" inputmode="numeric"></div>
           <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
+          <div style="grid-column:1 / -1"><label for="sMails">Correos que reciben el cierre de caja detallado</label><input id="sMails" type="text" placeholder="dueno@gmail.com, socio@gmail.com" autocomplete="off">
+            <div class="muted">Separados por comas. El puente de la laptop de caja los envía al cerrar caja.</div></div>
         </div>
         <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
       </div>
@@ -1000,7 +1002,7 @@
     var st = S.settings;
     $("sIva").value = num(st.iva_pct != null ? st.iva_pct : 16);
     $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
-    $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5);
+    $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5); $("sMails").value = st.report_emails || "";
   }
   function saleForm(d) {
     var ym = $("salesMonth").value || ymNow(), items = d ? (S.itemsByMonth[ym] || []).filter(function (i) { return i.sale_date === d.sale_date; }) : [];
@@ -1027,6 +1029,12 @@
   $("saveSettings").addEventListener("click", function () {
     var patch = { iva_pct: num($("sIva").value), service_staff_pct: num($("sStaff").value), fee_debito: num($("sDeb").value), fee_credito: num($("sCre").value), fee_pago_movil: num($("sPm").value),
       late_tolerance_min: Math.round(num($("sTol").value)), overtime_factor: num($("sOt").value) };
+    if (S.settings.report_emails !== undefined) {
+      var mails = $("sMails").value.split(/[,;\s]+/).filter(Boolean);
+      var bad = mails.filter(function (m) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
+      if (bad.length) return toast("Correo no válido: " + bad[0]);
+      patch.report_emails = mails.join(", ");
+    }
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
   });

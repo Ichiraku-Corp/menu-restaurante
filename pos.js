@@ -134,24 +134,41 @@
   }
   function drawTables() {
     if (!ST) return;
-    $("areas").innerHTML = AREAS.concat(["Para llevar"]).map(function (a) {
+    $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar"]).map(function (a) {
       var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length
+        : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
+        : a === "Por cobrar" ? ST.orders.length
         : ST.orders.filter(function (o) { var t = tableById(o.table_id); return t && t.area === a; }).length;
       return '<button type="button" data-area="' + esc(a) + '"' + (cur.area === a ? ' class="on"' : "") + ">" + esc(a) + (n ? " · " + n : "") + "</button>";
     }).join("");
-    if (cur.area === "Para llevar") {
-      var list = ST.orders.filter(function (o) { return o.kind === "llevar"; });
-      $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="newTogo" class="busy" style="border-style:dashed">+ Nuevo<small>para llevar</small></button>' +
-        list.map(function (o) { return '<button type="button" class="busy" data-order="' + o.id + '">' + esc(o.label.replace("Para llevar: ", "") || "Para llevar") +
-          "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small>" + (o.pending ? '<span class="pend">sin enviar</span>' : "") + "</button>"; }).join("") + "</div>";
+    if (cur.area === "Para llevar" || cur.area === "Delivery") {
+      var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; });
+      $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="busy" style="border-style:dashed">+ Nuevo<small>' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +
+        list.map(function (o) { return '<button type="button" class="busy" data-order="' + o.id + '">' + esc(o.label.replace(/^(Para llevar|Delivery): /, "") || cur.area) +
+          "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small>" + badges(o) + "</button>"; }).join("") + "</div>";
+      return;
+    }
+    if (cur.area === "Por cobrar") {
+      var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.opened_at) - new Date(b.opened_at); });
+      var due = all.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = all.filter(function (o) { return o.precuenta_at; }).length;
+      $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + " pedidos abiertos · " + ref(due) + " por cobrar</b>" +
+        '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length ? '<table class="tbl" style="margin-top:8px"><thead><tr><th>Pedido</th><th>Tiempo</th><th>Estado</th><th class="r">Total</th><th class="r">Falta</th></tr></thead><tbody>' +
+        all.map(function (o) { return '<tr data-order="' + o.id + '" style="cursor:pointer"><td><b>' + esc(o.label) + '</b><div class="muted">' + esc(o.opened_by || "") + "</div></td><td>" + mins(o.opened_at) + "</td><td>" +
+          (o.precuenta_at ? '<span class="pend" style="background:var(--accent);color:#fff;border-radius:999px;padding:1px 8px;font-size:12px">pidió la cuenta</span>' : '<span class="muted">comiendo</span>') +
+          (num(o.paid) > 0 ? ' <span class="muted">abonó ' + ref(num(o.paid)) + "</span>" : "") + '</td><td class="r">' + ref(o.total) + '</td><td class="r"><b>' + ref(num(o.total) - num(o.paid)) + "</b></td></tr>"; }).join("") +
+        "</tbody></table>" : '<p class="muted">No hay mesas por cobrar.</p>') + "</div>";
       return;
     }
     var tables = ST.tables.filter(function (t) { return t.area === cur.area; });
     $("areaBody").innerHTML = '<div class="tables">' + tables.map(function (t) {
       var o = ST.orders.find(function (x) { return x.table_id === t.id; });
       return '<button type="button" data-table="' + t.id + '"' + (o ? ' class="busy"' : "") + ">" + t.number +
-        (o ? "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small><small>" + esc(o.opened_by || "") + "</small>" + (o.pending ? '<span class="pend">sin enviar</span>' : "") : "<small>libre</small>") + "</button>";
+        (o ? "<small>" + ref(o.total) + " · " + mins(o.opened_at) + "</small><small>" + esc(o.opened_by || "") + "</small>" + badges(o) : "<small>libre</small>") + "</button>";
     }).join("") + "</div>";
+  }
+  function badges(o) {
+    return (o.pending ? '<span class="pend">sin enviar</span>' : "") + (o.precuenta_at ? '<span class="pend" style="background:var(--accent)">pidió la cuenta</span>' : "") +
+      (num(o.paid) > 0 ? '<span class="pend" style="background:var(--ok)">abonó ' + ref(num(o.paid)) + "</span>" : "");
   }
   function tableById(id) { return ST && ST.tables.find(function (t) { return t.id === id; }); }
   function mins(ts) { var m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; }
@@ -161,7 +178,8 @@
     drawTables();
   });
   $("areaBody").addEventListener("click", function (e) {
-    var b = e.target.closest("button"); if (!b) return;
+    var b = e.target.closest("button, tr[data-order]"); if (!b) return;
+    if (b.id === "newDeliv") { delivForm(null); return; }
     if (b.id === "newTogo") {
       ask({ title: "Nuevo pedido para llevar", help: "Nombre del cliente (opcional)", value: "" }).then(function (name) {
         if (name === null) return;
@@ -254,7 +272,9 @@
   function drawTicket() {
     var d = cur.data; if (!d) return;
     $("orderTitle").textContent = d.label;
-    $("orderMeta").textContent = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : "Para llevar (sin servicio)";
+    $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
+      ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
+      : "Para llevar (sin servicio)";
     $("orderBy").textContent = "Abrió " + (d.opened_by || "") + " · " + mins(d.opened_at);
     var h = "";
     d.items.forEach(function (i) {
@@ -271,18 +291,23 @@
     });
     $("lines").innerHTML = h || '<p class="muted" style="padding:8px">Sin platos todavía. Elige de la carta.</p>';
     var t = d.totals, cartSum = cur.cart.reduce(function (s, c) { return s + c.qty * priceOf(c.dish, c.variant); }, 0), rate = ST && ST.rate;
-    var sub = num(t.subtotal) + cartSum, disc = Math.min(num(t.discount), sub), svc = Math.round((sub - disc) * num(d.service_pct)) / 100, tot = sub - disc + svc;
+    var sub = num(t.subtotal) + cartSum, disc = Math.min(num(t.discount), sub), svc = Math.round((sub - disc) * num(d.service_pct)) / 100, dl = num(t.delivery), tot = sub - disc + svc + dl, paid = num(t.paid);
     $("totals").innerHTML = '<div class="tot"><span>Subtotal</span><span>' + ref(sub) + "</span></div>" +
       (disc ? '<div class="tot"><span>Descuento' + (d.discount_reason ? " (" + esc(d.discount_reason) + ")" : "") + "</span><span>−" + ref(disc) + "</span></div>" : "") +
       (svc ? '<div class="tot"><span>Servicio ' + num(d.service_pct) + " %</span><span>" + ref(svc) + "</span></div>" : "") +
+      (dl ? '<div class="tot"><span>Delivery</span><span>' + ref(dl) + "</span></div>" : "") +
       '<div class="tot big"><span>Total</span><span>' + ref(tot) + "</span></div>" +
-      (rate ? '<div class="tot muted"><span>En bolívares</span><span>' + bs(Math.round(tot * rate * 100) / 100) + "</span></div>" : "");
+      (paid ? '<div class="tot"><span>Abonado</span><span>−' + ref(paid) + '</span></div><div class="tot big"><span>Falta</span><span>' + ref(tot - paid) + "</span></div>" : "") +
+      (rate ? '<div class="tot muted"><span>En bolívares</span><span>' + bs(Math.round((tot - paid) * rate * 100) / 100) + "</span></div>" : "") +
+      (d.precuenta_at ? '<div class="muted">Precuenta impresa a las ' + new Date(d.precuenta_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + "</div>" : "");
     var pending = cur.cart.length + d.items.filter(function (i) { return i.status === "pendiente"; }).length;
     $("send").textContent = pending ? "Enviar a cocina (" + pending + ")" : "Enviar a cocina";
     $("send").disabled = !pending;
     var hasItems = d.items.some(function (i) { return i.status !== "anulado"; });
     $("pay").disabled = !hasItems || pending > 0; $("precuenta").disabled = !hasItems || pending > 0;
     $("move").classList.toggle("hidden", d.kind !== "mesa");
+    $("cancel").disabled = paid > 0;
+    var ed = $("editDeliv"); if (ed) ed.onclick = function () { delivForm(d); };
   }
   function fmtQ(n) { n = num(n); return n % 1 ? nf2.format(n) : String(n); }
 
@@ -338,6 +363,21 @@
   });
   $("moveCancel").addEventListener("click", function () { $("moveDlg").close(); });
 
+  // ---------------------------------------------------------------- Delivery
+  var delivEdit = null;
+  function delivForm(d) {
+    delivEdit = d; $("delivTitle").textContent = d ? "Datos del delivery" : "Nuevo delivery"; $("dErr").textContent = "";
+    $("dName").value = d ? d.customer : ""; $("dPhone").value = d ? d.phone : ""; $("dAddr").value = d ? d.address : ""; $("dFee").value = d ? num(d.delivery_fee) : "0";
+    $("delivDlg").showModal(); setTimeout(function () { $("dName").focus(); }, 50);
+  }
+  $("dCancel").addEventListener("click", function () { $("delivDlg").close(); });
+  $("dOk").addEventListener("click", function () {
+    var a = { p_name: $("dName").value.trim(), p_phone: $("dPhone").value.trim(), p_address: $("dAddr").value.trim(), p_fee: num($("dFee").value) };
+    if (a.p_name.length < 2) { $("dErr").textContent = "Escribe el nombre del cliente."; return; }
+    (delivEdit ? rpc("pos_set_delivery", Object.assign({ p_order: delivEdit.id }, a)).then(function () { return delivEdit.id; }) : rpc("pos_open_delivery", a))
+      .then(function (id) { $("delivDlg").close(); return openOrder(id); }).catch(function (e) { $("dErr").textContent = errMsg(e); });
+  });
+
   // ---------------------------------------------------------------- Cobro
   var pays = [], changeCur = "REF";
   $("pay").addEventListener("click", function () {
@@ -346,18 +386,21 @@
       pays = []; changeCur = "REF"; $("payErr").textContent = "";
       var t = cur.data.totals;
       $("payTitle").textContent = "Cobrar · " + cur.data.label;
-      $("payTotal").textContent = ref(num(t.total));
+      var dueNow = num(t.total) - num(t.paid); splitN = 0;
+      $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
       $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
-      $("payTotalBs").textContent = ST.rate ? bs(Math.round(num(t.total) * ST.rate * 100) / 100) : "";
+      $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
       $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + m[1] + "</button>"; }).join("");
       drawPays(); $("payDlg").showModal();
     }).catch(fail);
   });
   function payRef(p) { var m = METHODS.find(function (x) { return x[0] === p.method; }); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
-  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = num(cur.data.totals.total), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
+  var splitN = 0;
+  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
   $("payMethods").addEventListener("click", function (e) {
     var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
     var m = METHODS.find(function (x) { return x[0] === b.dataset.m; }), s = paySums(), rest = Math.max(0, s.rest);
+    if (splitN > 1) rest = Math.min(rest, Math.ceil(s.total / splitN * 100) / 100);
     pays.push({ method: m[0], amount: m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2), reference: "" });
     drawPays();
     var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); }
@@ -382,7 +425,16 @@
     } else { $("payRestLbl").textContent = "Completo"; $("payRest").textContent = "✓"; show("changeBox", false); }
     document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = b.dataset.cur === "BS" && !ST.rate; });
     $("payOk").disabled = !pays.length || s.rest > 0.02;
+    show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0);
+    $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
   }
+  $("paySplit").addEventListener("click", function () {
+    ask({ title: "Dividir la cuenta", help: "¿Entre cuántas personas? Cada método que toques pondrá la parte de una persona.", value: "2", type: "number" }).then(function (v) {
+      if (v === null) return; splitN = Math.max(1, Math.round(num(v)));
+      toast(splitN > 1 ? "Cada parte: " + ref(Math.ceil(paySums().total / splitN * 100) / 100) : "Sin dividir");
+    });
+  });
+  $("payPartial").addEventListener("click", function () { doPay(true); });
   $("payLines").addEventListener("input", function (e) {
     var row = e.target.closest("[data-i]"); if (!row) return; var p = pays[Number(row.dataset.i)];
     if (e.target.classList.contains("amt")) p.amount = e.target.value; else if (e.target.classList.contains("refin")) p.reference = e.target.value;
@@ -392,18 +444,20 @@
   $("changeCur").addEventListener("click", function (e) { var b = e.target.closest("[data-cur]"); if (!b || b.disabled) return; changeCur = b.dataset.cur; updatePaySums(); });
   $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
   var paying = false;
-  $("payOk").addEventListener("click", function () {
+  $("payOk").addEventListener("click", function () { doPay(false); });
+  function doPay(partial) {
     if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
     var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference }; }).filter(function (p) { return p.amount > 0; });
-    rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur }).then(function (r) {
+    rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
       $("payDlg").close();
+      if (r && r.closed === false) { toast("Abono de " + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder(); }
       var ch = r && r.change;
       toast("Cobrado " + ref(r.total) + (ch ? " · Vuelto " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)) : ""));
       if (ch) alert("Entrega de vuelto: " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)));
       goTables();
     }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
       .then(function () { paying = false; if (cur.data) updatePaySums(); });
-  });
+  }
 
   // ---------------------------------------------------------------- Caja
   $("btnCaja").addEventListener("click", function () { openCash(); });
@@ -430,6 +484,7 @@
           '<textarea id="cashNotes" placeholder="Notas del cierre (opcional)" style="margin-top:10px"></textarea>' +
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Cerrar caja e imprimir el cierre</button></p></div>";
       }
+      h += '<div class="card"><div class="row"><button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button></div></div>';
       $("cashBody").innerHTML = h;
       if (!$("cashDlg").open) $("cashDlg").showModal();
     }).catch(fail);
@@ -442,12 +497,61 @@
       }).catch(fail);
     } else if (id === "openCash") {
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
+    } else if (id === "soldOut") { openSoldOut();
+    } else if (id === "invCount") { openCount();
     } else if (id === "doClose") {
       var counted = {}; document.querySelectorAll("#cashBody .cnt").forEach(function (i) { if (i.value.trim() !== "") counted[i.dataset.m] = num(i.value); });
       if (!confirm("¿Cerrar la caja? Se imprimirá el cierre y las ventas pasarán a la gestión.")) return;
       rpc("pos_cash_close", { p_counted: counted, p_notes: $("cashNotes").value.trim() }).then(function () { toast("Caja cerrada. Cierre enviado a la impresora."); $("cashDlg").close(); refreshState(); }).catch(fail);
     }
   });
+
+  // ---------------------------------------------------------------- Agotados e inventario
+  var listMode = null, invRows = [];
+  function openSoldOut() {
+    listMode = "agotados"; $("listTitle").textContent = "Platos agotados"; $("listHelp").textContent = "Toca un plato para marcarlo agotado o disponible. Se oculta en la carta y nadie puede pedirlo.";
+    $("listSearch").value = ""; drawList(); $("listFoot").innerHTML = ""; $("listDlg").showModal();
+  }
+  function openCount() {
+    q(sb.rpc("pos_inventory")).then(function (rows) {
+      invRows = rows || []; listMode = "inventario"; $("listTitle").textContent = "Conteo de inventario";
+      $("listHelp").textContent = invRows.length ? "Escribe lo que hay de verdad, en la unidad de compra. Deja en blanco lo que no contaste." : "Todavía no hay insumos cargados. Se cargan en Gestión → Insumos.";
+      $("listSearch").value = ""; drawList();
+      $("listFoot").innerHTML = invRows.length ? '<button type="button" class="primary big" id="saveCount" style="width:100%">Guardar conteo</button>' : "";
+      $("listDlg").showModal();
+    }).catch(fail);
+  }
+  function drawList() {
+    var term = $("listSearch").value.trim().toLowerCase();
+    if (listMode === "agotados") {
+      $("listBody").innerHTML = '<div class="dishes">' + MENU.dishes.filter(function (d) { return !term || d.name.toLowerCase().indexOf(term) >= 0; }).map(function (d) {
+        return '<button type="button" data-av="' + d.id + '"' + (d.available ? "" : ' style="background:var(--danger);color:#fff;border-color:var(--danger)"') + ">" + esc(d.name) + "<span" + (d.available ? "" : ' style="color:#fff"') + ">" + (d.available ? "Disponible" : "AGOTADO") + "</span></button>";
+      }).join("") + "</div>";
+    } else {
+      $("listBody").innerHTML = '<table class="tbl"><thead><tr><th>Insumo</th><th class="r">Sistema</th><th>Contado</th></tr></thead><tbody>' + invRows.filter(function (r) { return !term || r.name.toLowerCase().indexOf(term) >= 0; }).map(function (r) {
+        var low = num(r.stock) <= num(r.min) && num(r.min) > 0;
+        return "<tr><td>" + esc(r.name) + (low ? ' <span class="pend" style="background:var(--warn);color:#fff;border-radius:999px;padding:0 8px;font-size:12px">bajo</span>' : "") + '</td><td class="r">' + nf2.format(num(r.stock)) + " " + esc(r.unit) +
+          '</td><td><input class="cnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px" value="' + esc(r._c || "") + '"></td></tr>';
+      }).join("") + "</tbody></table>";
+    }
+  }
+  $("listSearch").addEventListener("input", function () {
+    document.querySelectorAll("#listBody [data-ing]").forEach(function (i) { var r = invRows.find(function (x) { return String(x.id) === i.dataset.ing; }); if (r) r._c = i.value; });
+    drawList();
+  });
+  $("listBody").addEventListener("input", function (e) { var i = e.target.closest("[data-ing]"); if (!i) return; var r = invRows.find(function (x) { return String(x.id) === i.dataset.ing; }); if (r) r._c = i.value; });
+  $("listBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-av]"); if (!b) return;
+    var d = MENU.dishes.find(function (x) { return x.id === Number(b.dataset.av); });
+    rpc("pos_set_available", { p_dish: d.id, p_available: !d.available }).then(function () { d.available = !d.available; toast(d.name + (d.available ? " disponible" : " AGOTADO")); drawList(); drawMenu(); }).catch(fail);
+  });
+  $("listFoot").addEventListener("click", function (e) {
+    if (e.target.id !== "saveCount") return;
+    var counts = invRows.filter(function (r) { return r._c != null && String(r._c).trim() !== ""; }).map(function (r) { return { id: r.id, qty: num(r._c) }; });
+    if (!counts.length) return toast("No escribiste ninguna cantidad", true);
+    rpc("pos_count", { p_counts: counts }).then(function (n) { toast("Conteo guardado (" + n + " insumos)"); $("listDlg").close(); }).catch(fail);
+  });
+  $("listClose").addEventListener("click", function () { $("listDlg").close(); });
 
   // ---------------------------------------------------------------- Diálogo de texto
   var askResolve = null, askCfg = null;

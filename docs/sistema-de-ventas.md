@@ -13,7 +13,14 @@ de caja**. La factura fiscal se hace a mano hasta que llegue la factura electró
 
 ## Cómo funciona
 
-- **Áreas:** Feria (mesas 1–20), Tokio (1–8) y Edo (1–5), más **Para llevar**.
+- **Áreas:** Feria (mesas 1–20), Tokio (1–8) y Edo (1–5), más **Para llevar** y **Delivery** (nombre,
+  teléfono, dirección y costo del delivery; sin 10 %).
+- **Por cobrar:** todas las mesas abiertas con lo que falta, cuáles **pidieron la cuenta** (precuenta
+  impresa) y cuáles abonaron.
+- **Dividir la cuenta:** en el cobro, «Dividir cuenta» entre N personas; cada una paga con su método
+  («Cobrar solo esta parte») y la mesa sigue abierta hasta completar. Una cuenta con abonos no se puede anular.
+- **Agotados:** Caja → «Platos agotados»; desaparecen de la carta y nadie puede pedirlos.
+- **Conteo de inventario:** Caja → «Conteo de inventario» (lo contado reemplaza el stock del sistema).
 - Cada persona entra con **su PIN**; todas pueden tomar pedidos y cobrar. Todo queda registrado con su nombre.
 - **Enviar a cocina** imprime la comanda en cocina. Lo que ya está en cocina solo se puede **anular
   con motivo**; el motivo sale en el **cierre de caja**. Igual con los **descuentos**.
@@ -25,6 +32,9 @@ de caja**. La factura fiscal se hace a mano hasta que llegue la factura electró
 - **Caja:** se abre con el fondo en efectivo y se cierra escribiendo lo contado por método. El cierre
   se imprime con diferencias, anulaciones y descuentos, y las ventas pasan solas a **Gestión → Ventas**
   y al **inventario**.
+- **Cierre por correo:** al cerrar caja, el puente envía un reporte detallado (métodos y arqueo, áreas,
+  meseras, horas, platos, anulaciones, descuentos y cada pedido) a los correos de Gestión → Ventas →
+  Ajustes. Necesita en `config.json` una cuenta de Gmail con **contraseña de aplicación** (`correo`).
 - La tablet se **bloquea** sola a los 3 minutos sin uso.
 - Necesita internet. Si se cae, se anota en papel y se carga al volver.
 

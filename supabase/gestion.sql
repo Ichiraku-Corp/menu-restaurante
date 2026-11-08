@@ -433,7 +433,8 @@ create or replace function public.register_movement(
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare ing public.ingredients; emp bigint; u text; q numeric; newstock numeric; c numeric; new_id bigint;
 begin
-  if not public.can_manage_or_service() then raise exception 'Sin permiso'; end if;
+  -- La cuenta «sala» solo puede registrar conteos (desde la caja, con PIN: pos_count en pos.sql).
+  if not (public.can_manage_or_service() or (coalesce(public.staff_role(), '') = 'sala' and p_kind = 'conteo')) then raise exception 'Sin permiso'; end if;
   if p_kind not in ('compra', 'merma', 'consumo', 'conteo', 'ajuste') then raise exception 'Tipo no válido: %', p_kind; end if;
   if p_qty is null or (p_kind <> 'ajuste' and p_qty < 0) then raise exception 'Cantidad no válida'; end if;
 
@@ -535,7 +536,7 @@ alter table public.gestion_settings add column if not exists iva_pct numeric(5,2
 -- nóminas, ventas ni costos. Crear la cuenta en Authentication → Users y luego:
 --   insert into public.staff (email, role) values ('cocina@tu-dominio.com', 'cocina');
 alter table public.staff drop constraint if exists staff_role_check;
-alter table public.staff add constraint staff_role_check check (role in ('dueño', 'admin', 'cajero', 'cocina'));
+alter table public.staff add constraint staff_role_check check (role in ('dueño', 'admin', 'cajero', 'cocina', 'sala', 'impresora'));
 
 create or replace function public.staff_role() returns text
 language sql stable security definer set search_path = public as $$

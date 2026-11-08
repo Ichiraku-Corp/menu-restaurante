@@ -4,11 +4,24 @@
   "email": "CORREO-DE-LA-CUENTA-IMPRESORA",
   "password": "CONTRASEÑA-DE-LA-CUENTA-IMPRESORA",
   "printers": {
-    "cocina": { "ip": "192.168.1.100", "port": 9100 },
-    "caja":   { "ip": "192.168.0.20",  "port": 9100 }
+    "cocina": {
+      "ip": "192.168.1.100",
+      "port": 9100
+    },
+    "caja": {
+      "ip": "192.168.0.20",
+      "port": 9100
+    }
   },
   "width": 48,
   "poll_ms": 2000,
   "bcv": true,
-  "bcv_minutes": 30
+  "bcv_minutes": 30,
+  "correo": {
+    "host": "smtp.gmail.com",
+    "port": 465,
+    "user": "CORREO-GMAIL-QUE-ENVIA",
+    "password": "CONTRASEÑA-DE-APLICACION-DE-GMAIL",
+    "from_name": "Ichiraku Ramen"
+  }
 }
