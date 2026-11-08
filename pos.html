@@ -290,6 +290,38 @@
     .pad button { width:76px; height:76px; }
     .people { grid-template-columns:repeat(2, minmax(0, 1fr)); }
     .dishes { grid-template-columns:minmax(0, 1fr); }
+    /* Mesas: más mesas a la vista, avisos y resumen compactos */
+    .banner { font-size:13px; padding:8px 10px; border-radius:12px; margin-bottom:6px; gap:6px; }
+    .banner.alert ul { font-size:13px; }
+    .summary { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; margin-bottom:8px; }
+    .summary .s { padding:5px 7px; border-radius:11px; }
+    .summary .s b { font-size:14px; }
+    .summary .s span { font-size:9px; letter-spacing:.02em; }
+    .tables { grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; }
+    .tables button { min-height:74px; padding:6px 7px; border-radius:12px; }
+    .tables button .num { font-size:21px; }
+    .tables button .amt { font-size:12px; }
+    .legend span:last-child { display:none; }
+    /* Ventanas como hoja desde abajo, con los botones siempre a la vista */
+    dialog { width:100vw !important; max-width:100vw; margin:auto 0 0; border-radius:20px 20px 0 0; max-height:94dvh;
+      padding:16px 14px calc(14px + env(safe-area-inset-bottom, 0px)); border-left:0; border-right:0; border-bottom:0; }
+    dialog h2 { font-size:19px; }
+    .dfoot { position:sticky; bottom:calc(-14px - env(safe-area-inset-bottom, 0px)); z-index:3; background:var(--surface); margin:10px -14px calc(-14px - env(safe-area-inset-bottom, 0px));
+      padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); border-top:1px solid var(--line); flex-wrap:wrap; gap:8px; }
+    .dfoot .row { flex-wrap:wrap; gap:6px; }
+    .dfoot button { min-height:46px; padding:8px 12px; font-size:14px; }
+    .dfoot > .row { width:100%; }
+    #payOk, #repSend, #spPrint, #spSave { flex:1 1 auto; }
+    #payOk, #repSend { width:100%; }
+    .banner { display:block; }
+    #payRest { font-size:18px; }
+    /* Mensajes arriba para no tapar los botones de abajo */
+    #toast, body.has-bar #toast { top:calc(64px + env(safe-area-inset-top, 0px)); bottom:auto; max-width:calc(100vw - 24px); text-align:center; font-size:14px; padding:10px 16px; }
+    /* Por cobrar en tarjetas */
+    .duecards { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .duecards button { display:grid; grid-template-columns:1fr auto; gap:2px 10px; text-align:left; padding:10px 12px; border-radius:14px; }
+    .duecards button b.n { font-size:17px; text-align:right; }
+    .duecards small { color:var(--muted); font-weight:500; }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition:none !important; animation:none !important; } }
 </style>
@@ -451,7 +483,7 @@
     </div>
   </div>
   <p id="payErr" class="muted" style="color:var(--danger)"></p>
-  <div class="row between"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
+  <div class="row between dfoot"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
     <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
 </dialog>
 
@@ -471,7 +503,7 @@
   <div class="row between" style="margin:10px 0 4px"><b id="spLeft"></b><button type="button" id="spRest">Lo que falta → esta persona</button></div>
   <div id="spUnits" class="units"></div>
   <p id="spErr" class="muted" style="color:var(--danger)"></p>
-  <div class="row between"><div class="row"><button type="button" id="spCancel">Cancelar</button><button type="button" class="danger" id="spClear">Quitar división</button></div>
+  <div class="row between dfoot"><div class="row"><button type="button" id="spCancel">Cancelar</button><button type="button" class="danger" id="spClear">Quitar división</button></div>
     <div class="row"><button type="button" id="spSave">Guardar</button><button type="button" class="primary" id="spPrint">Guardar e imprimir precuenta</button></div></div>
 </dialog>
 
@@ -480,7 +512,7 @@
   <div class="row between"><h2 style="margin:0">Revisa el cierre antes de enviarlo</h2><button type="button" id="repBack">Volver y corregir</button></div>
   <div id="repBody" class="report"></div>
   <p id="repErr" class="muted" style="color:var(--danger)"></p>
-  <div class="row between"><button type="button" id="repBack2">Volver y corregir</button><button type="button" class="primary big" id="repSend">Cerrar caja y enviar por correo</button></div>
+  <div class="row between dfoot"><button type="button" id="repBack2">Volver y corregir</button><button type="button" class="primary big" id="repSend">Cerrar caja y enviar por correo</button></div>
 </dialog>
 
 <!-- Cuentas del personal (abonos en caja) -->

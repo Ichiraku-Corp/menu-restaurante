@@ -157,7 +157,9 @@
     drawTables(); window.scrollTo(0, 0);
   });
   $("obToggle").addEventListener("click", function () { $("toggleMenu").click(); syncOrderBar(); window.scrollTo(0, 0); });
-  $("obSend").addEventListener("click", function () { $("send").click(); });
+  $("obSend").addEventListener("click", function () {
+    var m = this.dataset.mode; if (m === "pay") $("pay").click(); else if (m === "bill") $("precuenta").click(); else $("send").click();
+  });
   function syncOrderBar() {
     if (!cur.data) return;
     var g = $("orderGrid"), showingMenu = g.classList.contains("show-menu"), pending = cur.cart.length + cur.data.items.filter(function (i) { return i.status === "pendiente"; }).length;
@@ -165,7 +167,12 @@
     $("obCount").textContent = count + (count === 1 ? " plato" : " platos") + (pending ? " · " + pending + " sin enviar" : "");
     $("obTotal").textContent = ref(cur.due || 0);
     $("obToggle").textContent = showingMenu ? "Ver cuenta" : "Ver carta";
-    $("obSend").disabled = !pending; $("obSend").textContent = pending ? "Enviar (" + pending + ")" : "Enviado";
+    // Botón principal según el momento: enviar lo nuevo → cobrar (o pedir la precuenta si no puede cobrar)
+    var hasItems = cur.data.items.some(function (i) { return i.status !== "anulado"; }), b = $("obSend");
+    b.dataset.mode = pending ? "send" : !hasItems ? "none" : U && U.charge ? "pay" : "bill";
+    b.disabled = b.dataset.mode === "none";
+    b.textContent = { send: "Enviar (" + pending + ")", pay: "Cobrar", bill: "Precuenta", none: "Enviar" }[b.dataset.mode];
+    b.className = b.dataset.mode === "pay" ? "ok" : "primary";
   }
   // Pantalla completa (para tablets sin «instalar app», como las Fire con Silk)
   var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
@@ -266,7 +273,10 @@
       var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.opened_at) - new Date(b.opened_at); });
       var due = all.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = all.filter(function (o) { return o.precuenta_at; }).length;
       $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + " pedidos abiertos · " + ref(due) + " por cobrar</b>" +
-        '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length ? '<table class="tbl" style="margin-top:8px"><thead><tr><th>Pedido</th><th>Tiempo</th><th>Estado</th><th class="r">Total</th><th class="r">Falta</th></tr></thead><tbody>' +
+        '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length && window.innerWidth <= 560 ? '<div class="duecards">' + all.map(function (o) {
+          return '<button type="button" data-order="' + o.id + '"><b>' + esc(o.label) + '</b><b class="n">' + ref(num(o.total) - num(o.paid)) + "</b><small>" + esc(o.opened_by || "") + " · " + mins(o.opened_at) + "</small><small style=\"text-align:right\">" +
+            (o.precuenta_at ? '<span class="pill bill">pidió la cuenta</span>' : '<span class="pill eat">comiendo</span>') + (num(o.paid) > 0 ? ' <span class="pill paid">abonó</span>' : "") + "</small></button>";
+        }).join("") + "</div>" : all.length ? '<table class="tbl" style="margin-top:8px"><thead><tr><th>Pedido</th><th>Tiempo</th><th>Estado</th><th class="r">Total</th><th class="r">Falta</th></tr></thead><tbody>' +
         all.map(function (o) { return '<tr data-order="' + o.id + '" style="cursor:pointer"><td><b>' + esc(o.label) + '</b><div class="muted">' + esc(o.opened_by || "") + "</div></td><td>" + mins(o.opened_at) + "</td><td>" +
           (o.precuenta_at ? '<span class="pill bill">pidió la cuenta</span>' : '<span class="pill eat">comiendo</span>') +
           (num(o.paid) > 0 ? ' <span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "") + '</td><td class="r">' + ref(o.total) + '</td><td class="r"><b>' + ref(num(o.total) - num(o.paid)) + "</b></td></tr>"; }).join("") +
