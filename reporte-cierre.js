@@ -31,6 +31,11 @@ ${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulad
     ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
 ${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
 ${H("Cobros por persona")}${table(["Quién cobró", "Método", "Pagos", "Monto", "En Ref"], (d.cashiers || []).map((x) => [he(x.name), MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [2, 3, 4])}
+${H("Conteo de afuera")}${table(["Producto", "Según sistema", "Contado", "Diferencia"], (Array.isArray(cnt._inv) ? cnt._inv : []).map((x) => {
+    const diff = x.counted == null || x.expected == null ? null : Number(x.counted) - Number(x.expected);
+    return [he(x.name), x.expected == null ? "primer conteo" : fq(x.expected) + " " + he(x.unit), x.counted == null ? "<i>sin contar</i>" : fq(x.counted) + " " + he(x.unit),
+      diff === null ? "" : `<b style="color:${Math.abs(diff) < 0.001 ? "#2f7d4f" : "#b3261e"}">${diff > 0 ? "+" : ""}${fq(diff)}</b>`];
+  }), [1, 2, 3])}
 ${H("Propinas y cuentas del personal")}<p style="margin:4px 0 8px">Propinas recibidas: <b>Ref ${fm(d.tips)}</b> (se reparten el día 5 con el servicio).</p>
 ${table(["Persona", "Movimiento", "Monto", "Detalle", "Saldo actual"], (d.tabs || []).map((x) => [he(x.name), x.kind === "consumo" ? "Consumo a cuenta" : "Abono en caja", "Ref " + fm(Math.abs(x.amount)), he(x.note), "Ref " + fm(x.balance)]), [2, 4])}
 ${H("Cobros hechos fuera de la caja")}${(d.off_caja || []).length ? table(["Hora", "Pedido", "Quién", "Equipo", "Método", "Monto"], d.off_caja.map((x) => [hh(x.at), he(x.order), he(x.by), he(x.device), MNAMES[x.method] || he(x.method), (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount)]), [5]) : "<p style=\"color:#2f7d4f\">Ninguno: todos los cobros se hicieron en la caja.</p>"}

@@ -223,6 +223,8 @@
     if (!ST.rate) h += '<div class="banner warn">No hay tasa del euro BCV. Escríbela en «Caja» para poder cobrar en bolívares.</div>';
     if (ST.printer_oldest && Date.now() - new Date(ST.printer_oldest).getTime() > 60000)
       h += '<div class="banner">La impresión está atrasada (' + ST.printer_backlog + ' pendientes). Revisa que la laptop de caja y su puente de impresión estén encendidos.</div>';
+    var low = ST.low_stock || [];
+    if (low.length && U && U.charge) h += '<div class="banner warn"><b>Queda poco afuera:</b> ' + low.map(function (x) { return esc(x.name) + " (" + (num(x.stock) <= 0 ? "AGOTADO" : fmtQ(x.stock)) + ")"; }).join(" · ") + " · Cuando llegue, regístralo en Caja → Llegó mercancía.</div>";
     var al = (ST.alerts || []);
     if (al.length && U && U.charge) h += '<div class="banner alert"><b>⚠ Cobros hechos fuera de la caja (' + al.length + ")</b><ul>" + al.map(function (a) {
       return "<li>" + new Date(a.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · <b>" + esc(a.by || "") + "</b> cobró " + esc(a.label) + " · " + ref(num(a.amount_ref)) + " desde «" + esc(a.device) + "»</li>";
@@ -837,7 +839,8 @@
   $("btnCaja").addEventListener("click", function () { openCash(); });
   $("cashClose").addEventListener("click", function () { $("cashDlg").close(); });
   function openCash() {
-    refreshState().then(function () { return q(sb.rpc("pos_cash_summary")); }).then(function (sm) {
+    refreshState().then(function () { return Promise.all([q(sb.rpc("pos_cash_summary")), q(sb.rpc("pos_outside")).catch(function () { return []; })]); }).then(function (rr) {
+      var sm = rr[0]; OUTS = rr[1] || [];
       var h = '<div class="card" style="margin:10px 0"><div class="row between"><div><b>Tasa euro BCV de hoy</b><div class="muted">' +
         (ST.rate ? nf2.format(ST.rate) + " Bs/€" + (ST.rate_date !== today() ? " (es de otro día)" : "") : "Sin tasa") +
         '</div></div>' + (U.charge ? '<button type="button" id="setRate">Escribir tasa</button>' : "") + '</div><p class="muted" style="margin-bottom:0">Se actualiza sola desde el BCV a través de la laptop de caja; aquí puedes corregirla.</p></div>';
@@ -857,10 +860,13 @@
           '<h3>Cierre: escribe lo que hay en cada método</h3><table class="tbl"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + "</tbody></table>" +
           "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
           "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
+          (OUTS.length ? "<h3>Conteo de afuera (lo que queda ahora)</h3>" + '<table class="tbl"><thead><tr><th>Producto</th><th class="r">Según sistema</th><th>Contado</th></tr></thead><tbody>' +
+            OUTS.map(function (r) { return "<tr><td>" + esc(r.name) + '</td><td class="r">' + (r.active ? fmtQ(r.stock) + " " + esc(r.unit) : '<span class="muted">primer conteo</span>') +
+              '</td><td><input class="icnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px"></td></tr>'; }).join("") + "</tbody></table>" : "") +
           '<textarea id="cashNotes" placeholder="Notas del cierre (opcional)" style="margin-top:10px"></textarea>' +
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
-      h += '<div class="card"><div class="row"><button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
+      h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
         (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button>' : "") + "</div></div>";
       $("cashBody").innerHTML = h;
       if (!$("cashDlg").open) $("cashDlg").showModal();
@@ -875,10 +881,14 @@
     } else if (id === "openCash") {
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
     } else if (id === "tabsBtn") { openTabs();
+    } else if (id === "buyBtn") { openPurchase();
     } else if (id === "soldOut") { openSoldOut();
     } else if (id === "invCount") { openCount();
     } else if (id === "doClose") {
       var counted = {}; document.querySelectorAll("#cashBody .cnt").forEach(function (i) { if (i.value.trim() !== "") counted[i.dataset.m] = num(i.value); });
+      var inv = {}, missing = 0; document.querySelectorAll("#cashBody .icnt").forEach(function (i) { if (i.value.trim() !== "") inv[i.dataset.ing] = num(i.value); else missing++; });
+      if (missing && !confirm("Faltan " + missing + " productos de afuera por contar. ¿Seguir sin contarlos?")) return;
+      counted._inv = inv;
       closing = { counted: counted, notes: $("cashNotes").value.trim() };
       rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
         closing.recipients = d.recipients || "";
@@ -942,6 +952,16 @@
       $("listDlg").showModal();
     }).catch(fail);
   }
+  var OUTS = [];
+  function openPurchase() {
+    q(sb.rpc("pos_outside")).then(function (rows) {
+      invRows = rows || []; listMode = "compra"; $("listTitle").textContent = "Llegó mercancía";
+      $("listHelp").textContent = invRows.length ? "Escribe cuánto llegó de cada producto (en su unidad). Se suma al inventario y lo agotado vuelve solo a la carta." : "Todavía no hay productos de afuera. Se cargan en Gestión → Insumos (zona Afuera).";
+      $("listSearch").value = ""; drawList();
+      $("listFoot").innerHTML = invRows.length ? '<button type="button" class="primary big" id="savePurchase" style="width:100%">Registrar lo que llegó</button>' : "";
+      $("listDlg").showModal();
+    }).catch(fail);
+  }
   function drawList() {
     var term = $("listSearch").value.trim().toLowerCase();
     if (listMode === "agotados") {
@@ -949,7 +969,7 @@
         return '<button type="button" data-av="' + d.id + '"' + (d.available ? "" : ' style="background:var(--danger);color:#fff;border-color:var(--danger)"') + ">" + esc(d.name) + "<span" + (d.available ? "" : ' style="color:#fff"') + ">" + (d.available ? "Disponible" : "AGOTADO") + "</span></button>";
       }).join("") + "</div>";
     } else {
-      $("listBody").innerHTML = '<table class="tbl"><thead><tr><th>Insumo</th><th class="r">Sistema</th><th>Contado</th></tr></thead><tbody>' + invRows.filter(function (r) { return !term || r.name.toLowerCase().indexOf(term) >= 0; }).map(function (r) {
+      $("listBody").innerHTML = '<table class="tbl"><thead><tr><th>' + (listMode === "compra" ? "Producto" : "Insumo") + '</th><th class="r">Hay</th><th>' + (listMode === "compra" ? "Llegó" : "Contado") + '</th></tr></thead><tbody>' + invRows.filter(function (r) { return !term || r.name.toLowerCase().indexOf(term) >= 0; }).map(function (r) {
         var low = num(r.stock) <= num(r.min) && num(r.min) > 0;
         return "<tr><td>" + esc(r.name) + (low ? ' <span class="pend" style="background:var(--warn);color:#fff;border-radius:999px;padding:0 8px;font-size:12px">bajo</span>' : "") + '</td><td class="r">' + nf2.format(num(r.stock)) + " " + esc(r.unit) +
           '</td><td><input class="cnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px" value="' + esc(r._c || "") + '"></td></tr>';
@@ -967,6 +987,12 @@
     rpc("pos_set_available", { p_dish: d.id, p_available: !d.available }).then(function () { d.available = !d.available; toast(d.name + (d.available ? " disponible" : " AGOTADO")); drawList(); drawMenu(); }).catch(fail);
   });
   $("listFoot").addEventListener("click", function (e) {
+    if (e.target.id === "savePurchase") {
+      var items = invRows.filter(function (r) { return r._c != null && num(r._c) > 0; }).map(function (r) { return { id: r.id, qty: num(r._c) }; });
+      if (!items.length) return toast("No escribiste ninguna cantidad", true);
+      rpc("pos_purchase", { p_items: items }).then(function (n) { toast("Mercancía registrada (" + n + " productos)"); $("listDlg").close(); loadMenu(); refreshState(); }).catch(fail);
+      return;
+    }
     if (e.target.id !== "saveCount") return;
     var counts = invRows.filter(function (r) { return r._c != null && String(r._c).trim() !== ""; }).map(function (r) { return { id: r.id, qty: num(r._c) }; });
     if (!counts.length) return toast("No escribiste ninguna cantidad", true);

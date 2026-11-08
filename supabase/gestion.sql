@@ -405,6 +405,10 @@ grant execute on function public.upsert_daily_sales(date, numeric, numeric, json
 -- conteo fija la cantidad contada, ajuste suma o resta.
 alter table public.ingredients add column if not exists stock_qty numeric(12,3) not null default 0;
 alter table public.ingredients add column if not exists min_qty   numeric(12,3) not null default 0 check (min_qty >= 0);
+-- «afuera» (barra, bebidas, postres, envases): se descuenta al enviar el pedido y se agota solo al llegar a 0.
+-- «cocina»: se descuenta por recetas al cerrar caja. inv_active: el stock ya se contó o se compró al menos una vez.
+alter table public.ingredients add column if not exists zone       text not null default 'cocina' check (zone in ('afuera', 'cocina'));
+alter table public.ingredients add column if not exists inv_active boolean not null default false;
 
 create table if not exists public.inventory_movements (
   id            bigint generated always as identity primary key,
@@ -434,7 +438,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare ing public.ingredients; emp bigint; u text; q numeric; newstock numeric; c numeric; new_id bigint;
 begin
   -- La cuenta «sala» solo puede registrar conteos (desde la caja, con PIN: pos_count en pos.sql).
-  if not (public.can_manage_or_service() or (coalesce(public.staff_role(), '') = 'sala' and p_kind = 'conteo')) then raise exception 'Sin permiso'; end if;
+  -- La cuenta «sala» (caja, con PIN) solo registra conteos y compras que llegan.
+  if not (public.can_manage_or_service() or (coalesce(public.staff_role(), '') = 'sala' and p_kind in ('conteo', 'compra'))) then raise exception 'Sin permiso'; end if;
   if p_kind not in ('compra', 'merma', 'consumo', 'conteo', 'ajuste') then raise exception 'Tipo no válido: %', p_kind; end if;
   if p_qty is null or (p_kind <> 'ajuste' and p_qty < 0) then raise exception 'Cantidad no válida'; end if;
 
@@ -459,7 +464,7 @@ begin
                           else ing.stock_qty - q end;
   c := round(abs(case when p_kind = 'conteo' then q - ing.stock_qty else q end) * ing.buy_price / ing.buy_qty, 2);
 
-  update public.ingredients set stock_qty = newstock where id = ing.id;
+  update public.ingredients set stock_qty = newstock, inv_active = inv_active or p_kind in ('compra', 'conteo') where id = ing.id;
   insert into public.inventory_movements (ingredient_id, kind, qty, unit, qty_stock, stock_after, cost, delta, reason, employee_id, source)
   values (ing.id, p_kind, p_qty, u, q, newstock, c, newstock - ing.stock_qty, coalesce(p_reason, ''), emp, coalesce(p_source, 'manual'))
   returning id into new_id;
@@ -514,6 +519,7 @@ begin
     join public.recipe_items ri on ri.dish_id = p.dish_id and ri.variant = p.rv
     join public.ingredients i on i.id = ri.ingredient_id
     where p.rv is not null and public.unit_family(ri.unit) = public.unit_family(i.buy_unit)
+      and i.zone <> 'afuera'   -- lo de afuera ya se descontó al enviar cada pedido (pos.sql)
     group by i.id, i.buy_unit, i.buy_price, i.buy_qty
   loop
     update public.ingredients set stock_qty = stock_qty - r.q where id = r.ingredient_id returning stock_qty into newstock;

@@ -429,6 +429,8 @@ begin
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
+    'low_stock', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'stock', stock_qty, 'min', min_qty, 'unit', buy_unit) order by stock_qty), '[]'::jsonb)
+                  from public.ingredients where zone = 'afuera' and inv_active and (stock_qty <= 0 or stock_qty <= min_qty)),
     'alerts', (select coalesce(jsonb_agg(jsonb_build_object('order_id', x.order_id, 'label', public.pos_order_label(x.order_id), 'by', public.pos_emp_name(x.created_by),
                  'device', x.device, 'amount_ref', x.ref, 'at', x.at) order by x.at), '[]'::jsonb)
                from (select order_id, created_by, device, sum(amount_ref) ref, max(created_at) at from public.pos_payments
@@ -525,6 +527,8 @@ begin
     into lines from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
   body := '^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
           coalesce('Orden #' || num || '   ', '') || public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' || lines || E'\n=';
+  -- inventario de afuera: se descuenta al enviar
+  perform public.inv_consume_item(i.id, -1) from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
   update public.pos_items set status = 'enviado', sent_at = now() where order_id = p_order and status = 'pendiente';
   perform public.pos_print('cocina', body);
   -- Copia para la comandera de pedidos de afuera (impresora de caja)
@@ -550,6 +554,7 @@ begin
   if it.status = 'anulado' then return 'ya anulado'; end if;
   if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo de la anulación'; end if;
   update public.pos_items set status = 'anulado', void_reason = trim(p_reason), voided_by = p_emp, voided_at = now() where id = p_item;
+  perform public.inv_consume_item(p_item, 1);  -- devuelve lo de afuera
   perform public.pos_print('cocina', '^ANULAR - ' || public.pos_order_label(it.order_id) || E'\n' || public.pos_now_txt() || E'\n=\n^' ||
     trim(to_char(it.qty, 'FM990.##')) || ' ' || it.name || case when it.variant <> '' then ' ' || it.variant else '' end ||
     E'\nMotivo: ' || trim(p_reason) || E'\n=');
@@ -789,6 +794,7 @@ begin
     perform public.pos_print('cocina', '^ANULAR PEDIDO' || E'\n' || public.pos_order_label(p_order) || E'\n' || public.pos_now_txt() ||
       E'\nMotivo: ' || trim(p_reason) || E'\n=');
   end if;
+  perform public.inv_consume_item(i.id, 1) from public.pos_items i where i.order_id = p_order and i.status = 'enviado';
   update public.pos_items set status = 'anulado', void_reason = trim(coalesce(p_reason, '')), voided_by = p_emp, voided_at = now()
   where order_id = p_order and status = 'enviado';
   delete from public.pos_items where order_id = p_order and status = 'pendiente';
@@ -994,7 +1000,9 @@ begin
            + case m when 'efectivo_usd' then s.opening_usd when 'efectivo_bs' then s.opening_bs else 0 end, 2))
     into exp from jsonb_object_keys(names) m;
   update public.pos_sessions set status = 'cerrada', closed_at = now(), closed_by = p_emp, expected = exp,
-    counted = coalesce(p_counted, '{}'::jsonb), notes = coalesce(p_notes, '') where id = s.id;
+    counted = (coalesce(p_counted, '{}'::jsonb) - '_inv') || jsonb_build_object('_inv',
+               public.pos_inv_close(p_counted -> '_inv', (select name from public.employees where id = p_emp), true)),
+    notes = coalesce(p_notes, '') where id = s.id;
   body := '^CIERRE DE CAJA' || E'\n' || 'Apertura: ' || to_char(s.opened_at at time zone 'America/Caracas', 'DD/MM HH24:MI') ||
     ' ' || coalesce(public.pos_emp_name(s.opened_by), '') || E'\nCierre:   ' || public.pos_now_txt() || ' ' || coalesce(public.pos_emp_name(p_emp), '') ||
     E'\n=\n' || public.pos_line('Pedidos cobrados', (sm ->> 'orders')) || E'\n' ||
@@ -1093,7 +1101,8 @@ begin
            + case m when 'efectivo_usd' then s.opening_usd when 'efectivo_bs' then s.opening_bs else 0 end, 2))
     into exp from unnest(array['efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito']) m;
   r := public.pos_session_report(s.id);
-  return jsonb_set(r, '{session}', (r -> 'session') || jsonb_build_object('expected', exp, 'counted', coalesce(p_counted, '{}'::jsonb),
+  return jsonb_set(r, '{session}', (r -> 'session') || jsonb_build_object('expected', exp,
+         'counted', (coalesce(p_counted, '{}'::jsonb) - '_inv') || jsonb_build_object('_inv', public.pos_inv_close(p_counted -> '_inv', '', false)),
          'notes', coalesce(p_notes, ''), 'closed_at', now(), 'closed_by', public.pos_emp_name(p_emp)))
          || jsonb_build_object('recipients', (select trim(report_emails) from public.gestion_settings limit 1), 'preview', true);
 end $$;
@@ -1303,6 +1312,105 @@ begin
   return n;
 end $$;
 
+-- ---------------------------------------------------------------- Inventario de afuera (en tiempo real)
+-- Al enviar un pedido se descuentan los insumos «afuera» de su receta; al anular un plato enviado se devuelven.
+-- Si un insumo llega a 0 los platos que lo usan se marcan agotados solos (y vuelven solos al reponer).
+create table if not exists public.inv_soldout_auto (
+  dish_id       bigint primary key references public.dishes(id) on delete cascade,
+  ingredient_id bigint references public.ingredients(id) on delete cascade,
+  at            timestamptz not null default now()
+);
+alter table public.inv_soldout_auto enable row level security;
+
+-- p_sign: -1 descuenta (venta), +1 devuelve (anulación)
+create or replace function public.inv_consume_item(p_item bigint, p_sign int) returns void
+language plpgsql security definer set search_path = public as $$
+declare it record; rv text; r record; q numeric; newstock numeric;
+begin
+  select i.* into it from public.pos_items i where i.id = p_item;
+  if it.dish_id is null then return; end if;
+  rv := coalesce((select ri.variant from public.recipe_items ri where ri.dish_id = it.dish_id and ri.variant = it.variant limit 1),
+                 (select ri.variant from public.recipe_items ri where ri.dish_id = it.dish_id and ri.variant = '' limit 1),
+                 (select min(ri.variant) from public.recipe_items ri where ri.dish_id = it.dish_id));
+  if rv is null then return; end if;
+  for r in select g.*, ri.qty rq, ri.unit ru from public.recipe_items ri join public.ingredients g on g.id = ri.ingredient_id
+           where ri.dish_id = it.dish_id and ri.variant = rv and g.zone = 'afuera' and g.inv_active
+             and public.unit_family(ri.unit) = public.unit_family(g.buy_unit) loop
+    q := round(it.qty * r.rq * public.unit_factor(r.ru) / public.unit_factor(r.buy_unit) / (1 - least(r.waste_pct, 89.99) / 100), 3);
+    update public.ingredients set stock_qty = stock_qty + p_sign * q where id = r.id returning stock_qty into newstock;
+    insert into public.inventory_movements (ingredient_id, kind, qty, unit, qty_stock, stock_after, cost, delta, reason, source)
+    values (r.id, case when p_sign < 0 then 'consumo' else 'ajuste' end, q, r.buy_unit, q, newstock, round(q * r.buy_price / r.buy_qty, 2), p_sign * q,
+            case when p_sign < 0 then 'Venta: ' else 'Anulado: ' end || it.name || ' · ' || public.pos_order_label(it.order_id), 'pos-item:' || it.id);
+  end loop;
+end $$;
+
+-- Se dispara con cada cambio de stock: agota o repone los platos que dependen del insumo
+create or replace function public.inv_check() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare d record;
+begin
+  if new.zone <> 'afuera' or not new.inv_active then return new; end if;
+  if new.stock_qty <= 0.0001 then
+    for d in select distinct ri.dish_id from public.recipe_items ri join public.dishes x on x.id = ri.dish_id
+             where ri.ingredient_id = new.id and x.available loop
+      update public.dishes set available = false where id = d.dish_id;
+      insert into public.inv_soldout_auto (dish_id, ingredient_id) values (d.dish_id, new.id) on conflict (dish_id) do nothing;
+      insert into public.pos_log (action, detail) values ('agotado_auto', jsonb_build_object('plato', d.dish_id, 'insumo', new.name));
+    end loop;
+  else
+    for d in select a.dish_id from public.inv_soldout_auto a where a.ingredient_id = new.id loop
+      -- vuelve a la carta solo si ningún otro insumo de afuera de ese plato está en 0
+      if not exists (select 1 from public.recipe_items ri join public.ingredients g on g.id = ri.ingredient_id
+                     where ri.dish_id = d.dish_id and g.id <> new.id and g.zone = 'afuera' and g.inv_active and g.stock_qty <= 0.0001) then
+        update public.dishes set available = true where id = d.dish_id;
+        delete from public.inv_soldout_auto where dish_id = d.dish_id;
+        insert into public.pos_log (action, detail) values ('disponible_auto', jsonb_build_object('plato', d.dish_id, 'insumo', new.name));
+      end if;
+    end loop;
+  end if;
+  return new;
+end $$;
+drop trigger if exists ingredients_inv_check on public.ingredients;
+create trigger ingredients_inv_check after update of stock_qty, inv_active, zone on public.ingredients
+  for each row execute function public.inv_check();
+
+-- Lo de afuera para la caja: compras que llegan y conteo al cerrar
+create or replace function public.pos_outside() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when public.pos_is_device() then coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name, 'unit', buy_unit,
+    'stock', stock_qty, 'min', min_qty, 'active', inv_active) order by name), '[]'::jsonb) end
+  from public.ingredients where zone = 'afuera'
+$$;
+-- p_items: [{"id": 3, "qty": 24}] en la unidad de compra
+create or replace function public.pos_purchase(p_emp bigint, p_pin text, p_items jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare c record; n int := 0; who text;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  select name into who from public.employees where id = p_emp;
+  for c in select * from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as x(id bigint, qty numeric) loop
+    if coalesce(c.qty, 0) <= 0 then continue; end if;
+    perform public.register_movement(c.id::text, 'compra', c.qty, null, 'Llegó mercancía (caja)', who, 'pos');
+    n := n + 1;
+  end loop;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'mercancia', jsonb_build_object('insumos', n));
+  return n;
+end $$;
+-- Conteo de afuera al cerrar: arma la lista esperado/contado y (si p_apply) lo registra
+create or replace function public.pos_inv_close(p_counts jsonb, p_who text, p_apply boolean) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r record; out jsonb := '[]'::jsonb; c numeric;
+begin
+  for r in select * from public.ingredients where zone = 'afuera' order by name loop
+    c := nullif(coalesce(p_counts, '{}'::jsonb) ->> r.id::text, '')::numeric;
+    out := out || jsonb_build_object('id', r.id, 'name', r.name, 'unit', r.buy_unit, 'expected', case when r.inv_active then r.stock_qty end, 'counted', c, 'min', r.min_qty);
+    if p_apply and c is not null and c >= 0 then
+      perform public.register_movement(r.id::text, 'conteo', c, null, 'Conteo al cerrar caja', p_who, 'pos');
+    end if;
+  end loop;
+  return out;
+end $$;
+
 -- ---------------------------------------------------------------- Actualizaciones automáticas del puente
 -- Cada versión trae solo los archivos que cambian (contenido en base64 + sha256). Solo se escribe con la
 -- llave de servicio (sin políticas RLS); el puente la lee con su cuenta «impresora» y avisa qué versión tiene.
@@ -1351,13 +1459,16 @@ begin
     'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
-    'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)'] loop
+    'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
+    'pos_purchase(bigint, text, jsonb)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
 end $$;
 -- Funciones internas: solo las llaman otras funciones.
 revoke execute on function public.pos_print(text, text) from authenticated;
+revoke execute on function public.inv_consume_item(bigint, int) from anon, public, authenticated;
+revoke execute on function public.pos_inv_close(jsonb, text, boolean) from anon, public, authenticated;
 revoke execute on function public.pos_sync_day(date) from authenticated;
 revoke execute on function public.pos_bill_text(bigint, text) from authenticated;
 revoke execute on function public.pos_session_report(bigint) from authenticated;

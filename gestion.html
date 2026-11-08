@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-5+J07Z3wY1+rhitwXfx89jlo6Kwuz/vbObMWrOGigQQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-VMZ02VNzmU6zttgee/0ESvMV7DDH4Z7mh+19S7z2Bm8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -846,6 +846,7 @@
         { k: "buy_unit", label: "Unidad", type: "select", options: [["kg", "kg"], ["g", "g"], ["l", "litros"], ["ml", "ml"], ["unidad", "unidades"]] },
         { k: "waste_pct", label: "Merma (%)", type: "number", step: "0.1", hint: "Ej.: 20 si de 1 kg se aprovechan 800 g." },
         S.inventory ? { k: "min_qty", label: "Stock mínimo (en la unidad de compra)", type: "number", step: "0.001", hint: "Por debajo de esto entra en la lista de compras." } : null,
+        S.inventory ? { k: "zone", label: "Zona", type: "select", options: [["cocina", "Cocina (se descuenta por recetas al cerrar caja)"], ["afuera", "Afuera: barra, bebidas, postres, envases (en tiempo real, se agota solo)"]] } : null,
         S.pricing ? { k: "supplier_id", label: "Proveedor", type: "select", full: true, options: [["", "—"]].concat(S.suppliers.map(function (x) { return [String(x.id), x.name]; })) }
                   : { k: "supplier", label: "Proveedor", full: true }
       ].filter(Boolean),
