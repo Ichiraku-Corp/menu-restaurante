@@ -296,8 +296,16 @@ if (require.main === module) {
       .then(() => { console.log("Enviado a " + which + " (" + (p.windows || p.ip) + ")"); process.exit(0); })
       .catch((e) => { console.error(e.message); process.exit(1); });
   } else {
+    // Una sola copia a la vez: si ya hay un puente corriendo, esta termina sin hacer nada.
+    const lock = net.createServer();
+    lock.once("error", () => { console.log("El puente ya está funcionando."); process.exit(0); });
+    lock.listen(47811, "127.0.0.1", () => startBridge());
+  }
+}
+function startBridge() {
+  {
     const desc = (p) => (p ? (p.windows ? "USB «" + p.windows + "»" : p.ip) : "sin configurar");
-    log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)}`);
+    log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)} · Edo ${desc(cfg.printers.edo)}`);
     tick(); setInterval(tick, POLL_MS);
     updateRate(); setInterval(updateRate, (cfg.bcv_minutes || 30) * 60e3);
     sendReports(); setInterval(sendReports, 60e3);
