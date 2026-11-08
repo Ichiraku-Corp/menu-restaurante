@@ -401,7 +401,7 @@ begin
                     case when i.option <> '' then E'\n  ' || i.option else '' end ||
                     case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id)
     into lines from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
-  body := E'@logo\n^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
+  body := '^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
           coalesce('Orden #' || num || '   ', '') || public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' || lines || E'\n=';
   update public.pos_items set status = 'enviado', sent_at = now() where order_id = p_order and status = 'pendiente';
   perform public.pos_print('cocina', body);
@@ -467,7 +467,7 @@ create or replace function public.pos_bill_text(p_order bigint, p_title text) re
 language sql stable security definer set search_path = public as $$
   with t as (select * from public.pos_totals(p_order)), o as (select * from public.pos_orders where id = p_order),
        r as (select coalesce(o.rate, public.pos_rate()) as rate from o)
-  select E'@logo\n~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
+  select E'~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
     coalesce((select string_agg(public.pos_line(trim(to_char(g.q, 'FM990.##')) || ' ' || g.name ||
                 case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)), E'\n' order by g.first)
               from (select i.name, i.variant, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
@@ -497,7 +497,7 @@ begin
   -- Las mesas de Edo (arriba) imprimen la precuenta en su propia impresora.
   perform public.pos_print(case when exists (select 1 from public.pos_orders o join public.pos_tables t on t.id = o.table_id where o.id = p_order and t.area = 'Edo')
                                 then 'edo' else 'caja' end,
-                           public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\n~Gracias por tu visita!');
+                           E'@logo\n' || public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\n~Gracias por tu visita!');
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'precuenta', p_order);
 end $$;
 
