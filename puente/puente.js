@@ -16,7 +16,19 @@ const path = require("path");
 
 const DIR = __dirname;
 const LOG = path.join(DIR, "puente.log");
-const cfg = JSON.parse(fs.readFileSync(process.env.PUENTE_CONFIG || path.join(DIR, "config.json"), "utf8"));
+const CFG_FILE = process.env.PUENTE_CONFIG || path.join(DIR, "config.json");
+const cfg = JSON.parse(fs.readFileSync(CFG_FILE, "utf8"));
+// Si se edita config.json (correo, claves de Binance/PayPal…), se vuelve a leer solo, sin reiniciar el puente.
+let cfgTime = 0; try { cfgTime = fs.statSync(CFG_FILE).mtimeMs; } catch (e) { /* nada */ }
+function reloadConfig() {
+  try {
+    const t = fs.statSync(CFG_FILE).mtimeMs; if (t === cfgTime) return;
+    const fresh = JSON.parse(fs.readFileSync(CFG_FILE, "utf8"));
+    cfgTime = t;
+    for (const k of ["correo", "binance", "paypal", "bcv", "bcv_minutes", "actualizar"]) { if (k in fresh) cfg[k] = fresh[k]; else delete cfg[k]; }
+    log("config.json cambió: se volvió a leer. " + keysInfo() + " · correo " + (cfg.correo && cfg.correo.host && cfg.correo.password ? "configurado (" + cfg.correo.user + ")" : "SIN configurar"));
+  } catch (e) { log("config.json tiene un error de escritura, se sigue usando el anterior: " + e.message); }
+}
 const URL_ = String(cfg.supabase_url).replace(/\/$/, "");
 const WIDTH = cfg.width || 48;
 const POLL_MS = cfg.poll_ms || 2000;
@@ -561,6 +573,8 @@ function startBridge() {
     log(`Puente iniciado. Cocina ${desc(cfg.printers.cocina)} · Caja ${desc(cfg.printers.caja)} · Edo ${desc(cfg.printers.edo)}`);
     tick(); setInterval(tick, POLL_MS);
     updateRate();
+    log("Correo de cierres: " + (cfg.correo && cfg.correo.host && cfg.correo.password ? "configurado (" + cfg.correo.user + ")" : "SIN configurar"));
+    setInterval(reloadConfig, 30e3);
     sendReports(); setInterval(sendReports, 60e3);
     log(keysInfo() + ` · versión ${currentVersion()}`);
     // Si arrancó una actualización en prueba y lleva 2 min bien, queda confirmada
