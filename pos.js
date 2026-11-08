@@ -354,7 +354,7 @@
     }).catch(fail);
   });
   function payRef(p) { var m = METHODS.find(function (x) { return x[0] === p.method; }); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
-  function paySums() { var total = num(cur.data.totals.total), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
+  function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = num(cur.data.totals.total), paid = pays.reduce(function (s, p) { return s + payRef(p); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
   $("payMethods").addEventListener("click", function (e) {
     var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
     var m = METHODS.find(function (x) { return x[0] === b.dataset.m; }), s = paySums(), rest = Math.max(0, s.rest);
@@ -402,7 +402,7 @@
       if (ch) alert("Entrega de vuelto: " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)));
       goTables();
     }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
-      .then(function () { paying = false; updatePaySums(); });
+      .then(function () { paying = false; if (cur.data) updatePaySums(); });
   });
 
   // ---------------------------------------------------------------- Caja
