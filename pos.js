@@ -75,7 +75,7 @@
     loadMenu();
   }
   function lock() {
-    U = null; pinBuf = ""; selected = null; show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
+    U = null; pinBuf = ""; selected = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
     ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
     $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + avatar(s.name, s.id) + "<span>" + esc(s.name) + "</span></button>"; }).join("");
     closeDialogs();
@@ -103,7 +103,7 @@
       if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
       U = { id: emp.id, name: r.name || emp.name, pin: pin };
       show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-      touch(); keepAwake(); goTables();
+      touch(); keepAwake(); syncFull(); goTables();
     }).catch(fail);
   }
   $("btnUser").addEventListener("click", lock);
@@ -140,6 +140,24 @@
     $("obTotal").textContent = ref(cur.due || 0);
     $("obToggle").textContent = showingMenu ? "Ver cuenta" : "Ver carta";
     $("obSend").disabled = !pending; $("obSend").textContent = pending ? "Enviar (" + pending + ")" : "Enviado";
+  }
+  // Pantalla completa (para tablets sin «instalar app», como las Fire con Silk)
+  var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+  var canFull = !standalone && (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function goFull() {
+    var el = document.documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen;
+    try { var r = f && f.call(el); if (r && r.catch) r.catch(function () {}); } catch (e) {}
+  }
+  function syncFull() { show("btnFull", !!(canFull && U && !isFull())); }
+  if (canFull) {
+    $("btnFull").addEventListener("click", function () { goFull(); try { localStorage.setItem("pos-full", "1"); } catch (e) {} });
+    ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) { document.addEventListener(ev, syncFull); });
+    // Si ya se eligió pantalla completa, se recupera con el primer toque (los navegadores exigen un toque).
+    document.addEventListener("pointerdown", function () {
+      var want = false; try { want = localStorage.getItem("pos-full") === "1"; } catch (e) {}
+      if (want && U && !isFull()) goFull();
+    }, true);
   }
   var wake = null;
   function keepAwake() {
