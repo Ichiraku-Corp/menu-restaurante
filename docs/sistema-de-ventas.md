@@ -64,3 +64,17 @@ de caja**. La factura fiscal se hace a mano hasta que llegue la factura electró
   la laptop debe estar en la misma red (cocina 192.168.1.100, caja 192.168.0.20).
 - **Sin tasa del día:** Caja → «Escribir tasa» (la del euro BCV).
 - **Alguien olvidó su PIN:** el dueño le pone uno nuevo en Gestión → Nómina.
+
+## Actualizaciones automáticas del puente
+
+Desde la versión 1 el puente se actualiza solo: cada 10 minutos pregunta a Supabase
+(`pos_bridge_check`) si hay una versión nueva en `pos_bridge_releases`.
+
+- Solo acepta `puente.js`, `logo.pbm`, `imprimir-usb.ps1` y archivos de `app/` (la app de las tablets).
+  **Nunca** toca `config.json` (claves de impresora, Binance, PayPal y correo).
+- Comprueba el sha256 de cada archivo y la sintaxis de `puente.js` antes de instalar.
+- Guarda lo anterior en `respaldo\` y, si cambió `puente.js`, se reinicia. Si la versión nueva no arranca
+  3 veces seguidas, vuelve sola a la anterior y no reintenta esa versión.
+- La versión instalada está en `version.txt`; el puente la reporta en `pos_kv` → `bridge_status`.
+- Para publicar: `python3 scripts/publicar-puente.py "nota" puente.js app/pos.js ...`
+- Para desactivarlo: `"actualizar": false` en `config.json`.

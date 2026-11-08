@@ -1137,6 +1137,34 @@ begin
   on conflict (key) do update set value = excluded.value, updated_at = now();
 end $$;
 
+-- ---------------------------------------------------------------- Actualizaciones automáticas del puente
+-- Cada versión trae solo los archivos que cambian (contenido en base64 + sha256). Solo se escribe con la
+-- llave de servicio (sin políticas RLS); el puente la lee con su cuenta «impresora» y avisa qué versión tiene.
+create table if not exists public.pos_bridge_releases (
+  version    int primary key,
+  notes      text not null default '',
+  files      jsonb not null,            -- [{"path": "puente.js", "sha256": "...", "b64": "..."}]
+  created_at timestamptz not null default now()
+);
+alter table public.pos_bridge_releases enable row level security;
+
+create or replace function public.pos_bridge_check(p_version int, p_info jsonb default '{}'::jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare r record;
+begin
+  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  insert into public.pos_kv (key, value) values ('bridge_status', jsonb_build_object('version', p_version, 'at', now()) || coalesce(p_info, '{}'::jsonb))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  select * into r from public.pos_bridge_releases where version > coalesce(p_version, 0) order by version desc limit 1;
+  if r.version is null then return null; end if;
+  -- Se mandan todos los archivos que cambiaron desde la versión que tiene el puente (el más nuevo de cada uno)
+  return jsonb_build_object('version', r.version, 'notes', r.notes, 'files',
+    (select jsonb_agg(f.file) from (
+       select distinct on (x->>'path') x as file
+       from public.pos_bridge_releases b, jsonb_array_elements(b.files) x
+       where b.version > coalesce(p_version, 0) order by x->>'path', b.version desc) f));
+end $$;
+
 -- ---------------------------------------------------------------- Permisos de las funciones
 do $$
 declare f text;
@@ -1155,7 +1183,7 @@ begin
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
     'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
-    'pos_incoming_checked(text, text)'] loop
+    'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

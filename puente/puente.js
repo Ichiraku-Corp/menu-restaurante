@@ -409,7 +409,7 @@ if (require.main === module) {
     // Una sola copia a la vez: si ya hay un puente corriendo, esta termina sin hacer nada.
     const lock = net.createServer();
     lock.once("error", () => { console.log("El puente ya está funcionando."); process.exit(0); });
-    lock.listen(47811, "127.0.0.1", () => startBridge());
+    lock.listen(47811, "127.0.0.1", () => { rollbackIfBroken(); startBridge(); });
   }
 }
 // ---------------------------------------------------------------- App de sala servida desde la laptop
@@ -515,6 +515,76 @@ async function checkPaypal() {
   } catch (e) { await reportCheck("paypal", e); }
 }
 
+// ---------------------------------------------------------------- Actualizaciones automáticas
+// Cada 10 min pregunta a Supabase si hay versión nueva. Solo acepta archivos permitidos (nunca config.json),
+// comprueba el sha256 de cada uno y la sintaxis de puente.js, guarda respaldo en «respaldo\» y reinicia.
+// Si la versión nueva no logra arrancar 3 veces seguidas, vuelve sola a la anterior.
+const VERSION_FILE = path.join(DIR, "version.txt"), TRIAL_FILE = path.join(DIR, "actualizacion-en-prueba.json"), BACKUP_DIR = path.join(DIR, "respaldo");
+function currentVersion() { try { return parseInt(fs.readFileSync(VERSION_FILE, "utf8"), 10) || 0; } catch (e) { return 0; } }
+function allowedPath(rel) {
+  if (typeof rel !== "string" || rel.includes("..") || path.isAbsolute(rel) || /[:*?"<>|]/.test(rel)) return false;
+  const n = rel.replace(/\\/g, "/");
+  if (/(^|\/)config(\.example)?\.json$/i.test(n) || /\.(log|bat|vbs|exe|cmd)$/i.test(n)) return false;
+  return n === "puente.js" || n === "logo.pbm" || n === "imprimir-usb.ps1" || n.startsWith("app/");
+}
+function rollbackIfBroken() {
+  // Se llama al arrancar: si hay una actualización en prueba, cuenta el intento y, al tercero, restaura el respaldo.
+  let t; try { t = JSON.parse(fs.readFileSync(TRIAL_FILE, "utf8")); } catch (e) { return; }
+  t.tries = (t.tries || 0) + 1;
+  if (t.tries < 3) { fs.writeFileSync(TRIAL_FILE, JSON.stringify(t)); return; }
+  for (const rel of t.files || []) {
+    const bak = path.join(BACKUP_DIR, rel);
+    try { if (fs.existsSync(bak)) { fs.mkdirSync(path.dirname(path.join(DIR, rel)), { recursive: true }); fs.copyFileSync(bak, path.join(DIR, rel)); } } catch (e) { /* sigue */ }
+  }
+  fs.writeFileSync(VERSION_FILE, String(t.from || 0));
+  fs.writeFileSync(path.join(DIR, "version-fallida.txt"), String(t.version));
+  fs.unlinkSync(TRIAL_FILE);
+  log(`La versión ${t.version} no arrancó bien: se restauró la ${t.from}. No se volverá a instalar esa versión.`);
+  process.exit(4); // iniciar.bat vuelve a arrancar ya con los archivos restaurados
+}
+let updating = false;
+async function checkUpdate() {
+  if (updating || cfg.actualizar === false) return; updating = true;
+  try {
+    const from = currentVersion();
+    const rel = await rpc("pos_bridge_check", { p_version: from, p_info: { node: process.version, host: os.hostname() } });
+    if (!rel || !rel.version) return;
+    let failed = 0; try { failed = parseInt(fs.readFileSync(path.join(DIR, "version-fallida.txt"), "utf8"), 10) || 0; } catch (e) { /* nada */ }
+    if (rel.version <= failed) return; // esa versión ya falló aquí
+    const files = (rel.files || []).filter((f) => allowedPath(f.path));
+    // 1) Escribir todo como .nuevo y verificar
+    for (const f of files) {
+      const buf = Buffer.from(f.b64, "base64");
+      if (crypto.createHash("sha256").update(buf).digest("hex") !== f.sha256) throw new Error(`${f.path}: el archivo llegó dañado`);
+      const dest = path.join(DIR, f.path); fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest + ".nuevo", buf);
+    }
+    const js = files.find((f) => f.path === "puente.js");
+    if (js) {
+      const chk = path.join(os.tmpdir(), "ichiraku-puente-revision.js");
+      fs.copyFileSync(path.join(DIR, "puente.js.nuevo"), chk);
+      await new Promise((res, rej) => execFile(process.execPath, ["--check", chk], { windowsHide: true }, (e, o, er) =>
+        (e ? rej(new Error("puente.js nuevo con errores: " + String(er).split("\n").filter((l) => /Error/.test(l))[0])) : res())));
+    }
+    // 2) Respaldo de lo actual y reemplazo
+    for (const f of files) {
+      const dest = path.join(DIR, f.path), bak = path.join(BACKUP_DIR, f.path);
+      if (fs.existsSync(dest)) { fs.mkdirSync(path.dirname(bak), { recursive: true }); fs.copyFileSync(dest, bak); }
+      fs.renameSync(dest + ".nuevo", dest);
+    }
+    fs.writeFileSync(VERSION_FILE, String(rel.version));
+    log(`Actualizado a la versión ${rel.version}${rel.notes ? ": " + rel.notes : ""} (${files.length} archivo(s))`);
+    if (files.some((f) => f.path === "logo.pbm")) LOGO = null;
+    if (js) { // reiniciar para usar el puente nuevo (en prueba hasta que pase 2 min funcionando)
+      fs.writeFileSync(TRIAL_FILE, JSON.stringify({ version: rel.version, from, files: files.map((f) => f.path), tries: 0 }));
+      setTimeout(() => process.exit(3), 1500);
+    }
+  } catch (e) {
+    for (const f of fs.readdirSync(DIR)) if (f.endsWith(".nuevo")) try { fs.unlinkSync(path.join(DIR, f)); } catch (e2) { /* nada */ }
+    log("No se pudo actualizar: " + (e.message || e));
+  } finally { updating = false; }
+}
+
 function startBridge() {
   serveApp();
   {
@@ -523,9 +593,12 @@ function startBridge() {
     tick(); setInterval(tick, POLL_MS);
     updateRate();
     sendReports(); setInterval(sendReports, 60e3);
-    log(keysInfo());
+    log(keysInfo() + ` · versión ${currentVersion()}`);
+    // Si arrancó una actualización en prueba y lleva 2 min bien, queda confirmada
+    if (fs.existsSync(TRIAL_FILE)) setTimeout(() => { try { fs.unlinkSync(TRIAL_FILE); log("Actualización confirmada: funciona bien"); } catch (e) { /* nada */ } }, 120e3);
+    setTimeout(checkUpdate, 20e3); setInterval(checkUpdate, 10 * 60e3);
     checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
