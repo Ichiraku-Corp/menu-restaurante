@@ -38,6 +38,8 @@ ${H("Conteo de afuera")}${table(["Producto", "Según sistema", "Contado", "Difer
   }), [1, 2, 3])}
 ${H("Propinas y cuentas del personal")}<p style="margin:4px 0 8px">Propinas recibidas: <b>Ref ${fm(d.tips)}</b> (se reparten el día 5 con el servicio).</p>
 ${table(["Persona", "Movimiento", "Monto", "Detalle", "Saldo actual"], (d.tabs || []).map((x) => [he(x.name), x.kind === "consumo" ? "Consumo a cuenta" : "Abono en caja", "Ref " + fm(Math.abs(x.amount)), he(x.note), "Ref " + fm(x.balance)]), [2, 4])}
+${(d.unverified || []).length ? H("⚠ Pagos de PayPal/Binance sin confirmar") + "<p style=\"margin:0 0 6px\">No aparecieron todavía en la plataforma al cerrar. Si no llegan, hay que reclamarlos.</p>" +
+  table(["Hora", "Pedido", "Método", "Monto", "Referencia", "Quién cobró"], d.unverified.map((x) => [hh(x.at), he(x.label), MNAMES[x.method] || he(x.method), "$ " + fm(x.amount), he(x.reference || "—"), he(x.by)]), [3]) : ""}
 ${H("Cobros hechos fuera de la caja")}${(d.off_caja || []).length ? table(["Hora", "Pedido", "Quién", "Equipo", "Método", "Monto"], d.off_caja.map((x) => [hh(x.at), he(x.order), he(x.by), he(x.device), MNAMES[x.method] || he(x.method), (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount)]), [5]) : "<p style=\"color:#2f7d4f\">Ninguno: todos los cobros se hicieron en la caja.</p>"}
 ${H("Por área")}${table(["Área", "Pedidos", "Total"], (d.by_kind || []).map((x) => [he(x.kind), x.orders, "Ref " + fm(x.total)]), [1, 2])}
 ${H("Mejores vendedores (incentivos)")}${["day", "week", "month"].map((k) => {

@@ -230,6 +230,11 @@
     if (!ST.rate) h += '<div class="banner warn">No hay tasa del euro BCV. Escríbela en «Caja» para poder cobrar en bolívares.</div>';
     if (ST.printer_oldest && Date.now() - new Date(ST.printer_oldest).getTime() > 60000)
       h += '<div class="banner">La impresión está atrasada (' + ST.printer_backlog + ' pendientes). Revisa que la laptop de caja y su puente de impresión estén encendidos.</div>';
+    var unv = ST.unverified || [];
+    if (unv.length && U && U.charge) h += '<div class="banner alert"><b>⚠ Pagos sin confirmar (' + unv.length + "):</b> no aparecieron en la plataforma. Revísalos en el teléfono.<ul>" + unv.map(function (x) {
+      return "<li>" + esc(x.label) + " · " + (x.method === "paypal" ? "PayPal" : "Binance") + " " + nf2.format(num(x.amount)) + (x.reference ? " · ref. " + esc(x.reference) : "") + " · " + esc(x.by || "") + " · " + ago(x.at) +
+        ' <button type="button" data-verify="' + x.id + '" style="min-height:32px;padding:4px 10px;font-size:13px">Ya lo vi, llegó</button></li>';
+    }).join("") + "</ul></div>";
     var low = ST.low_stock || [];
     if (low.length && U && U.charge) h += '<div class="banner warn"><b>Queda poco afuera:</b> ' + low.map(function (x) { return esc(x.name) + " (" + (num(x.stock) <= 0 ? "AGOTADO" : fmtQ(x.stock)) + ")"; }).join(" · ") + " · Cuando llegue, regístralo en Caja → Llegó mercancía.</div>";
     var al = (ST.alerts || []);
@@ -238,6 +243,10 @@
     }).join("") + '</ul><button type="button" id="alertsSeen">Visto</button></div>';
     $("banners").innerHTML = h;
     var sbtn = $("alertsSeen"); if (sbtn) sbtn.onclick = function () { rpc("pos_alerts_seen").then(refreshState).catch(fail); };
+    document.querySelectorAll("#banners [data-verify]").forEach(function (b) { b.onclick = function () {
+      if (!confirm("¿Confirmas que viste este pago en tu teléfono (PayPal/Binance) y llegó completo?")) return;
+      rpc("pos_payment_verify", { p_payment: Number(b.dataset.verify) }).then(function () { toast("Pago confirmado"); return refreshState(); }).catch(fail);
+    }; });
   }
 
   // ---------------------------------------------------------------- Mesas
@@ -810,12 +819,19 @@
         : "Revisado " + ago(r.checked_at) + ". Toca el pago de este cliente." + (p.method === "paypal" ? " PayPal puede tardar hasta 3 horas en mostrar un pago." : "");
       $("incHelp").textContent = help;
       $("incBody").innerHTML = incRows.map(function (x, k) {
-        return '<button type="button" data-k="' + k + '"><span><b>' + esc(x.payer || "Sin nombre") + "</b><small>" + ago(x.received_at) + (x.note ? " · " + esc(x.note) : "") + " · Ref. " + esc(String(x.tx_id).slice(-8)) + "</small></span>" +
-          '<b class="n">' + nf2.format(x.amount) + " " + esc(x.currency) + "</b></button>";
+        return '<div class="incrow"><button type="button" data-k="' + k + '"><span><b>' + esc(x.payer || "Sin nombre") + "</b><small>" + ago(x.received_at) + (x.note ? " · " + esc(x.note) : "") + " · Ref. " + esc(String(x.tx_id).slice(-8)) + "</small></span>" +
+          '<b class="n">' + nf2.format(x.amount) + " " + esc(x.currency) + '</b></button><button type="button" class="ext" data-ext="' + k + '" title="Ocultar: llegó a la cuenta pero no es un pago del restaurante">No es del restaurante</button></div>';
       }).join("") || '<p class="muted">No hay pagos nuevos sin usar en las últimas 36 horas.</p>';
     }).catch(function (e) { $("incHelp").textContent = errMsg(e); });
   }
   $("incBody").addEventListener("click", function (e) {
+    var x0 = e.target.closest("[data-ext]");
+    if (x0) {
+      var r0 = incRows[Number(x0.dataset.ext)];
+      if (!confirm("¿Ocultar el pago de " + (r0.payer || "sin nombre") + " por " + nf2.format(r0.amount) + " " + r0.currency + "? Solo si NO es un pago del restaurante.")) return;
+      rpc("pos_incoming_ignore", { p_id: r0.id }).then(function () { toast("Pago externo ocultado"); openIncoming(incFor); }).catch(fail);
+      return;
+    }
     var b = e.target.closest("[data-k]"); if (!b || incFor === null) return; var x = incRows[Number(b.dataset.k)], p = pays[incFor];
     p.incoming_id = x.id; p.reference = x.tx_id; p.amount = num(x.amount).toFixed(2); p.verified = { payer: x.payer, amount: num(x.amount), currency: x.currency };
     $("incDlg").close(); drawPays();

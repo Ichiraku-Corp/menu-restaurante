@@ -173,6 +173,12 @@ create table if not exists public.pos_incoming (
 );
 alter table public.pos_incoming enable row level security;
 alter table public.pos_payments add column if not exists incoming_id bigint references public.pos_incoming(id) on delete set null;
+-- Pagos recibidos que no son del restaurante (llegan a la misma cuenta): no se muestran ni se usan.
+alter table public.pos_incoming add column if not exists ignored boolean not null default false;
+alter table public.pos_incoming add column if not exists ignored_by text not null default '';
+-- Comprobación de pagos anotados a mano (Binance/PayPal): 'auto' cuando aparece el pago real, 'manual' si caja lo confirma.
+alter table public.pos_payments add column if not exists verified_at timestamptz;
+alter table public.pos_payments add column if not exists verified_how text not null default '';
 
 create table if not exists public.pos_print_jobs (
   id         bigint generated always as identity primary key,
@@ -429,6 +435,11 @@ begin
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
+    'unverified', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'method', p.method, 'amount', p.amount, 'reference', p.reference,
+                    'label', coalesce(public.pos_order_label(p.order_id), 'Abono'), 'by', public.pos_emp_name(p.created_by), 'at', p.created_at) order by p.created_at), '[]'::jsonb)
+                   from public.pos_payments p where p.method in ('binance', 'paypal') and p.amount > 0 and p.verified_at is null
+                     and p.created_at > now() - interval '4 days'
+                     and p.created_at < now() - case when p.method = 'paypal' then interval '3 hours' else interval '20 minutes' end),
     'low_stock', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'stock', stock_qty, 'min', min_qty, 'unit', buy_unit) order by stock_qty), '[]'::jsonb)
                   from public.ingredients where zone = 'afuera' and inv_active and (stock_qty <= 0 or stock_qty <= min_qty)),
     'alerts', (select coalesce(jsonb_agg(jsonb_build_object('order_id', x.order_id, 'label', public.pos_order_label(x.order_id), 'by', public.pos_emp_name(x.created_by),
@@ -723,7 +734,10 @@ begin
     values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person, p.incoming_id,
             left(coalesce(nullif(trim(p.device), ''), 'Sin nombre'), 30), coalesce(trim(p.device), '') = 'Caja', coalesce(p.tip, false), p.tab_employee_id)
     returning id into pid;
-    if p.incoming_id is not null then update public.pos_incoming set payment_id = pid where id = p.incoming_id; end if;
+    if p.incoming_id is not null then
+      update public.pos_incoming set payment_id = pid where id = p.incoming_id;
+      update public.pos_payments set verified_at = now(), verified_how = 'elegido' where id = pid;
+    end if;
     if p.method = 'cuenta' then
       insert into public.pos_tab_moves (employee_id, kind, amount_ref, order_id, payment_id, note, created_by)
       values (p.tab_employee_id, 'consumo', ref, p_order, pid, public.pos_order_label(p_order), coalesce(public.pos_emp_name(p_emp), ''));
@@ -732,6 +746,7 @@ begin
     paid := paid + ref;
   end loop;
   if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
+  perform public.pos_match_incoming();  -- si el pago real ya había llegado, queda comprobado de una vez
   if paid < due - 0.02 then
     if not coalesce(p_partial, false) then raise exception 'Falta por cobrar Ref %', public.pos_money(due - paid); end if;
     -- Cuenta dividida: si la persona pagó más de lo que le toca, se le da vuelto
@@ -960,6 +975,9 @@ language sql stable security definer set search_path = public as $$
                    'method', p.method, 'amount', p.amount, 'amount_ref', p.amount_ref, 'at', p.created_at) order by p.created_at), '[]'::jsonb)
                  from public.pos_payments p where p.session_id = p_session and p.device <> 'Caja' and p.amount > 0),
     'tips', (select coalesce(sum(amount_ref), 0) from public.pos_payments where session_id = p_session and is_tip),
+    'unverified', (select coalesce(jsonb_agg(jsonb_build_object('label', coalesce(public.pos_order_label(p.order_id), 'Abono'), 'method', p.method,
+                     'amount', p.amount, 'reference', p.reference, 'by', public.pos_emp_name(p.created_by), 'at', p.created_at) order by p.created_at), '[]'::jsonb)
+                   from public.pos_payments p where p.session_id = p_session and p.method in ('binance', 'paypal') and p.amount > 0 and p.verified_at is null),
     'tabs', (select coalesce(jsonb_agg(jsonb_build_object('name', public.pos_emp_name(m.employee_id), 'kind', m.kind, 'amount', m.amount_ref,
                'note', m.note, 'balance', public.pos_tab_balance(m.employee_id)) order by m.created_at), '[]'::jsonb)
              from public.pos_tab_moves m, s where m.kind in ('consumo', 'abono') and m.created_at between s.opened_at and coalesce(s.closed_at, now())),
@@ -1260,7 +1278,52 @@ begin
   where x.source in ('binance', 'paypal', 'banesco') and coalesce(x.tx_id, '') <> '' and x.amount > 0
   on conflict (source, tx_id) do nothing;
   get diagnostics n = row_count;
+  perform public.pos_match_incoming();
   return n;
+end $$;
+
+-- Empareja los pagos anotados a mano con lo que de verdad llegó: misma plataforma y monto, y la
+-- referencia si se escribió; si no, el pago recibido más cercano en hora (12 h antes a 6 h después).
+create or replace function public.pos_match_incoming() returns int
+language plpgsql security definer set search_path = public as $$
+declare p record; i record; n int := 0;
+begin
+  for p in select * from public.pos_payments
+           where method in ('binance', 'paypal') and amount > 0 and incoming_id is null and verified_at is null
+             and created_at > now() - interval '4 days' order by created_at loop
+    select x.* into i from public.pos_incoming x
+    where x.source = p.method and x.payment_id is null and not x.ignored and abs(x.amount - p.amount) < 0.01
+      and x.received_at between p.created_at - interval '12 hours' and p.created_at + interval '6 hours'
+    order by (p.reference <> '' and (x.tx_id ilike '%' || p.reference || '%' or p.reference ilike '%' || x.tx_id || '%')) desc,
+             abs(extract(epoch from x.received_at - p.created_at))
+    limit 1;
+    if i.id is not null then
+      update public.pos_incoming set payment_id = p.id where id = i.id;
+      update public.pos_payments set incoming_id = i.id, verified_at = now(), verified_how = 'auto',
+        reference = case when reference = '' then left(i.tx_id, 40) else reference end where id = p.id;
+      n := n + 1;
+    end if;
+  end loop;
+  return n;
+end $$;
+
+-- «No es del restaurante»: ocultar un pago recibido externo
+create or replace function public.pos_incoming_ignore(p_emp bigint, p_pin text, p_id bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  update public.pos_incoming set ignored = true, ignored_by = coalesce(public.pos_emp_name(p_emp), '') where id = p_id and payment_id is null;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'pago_externo', jsonb_build_object('incoming', p_id));
+end $$;
+
+-- Caja confirma a mano un pago que revisó en su teléfono (cuando la plataforma tarda en mostrarlo)
+create or replace function public.pos_payment_verify(p_emp bigint, p_pin text, p_payment bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  update public.pos_payments set verified_at = now(), verified_how = 'manual: ' || coalesce(public.pos_emp_name(p_emp), '')
+  where id = p_payment and verified_at is null;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'pago_confirmado', jsonb_build_object('pago', p_payment));
 end $$;
 
 -- Lo que llegó en las últimas 36 h y todavía no se ha usado en ninguna cuenta.
@@ -1271,7 +1334,7 @@ begin
   return jsonb_build_object(
     'rows', (select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'tx_id', i.tx_id, 'amount', i.amount, 'currency', i.currency,
                'payer', i.payer, 'note', i.note, 'received_at', i.received_at) order by i.received_at desc), '[]'::jsonb)
-             from public.pos_incoming i where i.source = p_source and i.payment_id is null and i.received_at > now() - interval '36 hours'),
+             from public.pos_incoming i where i.source = p_source and i.payment_id is null and not i.ignored and i.received_at > now() - interval '36 hours'),
     'last_sync', (select max(created_at) from public.pos_incoming where source = p_source),
     'checked_at', (select (value #>> '{}')::timestamptz from public.pos_kv where key = 'incoming_checked_' || p_source),
     'error', (select value #>> '{}' from public.pos_kv where key = 'incoming_error_' || p_source));
@@ -1460,7 +1523,7 @@ begin
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
-    'pos_purchase(bigint, text, jsonb)'] loop
+    'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
@@ -1468,6 +1531,7 @@ end $$;
 -- Funciones internas: solo las llaman otras funciones.
 revoke execute on function public.pos_print(text, text) from authenticated;
 revoke execute on function public.inv_consume_item(bigint, int) from anon, public, authenticated;
+revoke execute on function public.pos_match_incoming() from anon, public, authenticated;
 revoke execute on function public.pos_inv_close(jsonb, text, boolean) from anon, public, authenticated;
 revoke execute on function public.pos_sync_day(date) from authenticated;
 revoke execute on function public.pos_bill_text(bigint, text) from authenticated;
