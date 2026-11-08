@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-m0/WR3TM8Ch8bk4Vr9+4p8TY3wUHo5vLYUmVVIUaX3Q='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-krmFFE008m/FQdQI6pGduQIgM9hoWqZTkMSkL0dHgBQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -615,6 +615,7 @@
         { k: "monthly_extra", label: "Bonos u otros pagos al mes (" + PFX + ")", type: "number", step: "0.01", hint: "Bono de alimentación, transporte, etc." },
         S.attendance ? { k: "device_user_id", label: "Nº de empleado en el equipo facial", ph: "Ej.: 7", hint: "El «Employee No.» con que lo registraste en el equipo." } : null,
         { k: "pos_pin", label: "PIN del sistema de ventas (4 dígitos)", ph: e && e.pos_pin_hash ? "•••• (déjalo vacío para no cambiarlo)" : "Ej.: 4821", hint: "Para entrar en las tablets y la caja. Escribe «borrar» para quitarlo." },
+        { k: "pos_can_charge", label: "Puede cobrar, dar descuentos, anular pedidos y abrir/cerrar caja", type: "check", full: true },
         { k: "active", label: "Activo (cuenta en la nómina)", type: "check", full: true }, { k: "notes", label: "Notas", type: "area", full: true }
       ].filter(Boolean),
       extra: S.attendance ? scheduleEditor(e && e.schedule) : "",

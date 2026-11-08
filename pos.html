@@ -149,6 +149,12 @@
   .line.new { background:var(--warn-soft); }
   .line.new .q { background:var(--surface); }
   .line.click { cursor:pointer; }
+  /* Vista previa del cierre: hoja blanca como el correo */
+  .report { background:#fff; color:#1f1a17; border-radius:14px; padding:14px; margin:12px 0; max-height:64vh; overflow:auto; border:1px solid var(--line); }
+  .report table { min-width:560px; }
+  /* Avisos de cobros fuera de caja */
+  .banner.alert { background:var(--danger-soft); border-color:var(--danger); color:var(--text); }
+  .banner.alert ul { margin:6px 0; padding-left:18px; }
   /* Pagos verificados */
   .vbtn { min-height:44px; font-size:14px; padding:6px 10px; }
   .vbtn.ver { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); font-weight:700; }
@@ -287,6 +293,7 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="reporte-cierre.js"></script>
 <script src="pos.js" defer></script>
 </head>
 <body>
@@ -307,6 +314,8 @@
     <p class="muted">Solo la primera vez. Usa la cuenta de sala que te dio el dueño.</p>
     <input id="devEmail" type="email" placeholder="Correo de la cuenta de sala" autocomplete="username" required>
     <input id="devPass" type="password" placeholder="Contraseña" autocomplete="current-password" required style="margin-top:8px">
+    <label style="display:block;margin-top:10px">¿Qué equipo es este?
+      <select id="devName" style="margin-top:4px"><option>Caja</option><option>Tablet Feria</option><option>Tablet Tokio</option><option>Tablet Edo</option><option>Teléfono</option><option>Otro</option></select></label>
     <p><button class="primary big" type="submit" style="width:100%">Activar</button></p>
     <p id="devErr" class="muted" style="color:var(--danger)"></p>
   </form>
@@ -320,7 +329,8 @@
       <div class="pad" id="pad"></div>
       <p id="pinErr" class="muted" style="text-align:center;color:var(--danger)"></p>
     </div>
-    <p class="muted" style="text-align:center;margin-top:24px"><button id="devOut" class="danger">Desactivar este dispositivo</button></p>
+    <p class="muted" style="text-align:center;margin-top:24px">Este equipo: <b id="devNameTxt"></b> <button type="button" id="devRename" style="min-height:34px;padding:4px 10px;font-size:13px">Cambiar</button></p>
+    <p class="muted" style="text-align:center;margin-top:8px"><button id="devOut" class="danger">Desactivar este dispositivo</button></p>
   </section>
 
   <!-- 3. Mesas -->
@@ -461,6 +471,14 @@
   <p id="spErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><div class="row"><button type="button" id="spCancel">Cancelar</button><button type="button" class="danger" id="spClear">Quitar división</button></div>
     <div class="row"><button type="button" id="spSave">Guardar</button><button type="button" class="primary" id="spPrint">Guardar e imprimir precuenta</button></div></div>
+</dialog>
+
+<!-- Vista previa del reporte de cierre (lo mismo que llega al correo) -->
+<dialog id="repDlg" style="width:min(980px, calc(100vw - 20px))">
+  <div class="row between"><h2 style="margin:0">Revisa el cierre antes de enviarlo</h2><button type="button" id="repBack">Volver y corregir</button></div>
+  <div id="repBody" class="report"></div>
+  <p id="repErr" class="muted" style="color:var(--danger)"></p>
+  <div class="row between"><button type="button" id="repBack2">Volver y corregir</button><button type="button" class="primary big" id="repSend">Cerrar caja y enviar por correo</button></div>
 </dialog>
 
 <!-- Caja -->

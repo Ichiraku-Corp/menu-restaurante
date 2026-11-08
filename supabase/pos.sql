@@ -129,6 +129,9 @@ create table if not exists public.pos_payments (
 );
 create index if not exists pos_payments_session on public.pos_payments (session_id);
 alter table public.pos_payments add column if not exists person smallint;   -- persona que pagó (cuenta dividida)
+alter table public.pos_payments add column if not exists device text not null default '';   -- equipo desde el que se cobró
+alter table public.pos_payments add column if not exists alert_seen boolean not null default false;  -- aviso «cobro fuera de caja» visto
+alter table public.employees add column if not exists pos_can_charge boolean not null default false; -- puede cobrar, descontar, anular y manejar caja
 
 -- Pagos recibidos que el puente lee de Binance / PayPal (y luego Banesco) para verificar los cobros.
 create table if not exists public.pos_incoming (
@@ -200,6 +203,17 @@ begin
   if not exists (select 1 from public.employees e where e.id = p_emp and e.active and e.pos_pin_hash is not null
                  and e.pos_pin_hash = extensions.crypt(coalesce(p_pin, ''), e.pos_pin_hash)) then
     raise exception 'PIN incorrecto. Vuelve a entrar.';
+  end if;
+  return p_emp;
+end $$;
+
+-- Solo quien tenga «puede cobrar» (Gestión → Personal) cobra, descuenta, anula pedidos y abre/cierra caja.
+create or replace function public.pos_auth_charge(p_emp bigint, p_pin text) returns bigint
+language plpgsql stable security definer set search_path = public as $$
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if not exists (select 1 from public.employees where id = p_emp and pos_can_charge) then
+    raise exception 'No tienes permiso para cobrar. Pídele a una cajera autorizada.';
   end if;
   return p_emp;
 end $$;
@@ -341,9 +355,10 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- Lectura
-create or replace function public.pos_staff() returns table (id bigint, name text)
+drop function if exists public.pos_staff();
+create or replace function public.pos_staff() returns table (id bigint, name text, can_charge boolean)
 language sql stable security definer set search_path = public as $$
-  select e.id, public.pos_emp_name(e.id) from public.employees e
+  select e.id, public.pos_emp_name(e.id), e.pos_can_charge from public.employees e
   where public.pos_is_device() and e.active and e.pos_pin_hash is not null order by 2
 $$;
 
@@ -357,7 +372,8 @@ begin
   select exists (select 1 from public.employees e where e.id = p_emp and e.active and e.pos_pin_hash is not null
                  and e.pos_pin_hash = extensions.crypt(coalesce(p_pin, ''), e.pos_pin_hash)) into ok;
   insert into public.pos_log (employee_id, action) values (p_emp, case when ok then 'entrada' else 'pin_fallido' end);
-  return case when ok then jsonb_build_object('ok', true, 'name', public.pos_emp_name(p_emp))
+  return case when ok then jsonb_build_object('ok', true, 'name', public.pos_emp_name(p_emp),
+                                              'can_charge', (select pos_can_charge from public.employees where id = p_emp))
               else jsonb_build_object('ok', false, 'error', 'PIN incorrecto') end;
 end $$;
 
@@ -384,6 +400,10 @@ begin
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
+    'alerts', (select coalesce(jsonb_agg(jsonb_build_object('order_id', x.order_id, 'label', public.pos_order_label(x.order_id), 'by', public.pos_emp_name(x.created_by),
+                 'device', x.device, 'amount_ref', x.ref, 'at', x.at) order by x.at), '[]'::jsonb)
+               from (select order_id, created_by, device, sum(amount_ref) ref, max(created_at) at from public.pos_payments
+                     where not alert_seen and amount > 0 and created_at > now() - interval '18 hours' group by order_id, created_by, device) x),
     'printer_oldest', (select min(created_at) from public.pos_print_jobs where status = 'pendiente' and created_at > now() - interval '1 day')
   ) into r;
   return r;
@@ -513,7 +533,7 @@ end $$;
 create or replace function public.pos_discount(p_emp bigint, p_pin text, p_order bigint, p_amount numeric, p_reason text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  perform public.pos_auth(p_emp, p_pin);
+  perform public.pos_auth_charge(p_emp, p_pin);
   if coalesce(p_amount, 0) < 0 then raise exception 'Monto no válido'; end if;
   if p_amount > 0 and length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo del descuento'; end if;
   update public.pos_orders set discount = round(p_amount, 2), discount_reason = trim(coalesce(p_reason, '')), discount_by = p_emp
@@ -628,7 +648,7 @@ create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigi
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint;
 begin
-  perform public.pos_auth(p_emp, p_pin);
+  perform public.pos_auth_charge(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
   if o.id is null or o.status <> 'abierta' then raise exception 'El pedido ya está cerrado'; end if;
   if exists (select 1 from public.pos_items where order_id = p_order and status = 'pendiente') then
@@ -639,7 +659,7 @@ begin
   select * into t from public.pos_totals(p_order);
   due := round(t.total - t.paid, 2);
   rt := public.pos_rate();
-  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint) loop
+  for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text) loop
     if coalesce(p.amount, 0) <= 0 then continue; end if;
     if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
     who := coalesce(p.person, who);
@@ -652,8 +672,9 @@ begin
       if inc.payment_id is not null then raise exception 'Ese pago de % ya se usó en otra cuenta', inc.source; end if;
       p.reference := inc.tx_id;
     end if;
-    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, incoming_id)
-    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person, p.incoming_id)
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, incoming_id, device, alert_seen)
+    values (p_order, p.method, cur, round(p.amount, 2), ref, case when cur = 'BS' then rt end, left(coalesce(trim(p.reference), ''), 40), p_emp, sess, p.person, p.incoming_id,
+            left(coalesce(nullif(trim(p.device), ''), 'Sin nombre'), 30), coalesce(trim(p.device), '') = 'Caja')
     returning id into pid;
     if p.incoming_id is not null then update public.pos_incoming set payment_id = pid where id = p.incoming_id; end if;
     paid := paid + ref;
@@ -713,7 +734,7 @@ create or replace function public.pos_cancel(p_emp bigint, p_pin text, p_order b
 returns void language plpgsql security definer set search_path = public as $$
 declare sent int;
 begin
-  perform public.pos_auth(p_emp, p_pin);
+  perform public.pos_auth_charge(p_emp, p_pin);
   if exists (select 1 from public.pos_payments where order_id = p_order) then raise exception 'Este pedido ya tiene pagos: no se puede anular'; end if;
   select count(*) into sent from public.pos_items where order_id = p_order and status = 'enviado';
   if sent > 0 and length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo de la anulación'; end if;
@@ -740,7 +761,7 @@ create or replace function public.pos_set_rate(p_rate numeric, p_source text def
 returns void language plpgsql security definer set search_path = public as $$
 declare d date := (now() at time zone 'America/Caracas')::date;
 begin
-  if coalesce(public.staff_role(), '') <> 'impresora' then perform public.pos_auth(p_emp, p_pin);
+  if coalesce(public.staff_role(), '') <> 'impresora' then perform public.pos_auth_charge(p_emp, p_pin);
   elsif p_date is not null and p_date between d - 7 and d + 7 then d := p_date; end if;
   if coalesce(p_rate, 0) <= 0 then raise exception 'Tasa no válida'; end if;
   insert into public.pos_rates (rate_date, eur, source, updated_at)
@@ -754,7 +775,7 @@ create or replace function public.pos_cash_open(p_emp bigint, p_pin text, p_usd 
 returns bigint language plpgsql security definer set search_path = public as $$
 declare sid bigint;
 begin
-  perform public.pos_auth(p_emp, p_pin);
+  perform public.pos_auth_charge(p_emp, p_pin);
   if exists (select 1 from public.pos_sessions where status = 'abierta') then raise exception 'La caja ya está abierta'; end if;
   insert into public.pos_sessions (opened_by, opening_usd, opening_bs) values (p_emp, coalesce(p_usd, 0), coalesce(p_bs, 0)) returning id into sid;
   insert into public.pos_log (employee_id, action, detail) values (p_emp, 'abrir_caja', jsonb_build_object('fondo_usd', p_usd, 'fondo_bs', p_bs));
@@ -877,6 +898,12 @@ language sql stable security definer set search_path = public as $$
                   from o where discount > 0 and status = 'cobrada'),
     'cancelled', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(id), 'reason', void_reason, 'by', public.pos_emp_name(closed_by))), '[]'::jsonb)
                   from o where status = 'anulada'),
+    'cashiers', (select coalesce(jsonb_agg(jsonb_build_object('name', n, 'method', m, 'count', c, 'amount', a, 'amount_ref', ar) order by n, ar desc), '[]'::jsonb)
+                 from (select public.pos_emp_name(p.created_by) n, p.method m, count(*) filter (where p.amount > 0) c, sum(p.amount) a, sum(p.amount_ref) ar
+                       from public.pos_payments p where p.session_id = p_session group by 1, 2) x),
+    'off_caja', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(p.order_id), 'by', public.pos_emp_name(p.created_by), 'device', p.device,
+                   'method', p.method, 'amount', p.amount, 'amount_ref', p.amount_ref, 'at', p.created_at) order by p.created_at), '[]'::jsonb)
+                 from public.pos_payments p where p.session_id = p_session and p.device <> 'Caja' and p.amount > 0),
     'tops', (select jsonb_build_object(
                'day', public.pos_ranking(d, d), 'week', public.pos_ranking(date_trunc('week', d)::date, d), 'month', public.pos_ranking(date_trunc('month', d)::date, d))
              from (select (coalesce((select closed_at from s), now()) at time zone 'America/Caracas')::date d) dd)
@@ -904,7 +931,7 @@ declare s record; sm jsonb; exp jsonb; body text; d date; k text; rcp text;
   names jsonb := '{"efectivo_usd":"Efectivo $","zelle":"Zelle","binance":"Binance","paypal":"PayPal","efectivo_bs":"Efectivo Bs",
                    "pago_movil":"Pago movil","punto_debito":"Punto debito","punto_credito":"Punto credito"}';
 begin
-  perform public.pos_auth(p_emp, p_pin);
+  perform public.pos_auth_charge(p_emp, p_pin);
   select * into s from public.pos_sessions where status = 'abierta' for update;
   if s.id is null then raise exception 'La caja no está abierta'; end if;
   if exists (select 1 from public.pos_orders where status = 'abierta') then raise exception 'Hay mesas abiertas: cóbralas o anúlalas antes de cerrar'; end if;
@@ -944,16 +971,44 @@ begin
               from (select v, row_number() over () n from jsonb_array_elements(public.pos_ranking((now() at time zone 'America/Caracas')::date, (now() at time zone 'America/Caracas')::date)) v limit 3) r), 'Sin ventas hoy') ||
     E'\n' || public.pos_line('Lider de la semana', coalesce((public.pos_tops() -> 'week' -> 'rows' -> 0 ->> 'name') || ' Ref ' || public.pos_money((public.pos_tops() -> 'week' -> 'rows' -> 0 ->> 'sales')::numeric), '-')) ||
     E'\n' || public.pos_line('Lider del mes', coalesce((public.pos_tops() -> 'month' -> 'rows' -> 0 ->> 'name') || ' Ref ' || public.pos_money((public.pos_tops() -> 'month' -> 'rows' -> 0 ->> 'sales')::numeric), '-')) || E'\n=';
-  perform public.pos_print('caja', body);
   insert into public.pos_log (employee_id, action, detail) values (p_emp, 'cerrar_caja', jsonb_build_object('sesion', s.id));
   select trim(report_emails) into rcp from public.gestion_settings limit 1;
   if coalesce(rcp, '') <> '' then
+    -- Sin papel: el reporte completo va al correo (la cajera lo revisó en pantalla antes de cerrar)
     insert into public.pos_reports (session_id, recipients, data) values (s.id, rcp, public.pos_session_report(s.id));
+  else
+    perform public.pos_print('caja', body);  -- sin correos configurados: se imprime como antes
   end if;
   for d in select distinct (closed_at at time zone 'America/Caracas')::date from public.pos_orders where session_id = s.id and status = 'cobrada' loop
     perform public.pos_sync_day(d);
   end loop;
   return public.pos_cash_summary(s.id);
+end $$;
+
+create or replace function public.pos_alerts_seen(p_emp bigint, p_pin text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  update public.pos_payments set alert_seen = true where not alert_seen;
+  insert into public.pos_log (employee_id, action) values (p_emp, 'avisos_vistos');
+end $$;
+
+-- Vista previa del reporte de cierre (lo mismo que llegará al correo) con lo que la cajera contó.
+create or replace function public.pos_cash_preview(p_emp bigint, p_pin text, p_counted jsonb, p_notes text default '')
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare s record; sm jsonb; exp jsonb; r jsonb;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  select * into s from public.pos_sessions where status = 'abierta';
+  if s.id is null then raise exception 'La caja no está abierta'; end if;
+  sm := public.pos_cash_summary(s.id);
+  select jsonb_object_agg(m, round(coalesce((sm -> 'methods' -> m ->> 'amount')::numeric, 0)
+           + case m when 'efectivo_usd' then s.opening_usd when 'efectivo_bs' then s.opening_bs else 0 end, 2))
+    into exp from unnest(array['efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito']) m;
+  r := public.pos_session_report(s.id);
+  return jsonb_set(r, '{session}', (r -> 'session') || jsonb_build_object('expected', exp, 'counted', coalesce(p_counted, '{}'::jsonb),
+         'notes', coalesce(p_notes, ''), 'closed_at', now(), 'closed_by', public.pos_emp_name(p_emp)))
+         || jsonb_build_object('recipients', (select trim(report_emails) from public.gestion_settings limit 1), 'preview', true);
 end $$;
 
 -- ---------------------------------------------------------------- Puente de impresión (cuenta «impresora»)
@@ -1183,7 +1238,8 @@ begin
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
     'pos_split(bigint)', 'pos_split_units(bigint)', 'pos_person_name(int)', 'pos_incoming_push(jsonb)', 'pos_incoming_list(text)',
-    'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)'] loop
+    'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
+    'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

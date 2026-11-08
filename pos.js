@@ -58,7 +58,17 @@
   function deviceLogin() {
     U = null; ["pin", "tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("device", true);
   }
+  // Nombre de este equipo («Caja», «Tablet Edo»…): se guarda en el equipo y va en cada cobro
+  function devName() { try { return localStorage.getItem("pos-equipo") || ""; } catch (e) { return ""; } }
+  function setDevName(n) { try { localStorage.setItem("pos-equipo", n); } catch (e) {} $("devNameTxt").textContent = n || "sin nombre"; }
+  setDevName(devName());
+  $("devRename").addEventListener("click", function () {
+    ask({ title: "Nombre de este equipo", help: "Escribe exactamente «Caja» solo en la laptop de caja. Ejemplos: Tablet Edo, Tablet Feria.", value: devName() || "Tablet " }).then(function (v) {
+      if (v === null) return; setDevName(String(v).trim().slice(0, 30));
+    });
+  });
   $("device").addEventListener("submit", function (e) {
+    setDevName($("devName").value);
     e.preventDefault(); $("devErr").textContent = "";
     sb.auth.signInWithPassword({ email: $("devEmail").value.trim(), password: $("devPass").value })
       .then(function (r) { if (r.error) $("devErr").textContent = "No se pudo activar: " + r.error.message; });
@@ -102,7 +112,8 @@
     var emp = selected, pin = pinBuf;
     q(sb.rpc("pos_check_pin", { p_emp: emp.id, p_pin: pin })).then(function (r) {
       if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
-      U = { id: emp.id, name: r.name || emp.name, pin: pin };
+      U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
+      document.body.classList.toggle("nocharge", !U.charge);
       show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
       touch(); keepAwake(); syncFull(); goTables();
     }).catch(fail);
@@ -198,7 +209,12 @@
     if (!ST.rate) h += '<div class="banner warn">No hay tasa del euro BCV. Escríbela en «Caja» para poder cobrar en bolívares.</div>';
     if (ST.printer_oldest && Date.now() - new Date(ST.printer_oldest).getTime() > 60000)
       h += '<div class="banner">La impresión está atrasada (' + ST.printer_backlog + ' pendientes). Revisa que la laptop de caja y su puente de impresión estén encendidos.</div>';
+    var al = (ST.alerts || []);
+    if (al.length && U && U.charge) h += '<div class="banner alert"><b>⚠ Cobros hechos fuera de la caja (' + al.length + ")</b><ul>" + al.map(function (a) {
+      return "<li>" + new Date(a.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · <b>" + esc(a.by || "") + "</b> cobró " + esc(a.label) + " · " + ref(num(a.amount_ref)) + " desde «" + esc(a.device) + "»</li>";
+    }).join("") + '</ul><button type="button" id="alertsSeen">Visto</button></div>';
     $("banners").innerHTML = h;
+    var sbtn = $("alertsSeen"); if (sbtn) sbtn.onclick = function () { rpc("pos_alerts_seen").then(refreshState).catch(fail); };
   }
 
   // ---------------------------------------------------------------- Mesas
@@ -428,6 +444,8 @@
     $("send").disabled = !pending;
     var hasItems = d.items.some(function (i) { return i.status !== "anulado"; });
     $("pay").disabled = !hasItems || pending > 0; $("precuenta").disabled = !hasItems || pending > 0;
+    // Solo quien tiene permiso cobra, descuenta y anula (el servidor también lo exige)
+    ["pay", "discount", "cancel"].forEach(function (id) { show(id, !!(U && U.charge)); });
     $("move").classList.toggle("hidden", d.kind !== "mesa");
     $("splitBtn").disabled = !hasItems || pending > 0;
     label("splitBtn", "users", splitN(d) ? "Dividida entre " + splitN(d) + " · cambiar" : "Dividir por persona");
@@ -767,7 +785,7 @@
   $("payOk").addEventListener("click", function () { doPay(false); });
   function doPay(partial) {
     if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
-    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null }; }).filter(function (p) { return p.amount > 0; });
+    var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null, device: devName() || "Sin nombre" }; }).filter(function (p) { return p.amount > 0; });
     // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
     if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + payRef(p); }, 0); partial = restAll > 0.02; }
     rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
@@ -791,8 +809,10 @@
     refreshState().then(function () { return q(sb.rpc("pos_cash_summary")); }).then(function (sm) {
       var h = '<div class="card" style="margin:10px 0"><div class="row between"><div><b>Tasa euro BCV de hoy</b><div class="muted">' +
         (ST.rate ? nf2.format(ST.rate) + " Bs/€" + (ST.rate_date !== today() ? " (es de otro día)" : "") : "Sin tasa") +
-        '</div></div><button type="button" id="setRate">Escribir tasa</button></div><p class="muted" style="margin-bottom:0">Se actualiza sola desde el BCV a través de la laptop de caja; aquí puedes corregirla.</p></div>';
-      if (!sm) {
+        '</div></div>' + (U.charge ? '<button type="button" id="setRate">Escribir tasa</button>' : "") + '</div><p class="muted" style="margin-bottom:0">Se actualiza sola desde el BCV a través de la laptop de caja; aquí puedes corregirla.</p></div>';
+      if (!U.charge) {
+        h += '<div class="card"><p class="muted" style="margin:0">Abrir, cerrar y cobrar lo hace una cajera autorizada.</p></div>';
+      } else if (!sm) {
         h += '<div class="card"><h3 style="margin-top:0">Abrir caja</h3><div class="row"><label class="grow">Fondo en efectivo $<input id="fUsd" inputmode="decimal" value="0"></label>' +
           '<label class="grow">Fondo en efectivo Bs<input id="fBs" inputmode="decimal" value="0"></label></div><p><button type="button" class="primary big" id="openCash" style="width:100%">Abrir caja</button></p></div>';
       } else {
@@ -807,7 +827,7 @@
           "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
           "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
           '<textarea id="cashNotes" placeholder="Notas del cierre (opcional)" style="margin-top:10px"></textarea>' +
-          '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Cerrar caja e imprimir el cierre</button></p></div>";
+          '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
       h += '<div class="card"><div class="row"><button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button></div></div>';
       $("cashBody").innerHTML = h;
@@ -826,9 +846,26 @@
     } else if (id === "invCount") { openCount();
     } else if (id === "doClose") {
       var counted = {}; document.querySelectorAll("#cashBody .cnt").forEach(function (i) { if (i.value.trim() !== "") counted[i.dataset.m] = num(i.value); });
-      if (!confirm("¿Cerrar la caja? Se imprimirá el cierre y las ventas pasarán a la gestión.")) return;
-      rpc("pos_cash_close", { p_counted: counted, p_notes: $("cashNotes").value.trim() }).then(function () { toast("Caja cerrada. Cierre enviado a la impresora."); $("cashDlg").close(); refreshState(); }).catch(fail);
+      closing = { counted: counted, notes: $("cashNotes").value.trim() };
+      rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
+        closing.recipients = d.recipients || "";
+        $("repBody").innerHTML = window.IchirakuReporte ? window.IchirakuReporte.reportHtml(d) : "<pre>" + esc(JSON.stringify(d, null, 2)) + "</pre>";
+        $("repSend").textContent = closing.recipients ? "Cerrar caja y enviar por correo" : "Cerrar caja e imprimir (no hay correos configurados)";
+        $("repErr").textContent = ""; $("repDlg").showModal(); $("repBody").scrollTop = 0;
+      }).catch(fail);
     }
+  });
+  // Cierre: primero se revisa el reporte completo; al confirmar se cierra y se envía al correo (sin papel)
+  var closing = null;
+  function repBack() { $("repDlg").close(); }
+  $("repBack").addEventListener("click", repBack); $("repBack2").addEventListener("click", repBack);
+  $("repSend").addEventListener("click", function () {
+    if (!closing) return; $("repSend").disabled = true;
+    rpc("pos_cash_close", { p_counted: closing.counted, p_notes: closing.notes }).then(function () {
+      $("repDlg").close(); $("cashDlg").close();
+      toast(closing.recipients ? "Caja cerrada. El cierre llegará al correo: " + closing.recipients : "Caja cerrada. Cierre enviado a la impresora.");
+      refreshState();
+    }).catch(function (e) { $("repErr").textContent = errMsg(e); }).then(function () { $("repSend").disabled = false; });
   });
 
   // ---------------------------------------------------------------- Agotados e inventario
