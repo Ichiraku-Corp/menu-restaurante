@@ -230,6 +230,11 @@ ${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulad
     ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
 ${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
 ${H("Por área")}${table(["Área", "Pedidos", "Total"], (d.by_kind || []).map((x) => [he(x.kind), x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Mejores vendedores (incentivos)")}${["day", "week", "month"].map((k) => {
+    const rows = (d.tops && d.tops[k]) || [], t = { day: "Hoy", week: "Esta semana", month: "Este mes" }[k];
+    return `<p style="margin:8px 0 2px;font-weight:700">${t}${rows[0] ? " · ganador: " + he(rows[0].name) : ""}</p>` +
+      table(["#", "Vendedor", "Platos", "Pedidos", "Ventas"], rows.map((r, i) => [i + 1, he(r.name), fq(r.items), r.orders, "Ref " + fm(r.sales)]), [2, 3, 4]);
+  }).join("")}
 ${H("Por mesera (quien abrió la mesa)")}${table(["Persona", "Pedidos", "Total"], (d.staff || []).map((x) => [he(x.name), x.orders, "Ref " + fm(x.total)]), [1, 2])}
 ${H("Por hora")}${table(["Hora", "Pedidos", "Total"], (d.hours || []).map((x) => [String(x.hour).padStart(2, "0") + ":00", x.orders, "Ref " + fm(x.total)]), [1, 2])}
 ${H("Platos vendidos")}${table(["Plato", "Cantidad", "Ventas"], (d.dishes || []).map((x) => [he(x.name + (x.variant ? " " + x.variant : "")), fq(x.qty), "Ref " + fm(x.amount)]), [1, 2])}

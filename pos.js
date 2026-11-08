@@ -155,10 +155,11 @@
   }
   function drawTables() {
     if (!ST) return;
-    $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar"]).map(function (a) {
+    $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar", "Tops"]).map(function (a) {
       var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length
         : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
         : a === "Por cobrar" ? ST.orders.length
+        : a === "Tops" ? 0
         : ST.orders.filter(function (o) { var t = tableById(o.table_id); return t && t.area === a; }).length;
       return '<button type="button" data-area="' + esc(a) + '"' + (cur.area === a ? ' class="on"' : "") + ">" + esc(a) + (n ? ' <span class="cnt">' + n + "</span>" : "") + "</button>";
     }).join("");
@@ -172,6 +173,7 @@
         list.map(function (o) { return tableCard(o, esc(o.label.replace(/^(Para llevar|Delivery): /, "") || cur.area), 'data-order="' + o.id + '"'); }).join("") + "</div>";
       return;
     }
+    if (cur.area === "Tops") { drawTops(); return; }
     if (cur.area === "Por cobrar") {
       var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.opened_at) - new Date(b.opened_at); });
       var due = all.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = all.filter(function (o) { return o.precuenta_at; }).length;
@@ -190,6 +192,31 @@
       return o ? tableCard(o, String(t.number), 'data-table="' + t.id + '"')
         : '<button type="button" data-table="' + t.id + '"><span class="st">Libre</span><span class="num">' + t.number + "</span><small>&nbsp;</small></button>";
     }).join("") + "</div>";
+  }
+  var topsCache = null, topsAt = 0;
+  function drawTops() {
+    if (!topsCache || Date.now() - topsAt > 30000) {
+      topsAt = Date.now();
+      q(sb.rpc("pos_tops")).then(function (t) { topsCache = t; if (cur.area === "Tops") drawTops(); }).catch(fail);
+      if (!topsCache) { $("areaBody").innerHTML = '<p class="muted">Cargando…</p>'; return; }
+    }
+    var medals = ["#d4a017", "#9aa3ad", "#b8733a"];
+    function block(title, sub, rows) {
+      var max = rows.length ? num(rows[0].sales) : 0;
+      return '<div class="card topcard"><div class="row between"><h3>' + title + '</h3><span class="muted">' + sub + "</span></div>" +
+        (rows.length ? (function () {
+          var w = rows[0];
+          return '<div class="winner">' + avatar(w.name, w.id) + '<div><span class="muted">Mejor vendedor</span><b>' + esc(w.name) + "</b></div><b class=\"n big\">" + ref(num(w.sales)) + "</b></div>" +
+            '<ol class="rank">' + rows.map(function (r, i) {
+              return '<li><span class="pos" style="background:' + (medals[i] || "var(--chip)") + ";color:" + (i < 3 ? "#fff" : "var(--text)") + '">' + (i + 1) + "</span>" + avatar(r.name, r.id) +
+                '<span class="nm">' + esc(r.name) + '<small>' + fmtQ(r.items) + (num(r.items) === 1 ? " plato · " : " platos · ") + r.orders + (r.orders === 1 ? " pedido" : " pedidos") + '</small></span><span class="br"><i style="width:' + (max ? num(r.sales) / max * 100 : 0).toFixed(1) + '%"></i></span><b class="n">' + ref(num(r.sales)) + "</b></li>";
+            }).join("") + "</ol>";
+        })() : '<p class="muted">Todavía no hay ventas cobradas.</p>') + "</div>";
+    }
+    function dm(s) { return s ? s.slice(8, 10) + "/" + s.slice(5, 7) : ""; }
+    var t = topsCache;
+    $("areaBody").innerHTML = '<p class="muted" style="margin:6px 2px 0">Cada plato cuenta para quien lo pidió. Solo lo cobrado, sin anulaciones ni el 10 % de servicio.</p><div class="tops">' +
+      block("Hoy", dm(t.day.from), t.day.rows) + block("Esta semana", dm(t.week.from) + " al " + dm(t.week.to), t.week.rows) + block("Este mes", dm(t.month.from) + " al " + dm(t.month.to), t.month.rows) + "</div>";
   }
   function tableCard(o, title, attr) {
     var m = Math.round((Date.now() - new Date(o.opened_at).getTime()) / 60000), cls = (o.precuenta_at ? "bill" : "busy") + (o.pending ? " has-pend" : "");

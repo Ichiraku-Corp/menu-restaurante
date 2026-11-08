@@ -241,6 +241,31 @@ language sql volatile security definer set search_path = public as $$
   where (opened_at at time zone 'America/Caracas')::date = (now() at time zone 'America/Caracas')::date
 $$;
 
+-- ---------------------------------------------------------------- Mejores vendedores (incentivos)
+-- Cada plato cuenta para quien lo pidió en la tablet; solo pedidos cobrados y sin anulaciones.
+-- Ventas en Ref con IVA, sin el 10 % de servicio.
+create or replace function public.pos_ranking(p_from date, p_to date) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', x.created_by, 'name', public.pos_emp_name(x.created_by), 'sales', x.sales, 'items', x.items, 'orders', x.orders)
+                  order by x.sales desc, x.items desc), '[]'::jsonb)
+  from (select i.created_by, round(sum(i.qty * i.unit_price), 2) sales, sum(i.qty) items, count(distinct i.order_id) orders
+        from public.pos_items i join public.pos_orders o on o.id = i.order_id
+        where o.status = 'cobrada' and i.status <> 'anulado' and i.created_by is not null
+          and (o.closed_at at time zone 'America/Caracas')::date between p_from and p_to
+        group by i.created_by) x
+$$;
+
+create or replace function public.pos_tops() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare d date := (now() at time zone 'America/Caracas')::date;
+begin
+  if not (public.pos_is_device() or public.can_manage()) then raise exception 'Sin permiso'; end if;
+  return jsonb_build_object(
+    'day',   jsonb_build_object('from', d, 'to', d, 'rows', public.pos_ranking(d, d)),
+    'week',  jsonb_build_object('from', date_trunc('week', d)::date, 'to', d, 'rows', public.pos_ranking(date_trunc('week', d)::date, d)),
+    'month', jsonb_build_object('from', date_trunc('month', d)::date, 'to', d, 'rows', public.pos_ranking(date_trunc('month', d)::date, d)));
+end $$;
+
 -- ---------------------------------------------------------------- Lectura
 create or replace function public.pos_staff() returns table (id bigint, name text)
 language sql stable security definer set search_path = public as $$
@@ -694,7 +719,10 @@ language sql stable security definer set search_path = public as $$
     'discounts', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(id), 'amount', discount, 'reason', discount_reason, 'by', public.pos_emp_name(discount_by))), '[]'::jsonb)
                   from o where discount > 0 and status = 'cobrada'),
     'cancelled', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(id), 'reason', void_reason, 'by', public.pos_emp_name(closed_by))), '[]'::jsonb)
-                  from o where status = 'anulada')
+                  from o where status = 'anulada'),
+    'tops', (select jsonb_build_object(
+               'day', public.pos_ranking(d, d), 'week', public.pos_ranking(date_trunc('week', d)::date, d), 'month', public.pos_ranking(date_trunc('month', d)::date, d))
+             from (select (coalesce((select closed_at from s), now()) at time zone 'America/Caracas')::date d) dd)
   )
 $$;
 
@@ -753,6 +781,12 @@ begin
               E'\n  ' || coalesce(v ->> 'by', '') || ' - Motivo: ' || (v ->> 'reason'), E'\n')
               from jsonb_array_elements(sm -> 'discounts') v), 'Ninguno') ||
     case when coalesce(p_notes, '') <> '' then E'\n=\nNotas: ' || p_notes else '' end || E'\n=';
+  -- Mejores vendedores (día, semana y mes)
+  body := body || E'\n^MEJORES VENDEDORES\n' ||
+    coalesce((select string_agg(case r.n when 1 then '1. ' when 2 then '2. ' else '3. ' end || public.pos_line(r.v ->> 'name', 'Ref ' || public.pos_money((r.v ->> 'sales')::numeric), 45), E'\n' order by r.n)
+              from (select v, row_number() over () n from jsonb_array_elements(public.pos_ranking((now() at time zone 'America/Caracas')::date, (now() at time zone 'America/Caracas')::date)) v limit 3) r), 'Sin ventas hoy') ||
+    E'\n' || public.pos_line('Lider de la semana', coalesce((public.pos_tops() -> 'week' -> 'rows' -> 0 ->> 'name') || ' Ref ' || public.pos_money((public.pos_tops() -> 'week' -> 'rows' -> 0 ->> 'sales')::numeric), '-')) ||
+    E'\n' || public.pos_line('Lider del mes', coalesce((public.pos_tops() -> 'month' -> 'rows' -> 0 ->> 'name') || ' Ref ' || public.pos_money((public.pos_tops() -> 'month' -> 'rows' -> 0 ->> 'sales')::numeric), '-')) || E'\n=';
   perform public.pos_print('caja', body);
   insert into public.pos_log (employee_id, action, detail) values (p_emp, 'cerrar_caja', jsonb_build_object('sesion', s.id));
   select trim(report_emails) into rcp from public.gestion_settings limit 1;
@@ -864,7 +898,7 @@ begin
     'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
     'pos_open_delivery(bigint, text, text, text, text, numeric)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
-    'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)',
+    'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)'] loop
@@ -878,3 +912,4 @@ revoke execute on function public.pos_sync_day(date) from authenticated;
 revoke execute on function public.pos_bill_text(bigint, text) from authenticated;
 revoke execute on function public.pos_session_report(bigint) from authenticated;
 revoke execute on function public.pos_next_number() from authenticated;
+revoke execute on function public.pos_ranking(date, date) from authenticated;

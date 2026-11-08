@@ -182,6 +182,21 @@
     opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; z-index:60; max-width:90vw; text-align:center; box-shadow:0 8px 24px rgba(0,0,0,.2); }
   #toast.show { opacity:1; transform:translate(-50%, 0); }
   #toast.err { background:var(--danger); color:#fff; }
+  /* Tops de vendedores */
+  .tops { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; }
+  .topcard h3 { margin:0; font-size:18px; }
+  .winner { display:flex; align-items:center; gap:12px; margin:12px 0; padding:12px; border-radius:14px; background:linear-gradient(135deg, var(--accent-soft), var(--surface)); border:1px solid var(--accent-line); }
+  .winner .avatar { width:48px; height:48px; font-size:20px; }
+  .winner div { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .winner div b { font-size:20px; }
+  .winner .big { font-size:20px; }
+  .rank { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+  .rank li { display:grid; grid-template-columns:26px 30px minmax(0, 1fr) 70px auto; align-items:center; gap:8px; }
+  .rank .pos { width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+  .rank .nm { font-weight:700; min-width:0; }
+  .rank .nm small { display:block; color:var(--muted); font-weight:500; font-size:12px; }
+  .rank .br { height:8px; background:var(--chip); border-radius:4px; overflow:hidden; }
+  .rank .br i { display:block; height:100%; background:var(--accent); border-radius:0 4px 4px 0; }
   /* Teléfonos */
   @media (max-width: 560px) {
     header { gap:6px; padding:6px 10px; }
