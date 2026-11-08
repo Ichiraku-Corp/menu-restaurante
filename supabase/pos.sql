@@ -1307,6 +1307,26 @@ begin
   return n;
 end $$;
 
+-- Pago recibido por la notificación instantánea de PayPal (función paypal-ipn, con la llave de servicio)
+create or replace function public.pos_incoming_ipn(p_row jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if coalesce(auth.jwt() ->> 'role', '') <> 'service_role' then raise exception 'Sin permiso'; end if;
+  insert into public.pos_incoming (source, tx_id, amount, currency, payer, note, received_at)
+  select 'paypal', p_row ->> 'tx_id', round((p_row ->> 'amount')::numeric, 2), coalesce(p_row ->> 'currency', ''),
+         left(coalesce(p_row ->> 'payer', ''), 80), left(coalesce(p_row ->> 'note', ''), 120), (p_row ->> 'received_at')::timestamptz
+  where coalesce(p_row ->> 'tx_id', '') <> '' and (p_row ->> 'amount')::numeric > 0
+  on conflict (source, tx_id) do nothing;
+  get diagnostics n = row_count;
+  perform public.pos_match_incoming();
+  insert into public.pos_kv (key, value) values ('incoming_ipn_paypal', to_jsonb(now()))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return n;
+end $$;
+revoke execute on function public.pos_incoming_ipn(jsonb) from anon, public, authenticated;
+grant execute on function public.pos_incoming_ipn(jsonb) to service_role;
+
 -- «No es del restaurante»: ocultar un pago recibido externo
 create or replace function public.pos_incoming_ignore(p_emp bigint, p_pin text, p_id bigint) returns void
 language plpgsql security definer set search_path = public as $$
