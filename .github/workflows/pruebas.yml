@@ -52,3 +52,16 @@ jobs:
             const w = r.reportHtml({ kind: "semanal", from: "2026-11-02", to: "2026-11-08", totals: { total: 1 } });
             if (!c.includes("Cierre de caja") || !w.includes("Resumen semanal")) throw new Error("reporte vacío");
             console.log("ok:", r.weekSubject({ from: "2026-11-02", to: "2026-11-08", totals: { total: 1 } }));'
+
+  navegador:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Instalar navegador de pruebas
+        run: npm install --no-save --no-package-lock playwright@1.47.2 && npx playwright install --with-deps chromium
+      - name: Recorrido de la caja en el navegador
+        run: node pruebas-navegador/recorrido-caja.js

@@ -1,0 +1,84 @@
+// Recorre la app de caja en un navegador real con un Supabase falso (supabase-falso.js).
+// Uso: node pruebas-navegador/recorrido-caja.js   (necesita Playwright y Chromium)
+// Sirve el sitio con un servidor propio en el puerto 8799 y falla si algo no responde como debe.
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const http = require("http");
+const { chromium } = require("playwright");
+
+const ROOT = path.join(__dirname, "..");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp" };
+const server = http.createServer((req, res) => {
+  const f = path.join(ROOT, decodeURIComponent(req.url.split("?")[0]));
+  if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { "Content-Type": TYPES[path.extname(f)] || "application/octet-stream" }); fs.createReadStream(f).pipe(res);
+});
+
+let fallos = 0;
+function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; console.log("FALLÓ: " + msg); } }
+
+(async () => {
+  await new Promise((r) => server.listen(8799, r));
+  const browser = await chromium.launch();
+  const page = await (await browser.newContext({ viewport: { width: 1180, height: 900 } })).newPage();
+  const errores = [];
+  page.on("pageerror", (e) => errores.push(e.message));
+  page.on("dialog", (d) => d.accept());
+  const menu = fs.readFileSync(path.join(ROOT, "data", "menu.json"), "utf8");
+  await page.route("**/vendor/supabase-js-*/supabase.js", (r) => r.fulfill({ contentType: "application/javascript",
+    body: "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8") }));
+  const S = (fn) => page.evaluate(fn);
+  const pin = async (emp, code) => { await page.click(`#people [data-emp="${emp}"]`); for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
+
+  try {
+    // Equipo y PIN
+    await page.goto("http://localhost:8799/pos.html");
+    await page.fill("#devEmail", "tablet@ejemplo.test"); await page.fill("#devPass", "x"); await page.click("#device button");
+    await pin(2, "2222"); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });
+    ok(true, "la cajera entra con su PIN");
+
+    // Abrir caja
+    await page.click("#btnCaja"); await page.waitForTimeout(200); await page.click("#openCash"); await page.waitForTimeout(300);
+    ok(await S(() => !!window.__S.session), "abre la caja");
+    await page.click("#cashClose").catch(() => {});
+
+    // Mesa: plato con nota, enviar, cobrar en efectivo
+    await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("3")'); await page.waitForSelector("#orderView:not(.hidden)");
+    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")');
+    ok(await page.isVisible("#dishDlg"), "el plato abre su ventana (cantidad, opción y nota)");
+    await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
+    await page.click("#send"); await page.waitForTimeout(300);
+    ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
+    await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]'); await page.click("#payOk"); await page.waitForTimeout(400);
+    ok(await S(() => window.__S.orders.some((o) => o.status === "cobrada")), "la mesa se cobra en efectivo");
+
+    // Mesa abierta por error: se borra al salir
+    await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("6")'); await page.waitForSelector("#orderView:not(.hidden)");
+    await page.click("#back"); await page.waitForTimeout(300);
+    ok(await S(() => !!window.__drop), "una mesa vacía se borra al salir");
+
+    // Delivery de Yummy: sin costo de envío
+    await page.click('#areas [data-area="Delivery"]'); await page.click("#newDeliv");
+    await page.selectOption("#dChan", "yummy");
+    ok(!(await page.isVisible("#dFee")), "en Yummy no se pide costo de delivery");
+    await page.fill("#dName", "Cliente Yummy"); await page.click("#dOk"); await page.waitForSelector("#orderView:not(.hidden)");
+    ok(await S(() => window.__S.orders.some((o) => o.channel === "yummy" && o.delivery_fee === 0)), "el pedido queda como Yummy");
+    await page.click("#back"); await page.waitForTimeout(300);
+
+    // Cierre: arqueo con diferencia pide nota
+    await page.click("#btnCaja"); await page.waitForTimeout(300);
+    await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').fill("15");
+    await page.locator('#cashBody .cnt[data-m="pago_movil"]').fill("247.98");
+    await page.locator('#cashBody .cnt[data-m="pago_movil"]').dispatchEvent("input");
+    ok(await page.locator("#cashBody .cwarn").count() > 0, "avisa si el pago móvil parece escrito en dólares");
+    await page.click("#doClose"); await page.waitForTimeout(300);
+    ok(!(await S(() => !!window.__closed)), "no deja cerrar con diferencia grande sin nota");
+  } catch (e) {
+    fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
+  }
+  ok(errores.length === 0, "sin errores de JavaScript" + (errores.length ? ": " + errores.join(" | ") : ""));
+  await browser.close(); server.close();
+  if (fallos) { console.log(fallos + " prueba(s) fallaron"); process.exit(1); }
+  console.log("TODAS LAS PRUEBAS DEL NAVEGADOR PASARON");
+})();
