@@ -14,6 +14,7 @@ function table(head, rows, right) {
   return `<table style="border-collapse:collapse;width:100%;font-size:14px;margin:6px 0 18px">${th ? "<thead><tr>" + th + "</tr></thead>" : ""}<tbody>${tr || `<tr><td style="padding:6px 8px;color:#777">Ninguno</td></tr>`}</tbody></table>`;
 }
 function reportHtml(d) {
+  if (d && d.kind === "semanal") return weekHtml(d);
   const prev = d.preview ? `<p style="background:#fff4d6;border:1px solid #e9b949;border-radius:8px;padding:8px 10px;margin:0 0 12px"><b>Vista previa</b> · todavía no se ha cerrado la caja. Se enviará a: ${he(d.recipients || "(sin correos configurados)")}</p>` : "";
   const s = d.session || {}, t = d.totals || {}, exp = s.expected || {}, cnt = s.counted || {};
   const H = (x) => `<h2 style="font-size:17px;margin:22px 0 4px;color:#e5206b">${x}</h2>`;
@@ -60,6 +61,42 @@ ${s.notes ? H("Notas de la cajera") + "<p>" + he(s.notes) + "</p>" : ""}
 <p style="color:#777;font-size:12px;margin-top:24px">Enviado automáticamente por el sistema de ventas de Ichiraku. Precios con IVA incluido.</p></div>`;
 }
 
-  const api = { reportHtml: reportHtml };
+
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const KINDS = { mesa: "Mesas", delivery: "Delivery", llevar: "Para llevar" };
+const dd = (ymd) => { const d = new Date(ymd + "T12:00:00Z"); return DIAS[d.getUTCDay()] + " " + String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); };
+function weekSubject(d) { return `Resumen semanal ${dd(d.from)} al ${dd(d.to)} · Ref ${fm(d.totals && d.totals.total)}`; }
+function weekHtml(d) {
+  const t = d.totals || {}, H = (x) => `<h2 style="font-size:17px;margin:22px 0 4px;color:#e5206b">${x}</h2>`;
+  const prev = Number(d.prev_total || 0), chg = prev > 0 ? Math.round((Number(t.total) / prev - 1) * 100) : null;
+  const dl = d.delivery || {}, outs = d.outs || [];
+  const paidDl = outs.filter((x) => /deliver/i.test(x.reason)).reduce((a, x) => a + Number(x.amount_ref || 0), 0);
+  const big = (lbl, val, sub) => `<td style="padding:10px 12px;border:1px solid #eee;border-radius:8px;vertical-align:top"><div style="font-size:12px;color:#666;text-transform:uppercase">${lbl}</div><div style="font-size:22px;font-weight:700">${val}</div>${sub ? `<div style="font-size:12px;color:#666">${sub}</div>` : ""}</td>`;
+  const diffCell = (n) => `<b style="color:${Math.abs(n) < 0.01 ? "#2f7d4f" : "#b3261e"}">${n > 0 ? "+" : ""}${fm(n)}</b>`;
+  return `<div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:900px;color:#1f1a17">
+<h1 style="font-size:22px;margin:0">Resumen semanal · Ichiraku Ramen</h1>
+<p style="color:#555;margin:4px 0 12px">Del ${dd(d.from)} al ${dd(d.to)} · Tasa € BCV actual ${fm(d.rate)}</p>
+<table style="border-collapse:separate;border-spacing:8px;width:100%"><tr>
+${big("Ventas", "Ref " + fm(t.total), chg === null ? "primera semana" : (chg >= 0 ? "▲ " : "▼ ") + Math.abs(chg) + " % vs. semana anterior")}
+${big("Pedidos", fq(t.orders), "ticket promedio Ref " + fm(t.avg))}
+${big("Servicio acumulado", "Ref " + fm(t.service), "propinas Ref " + fm(d.tips))}
+</tr></table>
+${H("🛵 Pago a la empresa de delivery")}
+<p style="margin:4px 0 8px;font-size:15px">Cobrado a los clientes por delivery: <b>Ref ${fm(dl.fees)}</b> en ${fq(dl.orders)} envíos.${paidDl ? ` Ya salió de caja esta semana: Ref ${fm(paidDl)}.` : ""}</p>
+<p style="margin:0 0 8px;color:#555;font-size:13px">Al pagarle, registra en caja una <b>Salida de caja</b> con el motivo «Pago delivery semanal».</p>
+${H("Ventas por día")}${table(["Día", "Pedidos", "Total"], (d.days || []).map((x) => [dd(x.day), x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Por tipo de pedido")}${table(["Tipo", "Pedidos", "Total"], (d.by_kind || []).map((x) => [KINDS[x.kind] || he(x.kind), x.orders, "Ref " + fm(x.total)]), [1, 2])}
+${H("Cuadre de caja de cada día")}${table(["Cierre", "Cajera", "Diferencias por método", "Total en Ref", "Notas"], (d.sessions || []).map((x) => [hh(x.closed_at), he(x.by),
+    Object.keys(x.diffs || {}).filter((k) => Math.abs(x.diffs[k]) >= 0.01).map((k) => (MNAMES[k] || he(k)) + ": " + (BS.has(k) ? "Bs " : "$ ") + fm(x.diffs[k])).join("<br>") || "Todo cuadró",
+    diffCell(Number(x.diff_ref || 0)), he(x.notes)]), [3])}
+${H("Métodos de pago")}${table(["Método", "Pagos", "Monto", "En Ref"], (d.methods || []).map((x) => [MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [1, 2, 3])}
+${H("Platos más vendidos")}${table(["Plato", "Cantidad", "Ventas"], (d.dishes || []).map((x) => [he(x.name), fq(x.qty), "Ref " + fm(x.amount)]), [1, 2])}
+${H("Mejores vendedores")}${table(["#", "Vendedor", "Platos", "Pedidos", "Ventas"], (d.sellers || []).map((r, i) => [i + 1, he(r.name), fq(r.items), r.orders, "Ref " + fm(r.sales)]), [2, 3, 4])}
+${H("Salidas de caja")}${table(["Fecha", "Motivo", "Monto", "Quién"], outs.map((x) => [hh(x.at), he(x.reason), (x.method === "efectivo_bs" ? "Bs " : "$ ") + fm(x.amount), he(x.by)]), [2])}
+${H("Control")}${table([], [["Platos anulados", fq((d.voids || {}).count) + " · Ref " + fm((d.voids || {}).amount)], ["Pedidos anulados", fq(d.cancelled)], ["Descuentos", "Ref " + fm(t.discounts)]], [1])}
+<p style="color:#777;font-size:12px;margin-top:24px">Enviado automáticamente cada lunes por el sistema de ventas de Ichiraku. Precios con IVA incluido.</p></div>`;
+}
+
+  const api = { reportHtml: reportHtml, weekHtml: weekHtml, weekSubject: weekSubject };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.IchirakuReporte = api;
 })(typeof window !== "undefined" ? window : this);

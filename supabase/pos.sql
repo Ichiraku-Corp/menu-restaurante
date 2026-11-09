@@ -1572,6 +1572,76 @@ begin
        where b.version > coalesce(p_version, 0) order by x->>'path', b.version desc) f));
 end $$;
 
+-- ---------------------------------------------------------------- Resumen semanal (llega por correo cada lunes)
+-- Semana de lunes a domingo (hora de Caracas). El delivery se le paga a una sola empresa cada lunes.
+create or replace function public.pos_week_report(p_from date) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with w as (select p_from d1, p_from + 6 d2),
+  o as (select o.*, t.total, t.service, t.discount disc, (o.closed_at at time zone 'America/Caracas')::date dia
+        from public.pos_orders o cross join lateral public.pos_totals(o.id) t, w
+        where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
+  pay as (select p.* from public.pos_payments p, w
+          where (p.created_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
+  ses as (select s.*, coalesce((select eur from public.pos_rates r where r.rate_date <= (s.closed_at at time zone 'America/Caracas')::date
+                                order by r.rate_date desc limit 1), 1) rate
+          from public.pos_sessions s, w where s.status = 'cerrada' and (s.closed_at at time zone 'America/Caracas')::date between w.d1 and w.d2)
+  select jsonb_build_object(
+    'kind', 'semanal', 'from', (select d1 from w), 'to', (select d2 from w),
+    'totals', (select jsonb_build_object('orders', count(*), 'total', coalesce(sum(total), 0), 'service', coalesce(sum(service), 0),
+                 'discounts', coalesce(sum(disc), 0), 'delivery', coalesce(sum(delivery_fee), 0),
+                 'avg', case when count(*) > 0 then round(sum(total) / count(*), 2) else 0 end) from o),
+    'prev_total', (select coalesce(sum(t.total), 0) from public.pos_orders x cross join lateral public.pos_totals(x.id) t, w
+                   where x.status = 'cobrada' and (x.closed_at at time zone 'America/Caracas')::date between w.d1 - 7 and w.d2 - 7),
+    'cancelled', (select count(*) from public.pos_orders x, w where x.status = 'anulada'
+                  and (coalesce(x.closed_at, x.opened_at) at time zone 'America/Caracas')::date between w.d1 and w.d2),
+    'days', (select coalesce(jsonb_agg(jsonb_build_object('day', dia, 'orders', n, 'total', tot) order by dia), '[]'::jsonb)
+             from (select dia, count(*) n, sum(total) tot from o group by dia) x),
+    'by_kind', (select coalesce(jsonb_agg(jsonb_build_object('kind', kind, 'orders', n, 'total', tot) order by tot desc), '[]'::jsonb)
+                from (select kind, count(*) n, sum(total) tot from o group by kind) x),
+    'methods', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'count', n, 'amount', a, 'amount_ref', r) order by r desc), '[]'::jsonb)
+                from (select method, count(*) n, sum(amount) a, sum(amount_ref) r from pay where amount > 0 group by method) x),
+    'delivery', (select jsonb_build_object('orders', count(*), 'fees', coalesce(sum(delivery_fee), 0)) from o where kind = 'delivery' and delivery_fee > 0),
+    'outs', (select coalesce(jsonb_agg(jsonb_build_object('at', created_at, 'method', method, 'amount', -amount, 'amount_ref', -amount_ref,
+               'reason', cash_out_reason, 'by', public.pos_emp_name(created_by)) order by created_at), '[]'::jsonb)
+             from pay where amount < 0 and cash_out_reason <> ''),
+    'tips', (select coalesce(sum(amount_ref), 0) from pay where is_tip),
+    'dishes', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'qty', q, 'amount', a) order by q desc, a desc), '[]'::jsonb)
+               from (select i.name, sum(i.qty) q, round(sum(i.qty * i.unit_price), 2) a from public.pos_items i join o on o.id = i.order_id
+                     where i.status <> 'anulado' group by i.name order by 2 desc, 3 desc limit 12) x),
+    'voids', (select jsonb_build_object('count', count(*), 'amount', coalesce(round(sum(i.qty * i.unit_price), 2), 0))
+              from public.pos_items i join public.pos_orders x on x.id = i.order_id, w
+              where i.status = 'anulado' and (x.opened_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
+    'sellers', public.pos_ranking(p_from, p_from + 6),
+    'sessions', (select coalesce(jsonb_agg(jsonb_build_object('closed_at', closed_at, 'by', public.pos_emp_name(closed_by), 'notes', notes,
+                   'diffs', diffs, 'diff_ref', diff_ref) order by closed_at), '[]'::jsonb)
+                 from (select s.closed_at, s.closed_by, s.notes,
+                         coalesce((select jsonb_object_agg(k, round((s.counted ->> k)::numeric - coalesce((s.expected ->> k)::numeric, 0), 2))
+                                   from jsonb_object_keys(s.counted) k where k <> '_inv' and jsonb_typeof(s.counted -> k) = 'number'), '{}'::jsonb) diffs,
+                         coalesce((select round(sum(((s.counted ->> k)::numeric - coalesce((s.expected ->> k)::numeric, 0))
+                                   / case when k in ('efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito') then s.rate else 1 end), 2)
+                                   from jsonb_object_keys(s.counted) k where k <> '_inv' and jsonb_typeof(s.counted -> k) = 'number'), 0) diff_ref
+                       from ses s) x),
+    'rate', public.pos_rate()
+  )
+$$;
+
+-- El puente la llama cada minuto: desde el lunes a las 8 a. m. deja en cola el resumen de la semana pasada (una sola vez).
+create or replace function public.pos_week_queue() returns boolean
+language plpgsql security definer set search_path = public as $$
+declare nowc timestamp := now() at time zone 'America/Caracas'; d1 date; rcp text;
+begin
+  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  d1 := date_trunc('week', nowc)::date - 7;
+  if extract(isodow from nowc) = 1 and extract(hour from nowc) < 8 then return false; end if;
+  if exists (select 1 from public.pos_reports where data ->> 'kind' = 'semanal' and data ->> 'from' = d1::text) then return false; end if;
+  if not exists (select 1 from public.pos_orders where status = 'cobrada'
+                 and (closed_at at time zone 'America/Caracas')::date between d1 and d1 + 6) then return false; end if;
+  select trim(report_emails) into rcp from public.gestion_settings limit 1;
+  if coalesce(rcp, '') = '' then return false; end if;
+  insert into public.pos_reports (recipients, data) values (rcp, public.pos_week_report(d1));
+  return true;
+end $$;
+
 -- ---------------------------------------------------------------- Permisos de las funciones
 do $$
 declare f text;
@@ -1594,7 +1664,7 @@ begin
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
     'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
-    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)'] loop
+    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
@@ -1609,4 +1679,5 @@ revoke execute on function public.pos_bill_text(bigint, text) from authenticated
 revoke execute on function public.pos_session_report(bigint) from authenticated;
 revoke execute on function public.pos_next_number() from authenticated;
 revoke execute on function public.pos_ranking(date, date) from authenticated;
+revoke execute on function public.pos_week_report(date) from authenticated;
 revoke execute on function public.pos_customer_id(text) from anon, public, authenticated;

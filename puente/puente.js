@@ -347,18 +347,25 @@ function reportHtml(d) {
     return "<h1>Cierre de caja · Ichiraku Ramen</h1><pre>" + he(JSON.stringify(d, null, 2)) + "</pre>";
   }
 }
+function reportSubject(d) {
+  if (d && d.kind === "semanal") {
+    try { return require(path.join(DIR, "app", "reporte-cierre.js")).weekSubject(d); } catch (e) { return "Resumen semanal Ichiraku"; }
+  }
+  const s = (d && d.session) || {};
+  return `Cierre de caja ${hh(s.closed_at)} · Ref ${fm(d && d.totals && d.totals.total)}`;
+}
 async function sendReports() {
   if (!cfg.correo || !cfg.correo.host) return;
+  try { if (await rpc("pos_week_queue")) log("Resumen semanal listo para enviar"); } catch (e) { /* base sin la función todavía */ }
   try {
     const list = await rpc("pos_report_next");
     for (const r of list || []) {
       const to = String(r.recipients).split(/[,;\s]+/).filter((x) => /@/.test(x));
-      const s = (r.data && r.data.session) || {};
       try {
         if (!to.length) throw new Error("Sin destinatarios");
-        await smtpSend(cfg.correo, to, `Cierre de caja ${hh(s.closed_at)} · Ref ${fm(r.data.totals && r.data.totals.total)}`, reportHtml(r.data));
+        await smtpSend(cfg.correo, to, reportSubject(r.data), reportHtml(r.data));
         await rpc("pos_report_done", { p_id: r.id, p_ok: true });
-        log(`Cierre enviado por correo a ${to.join(", ")}`);
+        log(`${r.data && r.data.kind === "semanal" ? "Resumen semanal" : "Cierre"} enviado por correo a ${to.join(", ")}`);
       } catch (e) {
         await rpc("pos_report_done", { p_id: r.id, p_ok: false, p_error: e.message }).catch(() => {});
         log("ERROR al enviar el cierre por correo: " + e.message);
