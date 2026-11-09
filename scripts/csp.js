@@ -12,7 +12,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 const ROOT = path.join(__dirname, "..");
-const PAGES = ["index.html", "admin.html", "gestion.html", "cocina.html", "pos.html", "404.html"];
+const PAGES = ["index.html", "admin.html", "gestion.html", "cocina.html", "pos.html", "comandas.html", "404.html"];
 
 const config = fs.readFileSync(path.join(ROOT, "config.js"), "utf8");
 const m = config.match(/SUPABASE_URL:\s*"https:\/\/([^"/]+)/);
@@ -40,7 +40,7 @@ function policy(hashes) {
 // Huella de versión en los scripts propios (pos.js?v=abcd1234): así ningún navegador ni tablet se queda
 // con una copia vieja después de una actualización.
 function stampVersions(html) {
-  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos|reporte-cierre|mfa|monitoreo)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
+  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos|reporte-cierre|mfa|monitoreo|comandas)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
     const f = path.join(ROOT, file);
     if (!fs.existsSync(f)) return all;
     const v = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 10);

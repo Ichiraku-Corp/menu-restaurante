@@ -9,7 +9,7 @@
   // Versión = huella del programa principal de la página (pos.js?v=…); se lee al enviar, cuando ya cargó
   function version() {
     var v = "", all = Array.prototype.map.call(document.scripts, function (s) { return s.src; });
-    ["pos", "mfa", "reporte-cierre"].some(function (n) { return all.some(function (src) { var m = new RegExp("/" + n + "\\.js\\?v=([0-9a-f]+)").exec(src); if (m) v = m[1]; return !!m; }); });
+    ["pos", "comandas", "mfa", "reporte-cierre"].some(function (n) { return all.some(function (src) { var m = new RegExp("/" + n + "\\.js\\?v=([0-9a-f]+)").exec(src); if (m) v = m[1]; return !!m; }); });
     return "ichiraku-" + page + "@" + (v || "sin-version");
   }
   var page = (location.pathname.split("/").pop() || "index.html").replace(".html", "");

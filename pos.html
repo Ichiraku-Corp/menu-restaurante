@@ -13,13 +13,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=29cddb0b60">
+<link rel="stylesheet" href="pos.css?v=cb5a253065">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
-<script src="monitoreo.js?v=c503e432fa"></script>
+<script src="monitoreo.js?v=ac703fa2f3"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="reporte-cierre.js?v=948d08b1bc"></script>
-<script src="pos.js?v=be1e0dcbc7" defer></script>
+<script src="reporte-cierre.js?v=6cf424d38d"></script>
+<script src="pos.js?v=f2c5ba931c" defer></script>
 </head>
 <body>
 <header>
@@ -80,6 +80,7 @@
       </div>
       <div class="ticket card" style="margin-top:10px">
         <div class="meta"><b id="orderMeta"></b><span class="muted" id="orderBy"></span></div>
+        <button type="button" id="served" class="readybtn hidden">🍜 <span id="servedTxt"></span> · Ya lo serví</button>
         <div class="lines" id="lines"></div>
         <div id="totals" class="totals"></div>
         <div class="actions">

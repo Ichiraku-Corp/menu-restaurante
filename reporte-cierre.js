@@ -92,6 +92,7 @@ ${H("Cuadre de caja de cada día")}${table(["Cierre", "Cajera", "Diferencias por
     diffCell(Number(x.diff_ref || 0)), he(x.notes)]), [3])}
 ${H("Métodos de pago")}${table(["Método", "Pagos", "Monto", "En Ref"], (d.methods || []).map((x) => [MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [1, 2, 3])}
 ${H("Platos más vendidos")}${table(["Plato", "Cantidad", "Ventas"], (d.dishes || []).map((x) => [he(x.name), fq(x.qty), "Ref " + fm(x.amount)]), [1, 2])}
+${(d.kitchen || []).length ? H("Tiempos de cocina (de enviado a listo)") + table(["Plato", "Veces", "Promedio", "M\u00e1s lento"], d.kitchen.map((x) => [he(x.name), x.count, fq(x.avg) + " min", fq(x.max) + " min"]), [1, 2, 3]) : ""}
 ${H("Mejores vendedores")}${table(["#", "Vendedor", "Platos", "Pedidos", "Ventas"], (d.sellers || []).map((r, i) => [i + 1, he(r.name), fq(r.items), r.orders, "Ref " + fm(r.sales)]), [2, 3, 4])}
 ${H("Salidas de caja")}${table(["Fecha", "Motivo", "Monto", "Quién"], outs.map((x) => [hh(x.at), he(x.reason), (x.method === "efectivo_bs" ? "Bs " : "$ ") + fm(x.amount), he(x.by)]), [2])}
 ${H("Control")}${table([], [["Platos anulados", fq((d.voids || {}).count) + " · Ref " + fm((d.voids || {}).amount)], ["Pedidos anulados", fq(d.cancelled)], ["Descuentos", "Ref " + fm(t.discounts)]], [1])}

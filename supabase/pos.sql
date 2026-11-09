@@ -440,7 +440,8 @@ begin
                  'paid', tt.paid,
                  'precuenta_at', o.precuenta_at, 'phone', o.phone, 'channel', o.channel,
                  'pending', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'pendiente'),
-                 'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
+                 'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado'),
+                 'ready', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'enviado' and i.ready_at is not null and i.served_at is null)) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o cross join lateral public.pos_totals(o.id) tt where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
     'unverified', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'method', p.method, 'amount', p.amount, 'reference', p.reference,
@@ -1588,6 +1589,70 @@ begin
        where b.version > coalesce(p_version, 0) order by x->>'path', b.version desc) f));
 end $$;
 
+-- ---------------------------------------------------------------- Pantalla de cocina (comandas digitales con su tiempo)
+-- Cada plato enviado aparece en la pantalla de cocina; al tocarlo queda «listo» (ready_at) y la mesera lo ve en su tablet
+-- hasta que marca «servido» (served_at). Con sent_at → ready_at se mide el tiempo real de cada plato.
+alter table public.pos_items add column if not exists ready_at  timestamptz;
+alter table public.pos_items add column if not exists served_at timestamptz;
+create index if not exists pos_items_kitchen on public.pos_items (sent_at) where status = 'enviado' and ready_at is null;
+
+create or replace function public.pos_kitchen() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare d date := (now() at time zone 'America/Caracas')::date;
+begin
+  if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  return jsonb_build_object(
+    'now', now(),
+    'orders', (select coalesce(jsonb_agg(x order by x->>'first_sent'), '[]'::jsonb) from (
+      select jsonb_build_object('id', o.id, 'label', public.pos_order_label(o.id), 'kind', o.kind, 'day_number', o.day_number,
+               'waiter', public.pos_emp_name(o.opened_by), 'first_sent', min(i.sent_at),
+               'items', jsonb_agg(jsonb_build_object('id', i.id, 'name', i.name, 'variant', i.variant, 'option', i.option, 'notes', i.notes,
+                          'qty', i.qty, 'sent_at', i.sent_at) order by i.sent_at, i.id)) x
+      from public.pos_items i join public.pos_orders o on o.id = i.order_id
+      where i.status = 'enviado' and i.ready_at is null and o.status <> 'anulada' and i.sent_at > now() - interval '12 hours'
+      group by o.id) q),
+    'recent', (select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'name', i.name, 'qty', i.qty, 'label', public.pos_order_label(i.order_id),
+                 'minutes', round(extract(epoch from i.ready_at - i.sent_at) / 60, 1)) order by i.ready_at desc), '[]'::jsonb)
+               from (select * from public.pos_items where ready_at > now() - interval '15 minutes' order by ready_at desc limit 8) i),
+    'today', (select jsonb_build_object('count', count(*), 'avg', round(avg(extract(epoch from ready_at - sent_at) / 60)::numeric, 1))
+              from public.pos_items where ready_at is not null and (ready_at at time zone 'America/Caracas')::date = d)
+  );
+end $$;
+
+-- Marcar platos listos (la cocina no usa PIN: un toque). Sirve también para «deshacer» un toque equivocado.
+create or replace function public.pos_kitchen_ready(p_items bigint[], p_ready boolean default true) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  if p_ready then
+    update public.pos_items set ready_at = now() where id = any(p_items) and status = 'enviado' and ready_at is null;
+  else
+    update public.pos_items set ready_at = null, served_at = null where id = any(p_items) and ready_at > now() - interval '15 minutes';
+  end if;
+  get diagnostics n = row_count; return n;
+end $$;
+
+-- La mesera confirma que ya llevó a la mesa lo que estaba listo
+create or replace function public.pos_served(p_emp bigint, p_pin text, p_order bigint) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  update public.pos_items set served_at = now() where order_id = p_order and ready_at is not null and served_at is null;
+  get diagnostics n = row_count; return n;
+end $$;
+
+-- Tiempo promedio por plato (desde que se envía hasta que cocina lo marca listo)
+create or replace function public.pos_dish_times(p_days int default 30) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'count', n, 'avg', a, 'max', mx) order by a desc), '[]'::jsonb)
+  from (select name, count(*) n, round(avg(extract(epoch from ready_at - sent_at) / 60)::numeric, 1) a,
+               round(max(extract(epoch from ready_at - sent_at) / 60)::numeric, 1) mx
+        from public.pos_items where ready_at is not null and sent_at > now() - make_interval(days => greatest(coalesce(p_days, 30), 1))
+          and ready_at - sent_at < interval '3 hours' and (public.pos_is_device() or public.can_manage()) group by name) x
+$$;
+
 -- ---------------------------------------------------------------- Resumen semanal (llega por correo cada lunes)
 -- Semana de lunes a domingo (hora de Caracas). El delivery se le paga a una sola empresa cada lunes.
 create or replace function public.pos_week_report(p_from date) returns jsonb
@@ -1628,6 +1693,11 @@ language sql stable security definer set search_path = public as $$
               from public.pos_items i join public.pos_orders x on x.id = i.order_id, w
               where i.status = 'anulado' and (x.opened_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
     'sellers', public.pos_ranking(p_from, p_from + 6),
+    'kitchen', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'count', n, 'avg', a, 'max', mx) order by a desc), '[]'::jsonb)
+                from (select i.name, count(*) n, round(avg(extract(epoch from i.ready_at - i.sent_at) / 60)::numeric, 1) a,
+                             round(max(extract(epoch from i.ready_at - i.sent_at) / 60)::numeric, 1) mx
+                      from public.pos_items i, w where i.ready_at is not null and i.ready_at - i.sent_at < interval '3 hours'
+                        and (i.sent_at at time zone 'America/Caracas')::date between w.d1 and w.d2 group by i.name order by 3 desc limit 10) x),
     'sessions', (select coalesce(jsonb_agg(jsonb_build_object('closed_at', closed_at, 'by', public.pos_emp_name(closed_by), 'notes', notes,
                    'diffs', diffs, 'diff_ref', diff_ref) order by closed_at), '[]'::jsonb)
                  from (select s.closed_at, s.closed_by, s.notes,
@@ -1680,7 +1750,7 @@ begin
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
     'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
-    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()'] loop
+    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen()', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

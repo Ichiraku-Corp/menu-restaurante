@@ -332,3 +332,6 @@
 .billgrid label { font-size:13px; font-weight:700; color:var(--muted); }
 .billgrid input { padding:6px 8px; margin-top:2px; }
 .pill.wait { background:var(--warn); color:#fff; }
+.pill.ready { background:var(--ok); color:#fff; }
+.readybtn { width:100%; margin:6px 0; padding:12px; border:0; border-radius:12px; background:var(--ok); color:#fff; font-weight:800; animation:readyPulse 1.6s ease-in-out infinite; }
+@keyframes readyPulse { 50% { filter:brightness(1.15); } }

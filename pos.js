@@ -339,8 +339,11 @@
     if (!o.items && minsSince(o.opened_at) >= 10) return "sin pedido hace " + minsSince(o.opened_at) + " min";
     return "";
   }
+  $("served").addEventListener("click", function () {
+    rpc("pos_served", { p_order: cur.order }).then(function (n) { toast(n ? "Listo: " + n + " servido" + (n === 1 ? "" : "s") : "Nada pendiente"); show("served", false); return refreshState(); }).catch(fail);
+  });
   function badges(o) {
-    return (waitInfo(o) ? '<span class="pill wait">esperando</span>' : "") + (o.pending ? '<span class="pend">sin enviar</span>' : "") + (num(o.paid) > 0 ? '<span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "");
+    return (o.ready ? '<span class="pill ready">🍜 ' + o.ready + " listo" + (o.ready === 1 ? "" : "s") + "</span>" : "") + (waitInfo(o) ? '<span class="pill wait">esperando</span>' : "") + (o.pending ? '<span class="pend">sin enviar</span>' : "") + (num(o.paid) > 0 ? '<span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "");
   }
   function tableById(id) { return ST && ST.tables.find(function (t) { return t.id === id; }); }
   function mins(ts) { var m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; }
@@ -450,6 +453,8 @@
     $("btnClient").innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span>' +
       (d.client ? esc(d.client.name) : "Cliente") + "</span>";
     $("btnClient").classList.toggle("has", !!d.client);
+    var so = ST && ST.orders.find(function (x) { return x.id === d.id; }), rd = so ? so.ready || 0 : 0;
+    show("served", rd > 0); $("servedTxt").textContent = rd + (rd === 1 ? " plato listo en cocina" : " platos listos en cocina");
     $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
       ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
       : "Para llevar (sin servicio)";

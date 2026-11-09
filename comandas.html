@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#14110f">
+<title>Comandas · Cocina</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="comandas.css?v=df8734e9d0">
+<script src="config.js"></script>
+<script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
+<script src="monitoreo.js?v=ac703fa2f3"></script>
+<script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="comandas.js?v=2eaec4ae4f" defer></script>
+</head>
+<body>
+<form id="login" class="login hidden">
+  <h1>Pantalla de cocina</h1>
+  <p class="muted">Entra con la cuenta de sala del restaurante. Solo se hace una vez en este equipo.</p>
+  <input id="email" type="email" placeholder="Correo de la cuenta de sala" autocomplete="username" required>
+  <input id="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+  <button class="primary">Entrar</button>
+  <p id="loginErr" class="err"></p>
+</form>
+
+<div id="app" class="hidden">
+  <header>
+    <b class="brand">Comandas</b>
+    <span id="stats" class="muted"></span>
+    <span class="grow"></span>
+    <span id="clock" class="clock"></span>
+    <button type="button" id="sound" class="ghost">🔔 Sonido</button>
+    <button type="button" id="full" class="ghost" title="Pantalla completa">⛶</button>
+  </header>
+  <p id="net" class="net hidden">Sin conexión: reintentando…</p>
+  <main id="board" class="board"></main>
+  <footer id="recent" class="recent"></footer>
+</div>
+</body>
+</html>
