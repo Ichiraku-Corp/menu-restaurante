@@ -36,11 +36,57 @@ const POLL_MS = cfg.poll_ms || 2000;
 function log(...a) {
   const line = new Date().toLocaleString("es-VE", { hour12: false }) + "  " + a.join(" ");
   console.log(line);
+  if (/^ERROR/.test(a.join(" "))) sentryReport(a.join(" "), "error");
   try {
     if (fs.existsSync(LOG) && fs.statSync(LOG).size > 2e6) fs.renameSync(LOG, LOG + ".1");
     fs.appendFileSync(LOG, line + "\n");
   } catch (e) { /* sin log en disco */ }
 }
+
+// ---------------------------------------------------------------- Avisos de errores a Sentry (proyecto puente-ichiraku)
+// Sin dependencias: arma el «envelope» de Sentry a mano. Nunca envía claves, correos ni datos de clientes.
+// Se apaga con "sentry": false en config.json.
+const SENTRY_DSN = "https://40ab87fb8a9d0080d68613e4067fc0f9@o4512402789433344.ingest.us.sentry.io/4512402878234624";
+const sentrySeen = new Map(); let sentryCount = 0, sentryDay = "";
+function sentryScrub(t) {
+  return String(t == null ? "" : t).replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "[correo]").replace(/[A-Za-z0-9_\-]{32,}/g, "[oculto]").slice(0, 2000);
+}
+function sentryFrames(stack) {
+  return String(stack || "").split("\n").slice(1).map((l) => {
+    const m = /at (?:(.+?) \()?(.*?):(\d+):(\d+)\)?$/.exec(l.trim()); if (!m) return null;
+    const file = m[2].replace(/\\/g, "/"), mine = /puente\.js$|reporte-cierre\.js$/.test(file);
+    return { function: m[1] || "?", filename: mine ? file.split("/").pop() : file, lineno: +m[3], colno: +m[4], in_app: mine };
+  }).filter(Boolean).reverse();
+}
+function sentryReport(err, level) {
+  try {
+    if (cfg.sentry === false || process.env.PUENTE_SIN_SENTRY) return;
+    const dsn = /^https:\/\/([^@]+)@([^/]+)\/(\d+)$/.exec(cfg.sentry_dsn || SENTRY_DSN); if (!dsn) return;
+    const msg = sentryScrub(err && err.message ? err.message : err);
+    // Un mismo error como mucho una vez por hora, y no más de 40 avisos al día
+    const key = msg.replace(/\d+/g, "#").slice(0, 160), now = Date.now(), day = new Date().toISOString().slice(0, 10);
+    if (day !== sentryDay) { sentryDay = day; sentryCount = 0; }
+    if ((sentrySeen.get(key) || 0) > now - 3600e3 || sentryCount >= 40) return;
+    sentrySeen.set(key, now); sentryCount++;
+    let ver = "?"; try { ver = String(currentVersion()); } catch (e) { /* aún cargando */ }
+    const id = require("crypto").randomBytes(16).toString("hex");
+    const ev = { event_id: id, timestamp: now / 1000, platform: "node", level: level || "error", logger: "puente",
+      release: "puente-ichiraku@" + ver, environment: "laptop", server_name: require("os").hostname(),
+      tags: { version: ver, node: process.version },
+      contexts: { os: { name: process.platform } } };
+    if (err && err.stack) ev.exception = { values: [{ type: err.name || "Error", value: msg, stacktrace: { frames: sentryFrames(err.stack) },
+      mechanism: { type: level === "fatal" ? "onuncaughtexception" : "generic", handled: level !== "fatal" } }] };
+    else ev.message = { formatted: msg };
+    const body = JSON.stringify({ event_id: id, sent_at: new Date().toISOString() }) + "\n" + JSON.stringify({ type: "event" }) + "\n" + JSON.stringify(ev) + "\n";
+    const req = require("https").request({ hostname: dsn[2], path: `/api/${dsn[3]}/envelope/?sentry_key=${dsn[1]}&sentry_version=7`, method: "POST",
+      headers: { "Content-Type": "application/x-sentry-envelope", "Content-Length": Buffer.byteLength(body) }, family: 4, timeout: 20000 }, (res) => res.resume());
+    req.on("timeout", () => req.destroy()); req.on("error", () => { /* sin internet: se pierde el aviso, no el puente */ });
+    req.end(body);
+  } catch (e) { /* el aviso nunca debe tumbar el puente */ }
+}
+// Un fallo inesperado se avisa y el puente termina como antes (el iniciador lo vuelve a arrancar)
+if (require.main === module) process.on("uncaughtException", (e) => { try { log("FALLO INESPERADO: " + (e && e.stack || e)); } catch (x) { /* nada */ } sentryReport(e, "fatal"); setTimeout(() => process.exit(1), 2500); });
+if (require.main === module) process.on("unhandledRejection", (e) => { try { log("FALLO INESPERADO (promesa): " + (e && e.stack || e)); } catch (x) { /* nada */ } sentryReport(e instanceof Error ? e : new Error(String(e)), "fatal"); setTimeout(() => process.exit(1), 2500); });
 
 // ---------------------------------------------------------------- Sesión
 let token = null, refresh = null, expires = 0;
@@ -615,4 +661,4 @@ function startBridge() {
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
