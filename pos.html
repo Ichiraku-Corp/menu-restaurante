@@ -155,6 +155,15 @@
   /* Avisos de cobros fuera de caja */
   .banner.alert { background:var(--danger-soft); border-color:var(--danger); color:var(--text); }
   .banner.alert ul { margin:6px 0; padding-left:18px; }
+  /* Arqueo */
+  .arqueo .cdiff { font-size:13px; margin-top:4px; }
+  .arqueo .ok, #cashTotalDiff .ok { color:var(--ok); font-weight:700; }
+  .arqueo .plus, #cashTotalDiff .plus { color:var(--info); font-weight:700; }
+  .arqueo .minus, #cashTotalDiff .minus { color:var(--danger); font-weight:700; }
+  .arqueo .cwarn { color:var(--warn); background:var(--warn-soft); border-radius:8px; padding:4px 6px; margin-top:4px; }
+  .seepay { min-height:28px; padding:2px 8px; font-size:12px; margin-left:6px; }
+  .paylist .pl { display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  #cashTotalDiff { margin-top:8px; }
   /* Pagos verificados */
   .vbtn { min-height:44px; font-size:14px; padding:6px 10px; }
   .refbox { display:flex; gap:6px; min-width:0; grid-column:1 / 5; }
@@ -332,8 +341,8 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="reporte-cierre.js?v=b9274c122e"></script>
-<script src="pos.js?v=7544940e9b" defer></script>
+<script src="reporte-cierre.js?v=4ce5b46430"></script>
+<script src="pos.js?v=1030349b8d" defer></script>
 </head>
 <body>
 <header>

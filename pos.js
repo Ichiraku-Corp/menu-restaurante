@@ -374,6 +374,8 @@
   setInterval(function () { if (U && cur.order && !document.hidden && !anyDialogOpen()) loadOrder(); }, 6000);
   $("back").addEventListener("click", function () {
     if (cur.cart.length && !confirm("Hay " + cur.cart.length + " platos sin enviar a cocina. ¿Salir y descartarlos?")) return;
+    // mesa abierta por error: se borra sola al salir si no tiene platos
+    if (cur.data && !cur.data.items.length && !cur.cart.length) rpc("pos_drop_empty", { p_order: cur.order }).then(refreshState).catch(function () {});
     goTables();
   });
   $("toggleMenu").addEventListener("click", function () {
@@ -880,20 +882,30 @@
         h += '<div class="card"><h3 style="margin-top:0">Abrir caja</h3><div class="row"><label class="grow">Fondo en efectivo $<input id="fUsd" inputmode="decimal" value="0"></label>' +
           '<label class="grow">Fondo en efectivo Bs<input id="fBs" inputmode="decimal" value="0"></label></div><p><button type="button" class="primary big" id="openCash" style="width:100%">Abrir caja</button></p></div>';
       } else {
+        CASH = sm; EXPECTED = {};
         var rows = METHODS.map(function (m) {
           var v = sm.methods[m[0]] ? num(sm.methods[m[0]].amount) : 0, exp = v + (m[0] === "efectivo_usd" ? num(sm.opening_usd) : m[0] === "efectivo_bs" ? num(sm.opening_bs) : 0);
-          return '<tr><td><span class="mname">' + logo(m[0]) + m[1] + '</span></td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado" style="padding:6px 8px"></td></tr>';
+          EXPECTED[m[0]] = Math.round(exp * 100) / 100;
+          var list = (sm.payments || []).filter(function (p) { return p.method === m[0]; });
+          return '<tr data-row="' + m[0] + '"><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
+            '</td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px"><div class="cdiff" data-diff="' + m[0] + '"></div></td></tr>' +
+            '<tr class="paylist hidden" data-list="' + m[0] + '"><td colspan="3">' + list.map(function (p) {
+              return '<div class="pl"><span>' + new Date(p.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · " + esc(p.label || "") + (p.ref ? " · ref. " + esc(p.ref) : "") + " · " + esc(p.by || "") + '</span><b class="n">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(num(p.amount)) + "</b></div>";
+            }).join("") + "</td></tr>";
         }).join("");
         h += '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
           '<div class="tot"><span>Pedidos cobrados</span><b>' + sm.orders + '</b></div><div class="tot"><span>Ventas (con IVA)</span><b>' + ref(num(sm.sales)) + '</b></div><div class="tot"><span>Servicio</span><b>' + ref(num(sm.service)) + "</b></div>" +
           (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") +
-          '<h3>Cierre: escribe lo que hay en cada método</h3><table class="tbl"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + "</tbody></table>" +
+          '<div class="row between" style="margin-top:12px"><h3 style="margin:0">Cierre: escribe lo que hay en cada método</h3><button type="button" id="cashOutBtn">Salida de caja</button></div>' +
+          ((sm.outs || []).length ? '<p class="muted" style="margin:6px 0">Salidas: ' + sm.outs.map(function (o) { return esc(o.reason) + " " + (o.method === "efectivo_usd" ? "$ " : "Bs ") + nf2.format(num(o.amount)) + " (" + esc(o.by || "") + ")"; }).join(" · ") + " — ya restadas del esperado.</p>" : "") +
+          '<p class="muted" style="margin:6px 0">Bs: pago móvil, punto y efectivo Bs se cuentan en <b>bolívares</b>. El punto: escribe el total del <b>cierre de lote</b>.</p>' +
+          '<table class="tbl arqueo"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + '</tbody></table><div id="cashTotalDiff" class="tot big"></div>' +
           "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
           "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
           (OUTS.length ? "<h3>Conteo de afuera (lo que queda ahora)</h3>" + '<table class="tbl"><thead><tr><th>Producto</th><th class="r">Según sistema</th><th>Contado</th></tr></thead><tbody>' +
             OUTS.map(function (r) { return "<tr><td>" + esc(r.name) + '</td><td class="r">' + (r.active ? fmtQ(r.stock) + " " + esc(r.unit) : '<span class="muted">primer conteo</span>') +
               '</td><td><input class="icnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px"></td></tr>'; }).join("") + "</tbody></table>" : "") +
-          '<textarea id="cashNotes" placeholder="Notas del cierre (opcional)" style="margin-top:10px"></textarea>' +
+          '<textarea id="cashNotes" placeholder="Notas del cierre (obligatorias si la diferencia pasa de Ref 5)" style="margin-top:10px"></textarea>' +
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
       h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
@@ -912,12 +924,17 @@
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
     } else if (id === "tabsBtn") { openTabs();
     } else if (id === "buyBtn") { openPurchase();
+    } else if (id === "cashOutBtn") { cashOut();
+    } else if (e.target.dataset.see) { var lt = document.querySelector('#cashBody [data-list="' + e.target.dataset.see + '"]'); if (lt) lt.classList.toggle("hidden");
     } else if (id === "soldOut") { openSoldOut();
     } else if (id === "invCount") { openCount();
     } else if (id === "doClose") {
       var counted = {}; document.querySelectorAll("#cashBody .cnt").forEach(function (i) { if (i.value.trim() !== "") counted[i.dataset.m] = num(i.value); });
       var inv = {}, missing = 0; document.querySelectorAll("#cashBody .icnt").forEach(function (i) { if (i.value.trim() !== "") inv[i.dataset.ing] = num(i.value); else missing++; });
       if (missing && !confirm("Faltan " + missing + " productos de afuera por contar. ¿Seguir sin contarlos?")) return;
+      var td = cashDiff();
+      if (td.uncounted && !confirm("No escribiste lo contado en " + td.uncounted + " métodos que tienen dinero esperado. ¿Seguir así?")) return;
+      if (Math.abs(td.total) > 5 && $("cashNotes").value.trim().length < 5) { toast("La caja no cuadra por " + ref(td.total) + ": explica la diferencia en las notas", true); $("cashNotes").focus(); return; }
       counted._inv = inv;
       closing = { counted: counted, notes: $("cashNotes").value.trim() };
       rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
@@ -928,6 +945,39 @@
       }).catch(fail);
     }
   });
+  // ---- Arqueo inteligente: diferencia en vivo, moneda equivocada y total en Ref
+  var CASH = null, EXPECTED = {};
+  function cashDiff() {
+    var rate = ST && ST.rate, total = 0, uncounted = 0;
+    METHODS.forEach(function (m) {
+      var inp = document.querySelector('#cashBody .cnt[data-m="' + m[0] + '"]'), cell = document.querySelector('#cashBody [data-diff="' + m[0] + '"]');
+      if (!inp || !cell) return;
+      var exp = EXPECTED[m[0]] || 0, raw = inp.value.trim(), isBs = m[2] === "BS";
+      if (raw === "") { cell.innerHTML = ""; if (Math.abs(exp) > 0.009) uncounted++; return; }
+      var c = num(raw), d = Math.round((c - exp) * 100) / 100, dRef = isBs ? (rate ? d / rate : 0) : d;
+      total += dRef;
+      var warn = isBs && exp > 1000 && c > 0 && c < exp / 50 ? '<div class="cwarn">⚠ ¿Lo escribiste en dólares? Este método se cuenta en <b>bolívares</b> (≈ Bs ' + nf2.format(rate ? c * rate : 0) + ").</div>" : "";
+      cell.innerHTML = (Math.abs(d) < 0.01 ? '<span class="ok">✓ cuadra</span>' : '<span class="' + (d > 0 ? "plus" : "minus") + '">' + (d > 0 ? "sobra " : "falta ") + (isBs ? "Bs " : "$ ") + nf2.format(Math.abs(d)) +
+        (isBs && rate ? " (≈ Ref " + nf2.format(Math.abs(dRef)) + ")" : "") + "</span>") + warn;
+    });
+    var box = $("cashTotalDiff");
+    if (box) box.innerHTML = '<span>Diferencia total</span><span class="' + (Math.abs(total) < 0.5 ? "ok" : total > 0 ? "plus" : "minus") + '">' + (Math.abs(total) < 0.005 ? "Ref 0,00 ✓" : (total > 0 ? "+" : "−") + ref(Math.abs(total))) + "</span>";
+    return { total: Math.round(total * 100) / 100, uncounted: uncounted };
+  }
+  $("cashBody").addEventListener("input", function (e) { if (e.target.classList.contains("cnt")) cashDiff(); });
+  function cashOut() {
+    ask({ title: "Salida de caja: monto", help: "Dinero que sale del cajón (pago delivery semanal, compra, adelanto). Escribe el monto; después eliges si es en $ o Bs.", value: "", type: "number" }).then(function (a) {
+      if (a === null || !(num(a) > 0)) return;
+      ask({ title: "¿Moneda?", help: "Escribe $ si salió en dólares o Bs si salió en bolívares.", value: "$" }).then(function (cur2) {
+        if (cur2 === null) return; var method = /bs/i.test(cur2) ? "efectivo_bs" : "efectivo_usd";
+        ask({ title: "Motivo de la salida", help: "Ej.: Pago delivery semanal, compra de hielo, adelanto a Héctor.", value: "" }).then(function (why) {
+          if (why === null) return;
+          rpc("pos_cash_out", { p_method: method, p_amount: num(a), p_reason: why }).then(function () { toast("Salida registrada"); openCash(); }).catch(fail);
+        });
+      });
+    });
+  }
+
   // Cierre: primero se revisa el reporte completo; al confirmar se cierra y se envía al correo (sin papel)
   var closing = null;
   function repBack() { $("repDlg").close(); }

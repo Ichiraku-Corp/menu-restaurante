@@ -31,6 +31,7 @@ ${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulad
     ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
 ${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
 ${H("Cobros por persona")}${table(["Quién cobró", "Método", "Pagos", "Monto", "En Ref"], (d.cashiers || []).map((x) => [he(x.name), MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [2, 3, 4])}
+${(d.outs || []).length ? H("Salidas de caja") + table(["Hora", "Motivo", "Monto", "Quién"], d.outs.map((x) => [hh(x.at), he(x.reason), (x.method === "efectivo_bs" ? "Bs " : "$ ") + fm(x.amount), he(x.by)]), [2]) : ""}
 ${H("Conteo de afuera")}${table(["Producto", "Según sistema", "Contado", "Diferencia"], (Array.isArray(cnt._inv) ? cnt._inv : []).map((x) => {
     const diff = x.counted == null || x.expected == null ? null : Number(x.counted) - Number(x.expected);
     return [he(x.name), x.expected == null ? "primer conteo" : fq(x.expected) + " " + he(x.unit), x.counted == null ? "<i>sin contar</i>" : fq(x.counted) + " " + he(x.unit),

@@ -179,6 +179,8 @@ alter table public.pos_incoming add column if not exists ignored_by text not nul
 -- Comprobación de pagos anotados a mano (Binance/PayPal): 'auto' cuando aparece el pago real, 'manual' si caja lo confirma.
 alter table public.pos_payments add column if not exists verified_at timestamptz;
 alter table public.pos_payments add column if not exists verified_how text not null default '';
+-- Salida de caja (dinero que sale del cajón: pago a motorizados, compras, adelantos): pago negativo sin pedido
+alter table public.pos_payments add column if not exists cash_out_reason text not null default '';
 
 create table if not exists public.pos_print_jobs (
   id         bigint generated always as identity primary key,
@@ -803,6 +805,10 @@ declare sent int;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   if exists (select 1 from public.pos_payments where order_id = p_order) then raise exception 'Este pedido ya tiene pagos: no se puede anular'; end if;
+  -- mesa abierta por error, sin platos: se borra (no cuenta como anulación)
+  if not exists (select 1 from public.pos_items where order_id = p_order) then
+    delete from public.pos_orders where id = p_order and status = 'abierta'; return;
+  end if;
   select count(*) into sent from public.pos_items where order_id = p_order and status = 'enviado';
   if sent > 0 and length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo de la anulación'; end if;
   if sent > 0 then
@@ -874,7 +880,14 @@ begin
                 case when i.variant <> '' then ' ' || i.variant else '' end, 'qty', i.qty, 'amount', i.qty * i.unit_price,
                 'reason', i.void_reason, 'by', public.pos_emp_name(i.voided_by), 'at', i.voided_at) order by i.voided_at), '[]'::jsonb)
               from public.pos_items i where i.status = 'anulado' and i.voided_at >= s.opened_at and i.voided_at <= coalesce(s.closed_at, now())),
-    'open_orders', (select count(*) from public.pos_orders where status = 'abierta'),
+    'open_orders', (select count(*) from public.pos_orders where status = 'abierta' and exists (select 1 from public.pos_items i where i.order_id = pos_orders.id)),
+    'payments', (select coalesce(jsonb_agg(jsonb_build_object('method', p.method, 'amount', p.amount, 'ref', p.reference, 'at', p.created_at,
+                   'label', coalesce(public.pos_order_label(p.order_id), case when p.cash_out_reason <> '' then 'Salida: ' || p.cash_out_reason
+                            when p.tab_employee_id is not null then 'Abono de ' || public.pos_emp_name(p.tab_employee_id) else '' end),
+                   'by', public.pos_emp_name(p.created_by)) order by p.created_at), '[]'::jsonb)
+                 from public.pos_payments p where p.session_id = s.id and p.method <> 'cuenta'),
+    'outs', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'amount', -amount, 'reason', cash_out_reason, 'by', public.pos_emp_name(created_by), 'at', created_at) order by created_at), '[]'::jsonb)
+             from public.pos_payments where session_id = s.id and cash_out_reason <> ''),
     'expected', s.expected, 'counted', s.counted, 'notes', s.notes
   ) into r;
   return r;
@@ -975,6 +988,8 @@ language sql stable security definer set search_path = public as $$
                    'method', p.method, 'amount', p.amount, 'amount_ref', p.amount_ref, 'at', p.created_at) order by p.created_at), '[]'::jsonb)
                  from public.pos_payments p where p.session_id = p_session and p.device <> 'Caja' and p.amount > 0),
     'tips', (select coalesce(sum(amount_ref), 0) from public.pos_payments where session_id = p_session and is_tip),
+    'outs', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'amount', -amount, 'reason', cash_out_reason, 'by', public.pos_emp_name(created_by), 'at', created_at) order by created_at), '[]'::jsonb)
+             from public.pos_payments where session_id = p_session and cash_out_reason <> ''),
     'unverified', (select coalesce(jsonb_agg(jsonb_build_object('label', coalesce(public.pos_order_label(p.order_id), 'Abono'), 'method', p.method,
                      'amount', p.amount, 'reference', p.reference, 'by', public.pos_emp_name(p.created_by), 'at', p.created_at) order by p.created_at), '[]'::jsonb)
                    from public.pos_payments p where p.session_id = p_session and p.method in ('binance', 'paypal') and p.amount > 0 and p.verified_at is null),
@@ -1011,6 +1026,8 @@ begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into s from public.pos_sessions where status = 'abierta' for update;
   if s.id is null then raise exception 'La caja no está abierta'; end if;
+  delete from public.pos_orders o where o.status = 'abierta' and not exists (select 1 from public.pos_items i where i.order_id = o.id)
+    and not exists (select 1 from public.pos_payments p where p.order_id = o.id);
   if exists (select 1 from public.pos_orders where status = 'abierta') then raise exception 'Hay mesas abiertas: cóbralas o anúlalas antes de cerrar'; end if;
   sm := public.pos_cash_summary(s.id);
   -- esperado por método, en su moneda (el efectivo incluye el fondo inicial)
@@ -1070,6 +1087,36 @@ begin
   perform public.pos_auth_charge(p_emp, p_pin);
   update public.pos_payments set alert_seen = true where not alert_seen;
   insert into public.pos_log (employee_id, action) values (p_emp, 'avisos_vistos');
+end $$;
+
+-- ---- Salidas de caja (solo efectivo) y mesas abiertas por error
+create or replace function public.pos_cash_out(p_emp bigint, p_pin text, p_method text, p_amount numeric, p_reason text)
+returns void language plpgsql security definer set search_path = public as $$
+declare sess bigint; rt numeric; cur text;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  if p_method not in ('efectivo_usd', 'efectivo_bs') then raise exception 'Las salidas de caja son solo de efectivo'; end if;
+  if coalesce(p_amount, 0) <= 0 then raise exception 'Escribe el monto'; end if;
+  if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo (ej.: pago delivery semanal, compra de hielo)'; end if;
+  select id into sess from public.pos_sessions where status = 'abierta';
+  if sess is null then raise exception 'La caja está cerrada'; end if;
+  rt := public.pos_rate();
+  cur := case when p_method = 'efectivo_usd' then 'REF' else 'BS' end;
+  if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día'; end if;
+  insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, device, alert_seen, cash_out_reason, verified_at, verified_how)
+  values (null, p_method, cur, -round(p_amount, 2), -round(case when cur = 'REF' then p_amount else p_amount / rt end, 2), case when cur = 'BS' then rt end,
+          'salida', p_emp, sess, 'Caja', true, left(trim(p_reason), 80), now(), 'salida');
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'salida_caja', jsonb_build_object('metodo', p_method, 'monto', p_amount, 'motivo', trim(p_reason)));
+end $$;
+-- Salir de una mesa abierta por error (sin platos ni pagos): se borra sin dejar rastro de «anulada»
+create or replace function public.pos_drop_empty(p_emp bigint, p_pin text, p_order bigint) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  delete from public.pos_orders o where o.id = p_order and o.status = 'abierta'
+    and not exists (select 1 from public.pos_items i where i.order_id = o.id)
+    and not exists (select 1 from public.pos_payments p where p.order_id = o.id);
+  return found;
 end $$;
 
 -- ---- Cuentas del personal en caja
@@ -1543,7 +1590,8 @@ begin
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
-    'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)'] loop
+    'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
+    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
