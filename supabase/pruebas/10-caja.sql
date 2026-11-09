@@ -77,6 +77,13 @@ select public.pos_send(:mesera, '2222', :o2);
 select public.pos_pay(:caja, '1111', :o2, '[{"method":"pago_movil","amount":1000,"device":"Caja"}]');
 select prueba.ok((public.pos_order(:o2) ->> 'status') = 'cobrada', 'para llevar cobrado con Bs 1.000 (Ref 10 a tasa 100)');
 
+-- ---------------------------------------------------------------- Pedido Yummy (no se le paga a la empresa de delivery)
+select public.pos_open_delivery(:mesera, '2222', 'Cliente Yummy', '', '', 0, 'yummy') as oy \gset
+select prueba.ok((public.pos_order(:oy) ->> 'channel') = 'yummy', 'el pedido de Yummy queda marcado como Yummy');
+select public.pos_add(:mesera, '2222', :oy, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select public.pos_send(:mesera, '2222', :oy);
+select public.pos_pay(:caja, '1111', :oy, '[{"method":"pago_movil","amount":1000,"device":"Caja"}]');
+
 -- ---------------------------------------------------------------- Pedido 3: anulación con motivo; mesa vacía se borra
 select public.pos_open(:mesera, '2222', null, 'Se arrepintió') as o3 \gset
 select public.pos_add(:mesera, '2222', :o3, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
@@ -91,13 +98,15 @@ select prueba.falla(format('select public.pos_cash_out(%s, %L, %L, 10, %L)', :ca
 select public.pos_cash_out(:caja, '1111', 'efectivo_usd', 10, 'Pago delivery semanal');
 select (public.pos_cash_summary() -> 'methods' -> 'efectivo_usd' ->> 'amount')::numeric as efe \gset
 select prueba.ok(:efe + 50 = 62, format('efectivo esperado: 50 de fondo + 22 cobrados - 10 de salida = 62 (dio %s)', :efe + 50));
-select public.pos_cash_close(:caja, '1111', '{"efectivo_usd":62,"pago_movil":1000}'::jsonb, '');
+select public.pos_cash_close(:caja, '1111', '{"efectivo_usd":62,"pago_movil":2000}'::jsonb, '');
 reset role;
 select prueba.ok((select status from public.pos_sessions order by id desc limit 1) = 'cerrada', 'la caja queda cerrada');
-select prueba.ok((select (data -> 'totals' ->> 'total')::numeric from public.pos_reports order by id desc limit 1) = 32, 'el correo de cierre queda en cola con Ref 32 vendidos');
+select prueba.ok((select (data -> 'totals' ->> 'total')::numeric from public.pos_reports order by id desc limit 1) = 42, 'el correo de cierre queda en cola con Ref 42 vendidos');
 select prueba.ok((select count(*) from public.pos_orders where status = 'abierta') = 0, 'no quedan mesas abiertas');
-select prueba.ok((public.pos_week_report(date_trunc('week', now() at time zone 'America/Caracas')::date) -> 'totals' ->> 'orders')::int = 2,
-                 'el resumen semanal cuenta los 2 pedidos cobrados');
+select prueba.ok((public.pos_week_report(date_trunc('week', now() at time zone 'America/Caracas')::date) -> 'totals' ->> 'orders')::int = 3,
+                 'el resumen semanal cuenta los 3 pedidos cobrados');
+select prueba.ok((public.pos_week_report(date_trunc('week', now() at time zone 'America/Caracas')::date) -> 'delivery' ->> 'orders')::int = 0,
+                 'Yummy no suma a lo que se le paga a la empresa de delivery');
 select prueba.ok(jsonb_array_length(public.pos_week_report(date_trunc('week', now() at time zone 'America/Caracas')::date) -> 'outs') = 1,
                  'el resumen semanal muestra la salida de caja');
 \echo 'TODAS LAS PRUEBAS DE CAJA PASARON'

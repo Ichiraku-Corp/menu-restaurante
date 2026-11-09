@@ -63,7 +63,7 @@ ${s.notes ? H("Notas de la cajera") + "<p>" + he(s.notes) + "</p>" : ""}
 
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
-const KINDS = { mesa: "Mesas", delivery: "Delivery", llevar: "Para llevar" };
+const KINDS = { mesa: "Mesas", delivery: "Delivery propio", yummy: "Yummy", llevar: "Para llevar" };
 const dd = (ymd) => { const d = new Date(ymd + "T12:00:00Z"); return DIAS[d.getUTCDay()] + " " + String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); };
 function weekSubject(d) { return `Resumen semanal ${dd(d.from)} al ${dd(d.to)} · Ref ${fm(d.totals && d.totals.total)}`; }
 function weekHtml(d) {

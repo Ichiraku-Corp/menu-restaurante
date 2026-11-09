@@ -88,6 +88,9 @@ alter table public.pos_orders add column if not exists day_number   int;   -- n√
 alter table public.pos_orders add column if not exists customer_id  bigint references public.customers(id) on delete set null;
 -- Cuenta dividida por persona: {"n": 4, "units": {"<id del plato>": [1, 3]}} (persona de cada unidad; 0 = sin asignar)
 alter table public.pos_orders add column if not exists split        jsonb;
+-- Delivery propio (se le paga a la empresa de delivery cada lunes) o pedido que llega por Yummy
+alter table public.pos_orders add column if not exists channel      text not null default 'propio' check (channel in ('propio', 'yummy'));
+update public.pos_orders set channel = 'yummy' where kind = 'delivery' and channel = 'propio' and label ilike '%yummy%';
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
 create index if not exists pos_orders_closed_at on public.pos_orders (closed_at);
@@ -277,7 +280,7 @@ language sql immutable as $$ select to_char(coalesce(x, 0), 'FM999G999G990D00') 
 create or replace function public.pos_order_label(p_order bigint) returns text
 language sql stable security definer set search_path = public as $$
   select case when o.kind = 'mesa' then coalesce(t.area || ' ' || t.number, 'Mesa')
-              when o.kind = 'delivery' then 'Delivery' || case when o.label <> '' then ': ' || o.label else '' end
+              when o.kind = 'delivery' then case when o.channel = 'yummy' then 'Yummy' else 'Delivery' end || case when o.label <> '' then ': ' || o.label else '' end
               else 'Para llevar' || case when o.label <> '' then ': ' || o.label else '' end end
   from public.pos_orders o left join public.pos_tables t on t.id = o.table_id where o.id = p_order
 $$;
@@ -435,7 +438,7 @@ begin
                  'opened_at', o.opened_at, 'opened_by', public.pos_emp_name(o.opened_by),
                  'total', tt.total,
                  'paid', tt.paid,
-                 'precuenta_at', o.precuenta_at, 'phone', o.phone,
+                 'precuenta_at', o.precuenta_at, 'phone', o.phone, 'channel', o.channel,
                  'pending', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'pendiente'),
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o cross join lateral public.pos_totals(o.id) tt where o.status = 'abierta'),
@@ -473,7 +476,7 @@ begin
                 'qty', i.qty, 'unit_price', i.unit_price, 'status', i.status, 'void_reason', i.void_reason,
                 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
               from public.pos_items i where i.order_id = o.id),
-    'split', o.split,
+    'split', o.split, 'channel', o.channel,
     'split_totals', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from public.pos_split(o.id) x),
     'payments', (select coalesce(jsonb_agg(jsonb_build_object('method', p.method, 'currency', p.currency, 'amount', p.amount,
                    'amount_ref', p.amount_ref, 'reference', p.reference, 'person', p.person) order by p.id), '[]'::jsonb)
@@ -958,7 +961,7 @@ language sql stable security definer set search_path = public as $$
     'methods', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'currency', currency, 'amount', amount, 'amount_ref', amount_ref, 'count', n) order by amount_ref desc), '[]'::jsonb)
                 from (select method, min(currency) currency, sum(amount) amount, sum(amount_ref) amount_ref, count(*) n from public.pos_payments where session_id = p_session group by method) m),
     'by_kind', (select coalesce(jsonb_agg(jsonb_build_object('kind', k, 'orders', n, 'total', tt) order by tt desc), '[]'::jsonb)
-                from (select case when o.kind = 'mesa' then coalesce(t.area, 'Mesa') when o.kind = 'delivery' then 'Delivery' else 'Para llevar' end k, count(*) n, sum(o.total) tt
+                from (select case when o.kind = 'mesa' then coalesce(t.area, 'Mesa') when o.kind = 'delivery' then case when o.channel = 'yummy' then 'Yummy' else 'Delivery' end else 'Para llevar' end k, count(*) n, sum(o.total) tt
                       from o left join public.pos_tables t on t.id = o.table_id where o.status = 'cobrada' group by 1) x),
     'dishes', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'variant', variant, 'qty', q, 'amount', a) order by a desc), '[]'::jsonb)
                from (select name, variant, sum(qty) q, sum(qty * unit_price) a from it where status <> 'anulado' and ostatus = 'cobrada' group by name, variant) x),
@@ -1208,25 +1211,29 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- Delivery
-create or replace function public.pos_open_delivery(p_emp bigint, p_pin text, p_name text, p_phone text default '', p_address text default '', p_fee numeric default 0)
+drop function if exists public.pos_open_delivery(bigint, text, text, text, text, numeric);
+create or replace function public.pos_open_delivery(p_emp bigint, p_pin text, p_name text, p_phone text default '', p_address text default '', p_fee numeric default 0, p_channel text default 'propio')
 returns bigint language plpgsql security definer set search_path = public as $$
 declare oid bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
-  insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by, day_number)
-  values ('delivery', left(trim(p_name), 40), left(trim(coalesce(p_phone, '')), 30), left(trim(coalesce(p_address, '')), 200), greatest(coalesce(p_fee, 0), 0), 0, p_emp, public.pos_next_number())
+  insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by, day_number, channel)
+  values ('delivery', left(trim(p_name), 40), left(trim(coalesce(p_phone, '')), 30), left(trim(coalesce(p_address, '')), 200), greatest(coalesce(p_fee, 0), 0), 0, p_emp, public.pos_next_number(),
+          case when p_channel = 'yummy' then 'yummy' else 'propio' end)
   returning id into oid;
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'abrir', oid);
   return oid;
 end $$;
 
-create or replace function public.pos_set_delivery(p_emp bigint, p_pin text, p_order bigint, p_name text, p_phone text, p_address text, p_fee numeric)
+drop function if exists public.pos_set_delivery(bigint, text, bigint, text, text, text, numeric);
+create or replace function public.pos_set_delivery(p_emp bigint, p_pin text, p_order bigint, p_name text, p_phone text, p_address text, p_fee numeric, p_channel text default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
   update public.pos_orders set label = left(trim(coalesce(p_name, label)), 40), phone = left(trim(coalesce(p_phone, '')), 30),
-    address = left(trim(coalesce(p_address, '')), 200), delivery_fee = greatest(coalesce(p_fee, 0), 0)
+    address = left(trim(coalesce(p_address, '')), 200), delivery_fee = greatest(coalesce(p_fee, 0), 0),
+    channel = case when p_channel in ('propio', 'yummy') then p_channel else channel end
   where id = p_order and status = 'abierta' and kind = 'delivery';
   if not found then raise exception 'No se puede cambiar este pedido'; end if;
 end $$;
@@ -1597,10 +1604,10 @@ language sql stable security definer set search_path = public as $$
     'days', (select coalesce(jsonb_agg(jsonb_build_object('day', dia, 'orders', n, 'total', tot) order by dia), '[]'::jsonb)
              from (select dia, count(*) n, sum(total) tot from o group by dia) x),
     'by_kind', (select coalesce(jsonb_agg(jsonb_build_object('kind', kind, 'orders', n, 'total', tot) order by tot desc), '[]'::jsonb)
-                from (select kind, count(*) n, sum(total) tot from o group by kind) x),
+                from (select case when kind = 'delivery' and channel = 'yummy' then 'yummy' else kind end kind, count(*) n, sum(total) tot from o group by 1) x),
     'methods', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'count', n, 'amount', a, 'amount_ref', r) order by r desc), '[]'::jsonb)
                 from (select method, count(*) n, sum(amount) a, sum(amount_ref) r from pay where amount > 0 group by method) x),
-    'delivery', (select jsonb_build_object('orders', count(*), 'fees', coalesce(sum(delivery_fee), 0)) from o where kind = 'delivery' and delivery_fee > 0),
+    'delivery', (select jsonb_build_object('orders', count(*), 'fees', coalesce(sum(delivery_fee), 0)) from o where kind = 'delivery' and channel = 'propio' and delivery_fee > 0),
     'outs', (select coalesce(jsonb_agg(jsonb_build_object('at', created_at, 'method', method, 'amount', -amount, 'amount_ref', -amount_ref,
                'reason', cash_out_reason, 'by', public.pos_emp_name(created_by)) order by created_at), '[]'::jsonb)
              from pay where amount < 0 and cash_out_reason <> ''),
@@ -1652,7 +1659,7 @@ begin
     'pos_open(bigint, text, bigint, text)', 'pos_add(bigint, text, bigint, jsonb)', 'pos_send(bigint, text, bigint)',
     'pos_void(bigint, text, bigint, text)', 'pos_discount(bigint, text, bigint, numeric, text)', 'pos_move(bigint, text, bigint, bigint)',
     'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
-    'pos_open_delivery(bigint, text, text, text, text, numeric)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric)',
+    'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
     'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
     'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',

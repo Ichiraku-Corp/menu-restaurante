@@ -341,8 +341,8 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="reporte-cierre.js?v=c2d010c1ca"></script>
-<script src="pos.js?v=1030349b8d" defer></script>
+<script src="reporte-cierre.js?v=7e3c0f3509"></script>
+<script src="pos.js?v=3808d64467" defer></script>
 </head>
 <body>
 <header>
@@ -462,10 +462,12 @@
 <!-- Delivery -->
 <dialog id="delivDlg">
   <h2 id="delivTitle">Nuevo delivery</h2>
-  <input id="dName" placeholder="Nombre del cliente" maxlength="40">
+  <label class="muted" style="display:block">Tipo<select id="dChan"><option value="propio">Delivery propio (lo lleva nuestro delivery)</option><option value="yummy">Yummy</option></select></label>
+  <input id="dName" placeholder="Nombre del cliente" maxlength="40" style="margin-top:8px">
   <input id="dPhone" placeholder="Teléfono" inputmode="tel" maxlength="30" style="margin-top:8px">
   <textarea id="dAddr" placeholder="Dirección" maxlength="200" style="margin-top:8px"></textarea>
-  <label class="muted" style="display:block;margin-top:8px">Costo del delivery (Ref)<input id="dFee" inputmode="decimal" value="0"></label>
+  <label class="muted" id="dFeeBox" style="display:block;margin-top:8px">Costo del delivery (Ref)<input id="dFee" inputmode="decimal" value="0"></label>
+  <p class="muted" style="margin:6px 0 0;font-size:13px">Pedidos del personal para llevar van en «Para llevar», no aquí.</p>
   <p id="dErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><button type="button" id="dCancel">Cancelar</button><button type="button" class="primary" id="dOk">Guardar</button></div>
 </dialog>

@@ -587,11 +587,15 @@
   function delivForm(d) {
     delivEdit = d; $("delivTitle").textContent = d ? "Datos del delivery" : "Nuevo delivery"; $("dErr").textContent = "";
     $("dName").value = d ? d.customer : ""; $("dPhone").value = d ? d.phone : ""; $("dAddr").value = d ? d.address : ""; $("dFee").value = d ? num(d.delivery_fee) : "0";
+    $("dChan").value = d && d.channel === "yummy" ? "yummy" : "propio"; delivChan();
     $("delivDlg").showModal(); setTimeout(function () { $("dName").focus(); }, 50);
   }
+  // Yummy cobra su envío en su app: aquí no lleva costo de delivery
+  function delivChan() { var y = $("dChan").value === "yummy"; $("dFeeBox").classList.toggle("hidden", y); if (y) $("dFee").value = "0"; }
+  $("dChan").addEventListener("change", delivChan);
   $("dCancel").addEventListener("click", function () { $("delivDlg").close(); });
   $("dOk").addEventListener("click", function () {
-    var a = { p_name: $("dName").value.trim(), p_phone: $("dPhone").value.trim(), p_address: $("dAddr").value.trim(), p_fee: num($("dFee").value) };
+    var a = { p_name: $("dName").value.trim(), p_phone: $("dPhone").value.trim(), p_address: $("dAddr").value.trim(), p_fee: num($("dFee").value), p_channel: $("dChan").value };
     if (a.p_name.length < 2) { $("dErr").textContent = "Escribe el nombre del cliente."; return; }
     (delivEdit ? rpc("pos_set_delivery", Object.assign({ p_order: delivEdit.id }, a)).then(function () { return delivEdit.id; }) : rpc("pos_open_delivery", a))
       .then(function (id) { $("delivDlg").close(); return openOrder(id); }).catch(function (e) { $("dErr").textContent = errMsg(e); });
