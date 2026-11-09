@@ -1,0 +1,54 @@
+name: Pruebas automáticas
+
+# Cada cambio que se sube se prueba solo: el esquema se instala en una base vacía y se
+# recorre un día de caja completo (abrir, pedir, cobrar, salida de caja, cerrar).
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  base-de-datos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: prueba
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: prueba
+    steps:
+      - uses: actions/checkout@v4
+      - name: Esquema y recorrido de caja
+        run: supabase/pruebas/correr.sh
+
+  programas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Sintaxis de los programas
+        run: for f in pos.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
+      - name: Política de seguridad de las páginas al día
+        run: node scripts/csp.js --check
+      - name: Los reportes por correo se generan sin errores
+        run: |
+          node -e '
+            const r = require("./reporte-cierre.js");
+            const c = r.reportHtml({ session: {}, totals: {} });
+            const w = r.reportHtml({ kind: "semanal", from: "2026-11-02", to: "2026-11-08", totals: { total: 1 } });
+            if (!c.includes("Cierre de caja") || !w.includes("Resumen semanal")) throw new Error("reporte vacío");
+            console.log("ok:", r.weekSubject({ from: "2026-11-02", to: "2026-11-08", totals: { total: 1 } }));'
