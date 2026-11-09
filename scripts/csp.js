@@ -17,6 +17,8 @@ const PAGES = ["index.html", "admin.html", "gestion.html", "cocina.html", "pos.h
 const config = fs.readFileSync(path.join(ROOT, "config.js"), "utf8");
 const m = config.match(/SUPABASE_URL:\s*"https:\/\/([^"/]+)/);
 const SUPA = m ? m[1] : null;
+const ms = config.match(/SENTRY_DSN:\s*"https:\/\/[^@"]+@([^"/]+)/);
+const SENTRY = ms ? ms[1] : null;
 
 function policy(hashes) {
   const supa = SUPA ? [`https://${SUPA}`] : [];
@@ -25,7 +27,7 @@ function policy(hashes) {
     ["script-src 'self'"].concat(hashes.map((h) => `'sha256-${h}'`)).join(" "),
     "style-src 'self' 'unsafe-inline'",
     ["img-src 'self' data: blob:"].concat(supa).join(" "),
-    ["connect-src 'self'"].concat(supa, SUPA ? [`wss://${SUPA}`] : []).join(" "),
+    ["connect-src 'self'"].concat(supa, SUPA ? [`wss://${SUPA}`] : [], SENTRY ? [`https://${SENTRY}`] : []).join(" "),
     "font-src 'self'",
     "media-src 'self' blob:",
     "object-src 'none'",
@@ -38,7 +40,7 @@ function policy(hashes) {
 // Huella de versión en los scripts propios (pos.js?v=abcd1234): así ningún navegador ni tablet se queda
 // con una copia vieja después de una actualización.
 function stampVersions(html) {
-  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos|reporte-cierre|mfa)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
+  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos|reporte-cierre|mfa|monitoreo)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
     const f = path.join(ROOT, file);
     if (!fs.existsSync(f)) return all;
     const v = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 10);

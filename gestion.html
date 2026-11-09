@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TI1CMmVSmod65fl3z50piRarB6CN4N3lqRnDv2kd+/k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TI1CMmVSmod65fl3z50piRarB6CN4N3lqRnDv2kd+/k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -99,6 +99,8 @@
   details.tview { margin-top:8px; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
 </style>
 <script src="config.js"></script>
+<script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
+<script src="monitoreo.js?v=c503e432fa"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="mfa.js?v=6cc3aca8ac"></script>
 </head>
