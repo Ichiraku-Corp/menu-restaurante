@@ -128,6 +128,9 @@ create table if not exists public.pos_payments (
   session_id bigint references public.pos_sessions(id) on delete set null
 );
 create index if not exists pos_payments_session on public.pos_payments (session_id);
+create index if not exists pos_payments_order on public.pos_payments (order_id);
+create index if not exists pos_payments_created on public.pos_payments (created_at);
+create index if not exists pos_orders_open on public.pos_orders (opened_at) where status = 'abierta';
 alter table public.pos_payments add column if not exists person smallint;   -- persona que pagó (cuenta dividida)
 alter table public.pos_payments add column if not exists device text not null default '';   -- equipo desde el que se cobró
 alter table public.pos_payments add column if not exists alert_seen boolean not null default false;  -- aviso «cobro fuera de caja» visto
@@ -430,12 +433,12 @@ begin
     'orders', (select coalesce(jsonb_agg(jsonb_build_object(
                  'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'day_number', o.day_number,
                  'opened_at', o.opened_at, 'opened_by', public.pos_emp_name(o.opened_by),
-                 'total', (select total from public.pos_totals(o.id)),
-                 'paid', (select paid from public.pos_totals(o.id)),
+                 'total', tt.total,
+                 'paid', tt.paid,
                  'precuenta_at', o.precuenta_at, 'phone', o.phone,
                  'pending', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'pendiente'),
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado')) order by o.opened_at), '[]'::jsonb)
-               from public.pos_orders o where o.status = 'abierta'),
+               from public.pos_orders o cross join lateral public.pos_totals(o.id) tt where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
     'unverified', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'method', p.method, 'amount', p.amount, 'reference', p.reference,
                     'label', coalesce(public.pos_order_label(p.order_id), 'Abono'), 'by', public.pos_emp_name(p.created_by), 'at', p.created_at) order by p.created_at), '[]'::jsonb)
