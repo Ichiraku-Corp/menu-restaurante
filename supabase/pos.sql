@@ -1681,3 +1681,26 @@ revoke execute on function public.pos_next_number() from authenticated;
 revoke execute on function public.pos_ranking(date, date) from authenticated;
 revoke execute on function public.pos_week_report(date) from authenticated;
 revoke execute on function public.pos_customer_id(text) from anon, public, authenticated;
+-- Ayudantes internos: los usan otras funciones; ningún equipo los llama directo.
+revoke execute on function public.pos_tab_balance(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_emp_name(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_order_label(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_split(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_split_units(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_totals(bigint) from anon, public, authenticated;
+revoke execute on function public.pos_rate() from anon, public, authenticated;
+-- Tablas internas (sin políticas): nadie entra directo, solo a través de las funciones.
+do $$
+declare t text;
+begin
+  foreach t in array array['pos_bridge_releases', 'pos_devices', 'pos_incoming', 'pos_kv', 'inv_soldout_auto'] loop
+    execute format('revoke all on public.%I from anon, authenticated', t);
+  end loop;
+  foreach t in array array['pos_tab_moves', 'svc_lines', 'svc_months'] loop
+    if to_regclass('public.' || t) is not null then execute format('revoke all on public.%I from anon', t); end if;
+  end loop;
+  -- TRUNCATE no respeta las políticas de fila: nadie desde la app lo necesita.
+  for t in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('revoke truncate, references, trigger on public.%I from anon, authenticated', t);
+  end loop;
+end $$;
