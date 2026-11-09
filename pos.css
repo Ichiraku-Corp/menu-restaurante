@@ -323,3 +323,12 @@
     .duecards small { color:var(--muted); font-weight:500; }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition:none !important; animation:none !important; } }
+
+/* Botones de billetes en efectivo $ */
+.bills { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:6px; }
+.bills button { min-height:38px; padding:4px 12px; font-weight:800; border-radius:10px; }
+.bills .bclr { color:var(--muted); }
+.billgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+.billgrid label { font-size:13px; font-weight:700; color:var(--muted); }
+.billgrid input { padding:6px 8px; margin-top:2px; }
+.pill.wait { background:var(--warn); color:#fff; }

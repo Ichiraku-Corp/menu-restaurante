@@ -697,6 +697,29 @@ end $$;
 -- p_change_currency: en qué se entrega el vuelto si sobra ('REF' = dólares en efectivo, 'BS' = bolívares en efectivo).
 -- p_partial = true: abono (por ejemplo, cada persona paga su parte); el pedido sigue abierto hasta completar.
 drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text);
+-- Vuelto: en $ (REF), en Bs (BS) o mixto (MIX: los dólares enteros en efectivo y lo que sobra en bolívares)
+create or replace function public.pos_give_change(p_order bigint, p_over numeric, p_cur text, p_rate numeric, p_emp bigint, p_sess bigint, p_person int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare usd numeric; rest numeric;
+begin
+  if coalesce(p_over, 0) <= 0.02 then return null; end if;
+  if p_cur = 'MIX' and p_rate is not null and floor(p_over) >= 1 and p_over - floor(p_over) > 0.009 then
+    usd := floor(p_over); rest := round(p_over - usd, 2);
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
+    values (p_order, 'efectivo_usd', 'REF', -usd, -usd, 'vuelto', p_emp, p_sess, p_person);
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+    values (p_order, 'efectivo_bs', 'BS', -round(rest * p_rate, 2), -rest, p_rate, 'vuelto', p_emp, p_sess, p_person);
+    return jsonb_build_object('currency', 'MIX', 'amount', p_over, 'usd', usd, 'bs', round(rest * p_rate, 2));
+  elsif p_cur in ('BS', 'MIX') and p_rate is not null and not (p_cur = 'MIX' and p_over - floor(p_over) <= 0.009) then
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+    values (p_order, 'efectivo_bs', 'BS', -round(p_over * p_rate, 2), -p_over, p_rate, 'vuelto', p_emp, p_sess, p_person);
+    return jsonb_build_object('currency', 'BS', 'amount', round(p_over * p_rate, 2));
+  end if;
+  insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
+  values (p_order, 'efectivo_usd', 'REF', -p_over, -p_over, 'vuelto', p_emp, p_sess, p_person);
+  return jsonb_build_object('currency', 'REF', 'amount', p_over);
+end $$;
+
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint; tips numeric := 0;
@@ -761,22 +784,16 @@ begin
     if who is not null then
       select round(x.paid - x.total, 2) into pover from public.pos_split(p_order) x where x.person = who;
       if coalesce(pover, 0) > 0.02 then
-        if coalesce(p_change_currency, 'REF') = 'BS' and rt is not null then
-          insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
-          values (p_order, 'efectivo_bs', 'BS', -round(pover * rt, 2), -pover, rt, 'vuelto', p_emp, sess, who);
-          chg := jsonb_build_object('currency', 'BS', 'amount', round(pover * rt, 2));
-        else
-          insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
-          values (p_order, 'efectivo_usd', 'REF', -pover, -pover, 'vuelto', p_emp, sess, who);
-          chg := jsonb_build_object('currency', 'REF', 'amount', pover);
-        end if;
+        chg := public.pos_give_change(p_order, pover, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who);
         paid := paid - pover;
       else pover := 0;
       end if;
     end if;
     perform public.pos_print('caja', '^ABONO' || case when who is not null then E'\n^' || upper(public.pos_person_name(who)) else '' end || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
       public.pos_line('Abonado ahora', 'Ref ' || public.pos_money(paid)) || E'\n' ||
-      case when pover > 0 then public.pos_line('Vuelto', case when chg ->> 'currency' = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money((chg ->> 'amount')::numeric)) || E'\n' else '' end ||
+      case when pover > 0 then public.pos_line('Vuelto', case chg ->> 'currency' when 'BS' then 'Bs ' || public.pos_money((chg ->> 'amount')::numeric)
+        when 'MIX' then '$ ' || public.pos_money((chg ->> 'usd')::numeric) || ' + Bs ' || public.pos_money((chg ->> 'bs')::numeric)
+        else 'Ref ' || public.pos_money((chg ->> 'amount')::numeric) end) || E'\n' else '' end ||
       public.pos_line('Total de la cuenta', 'Ref ' || public.pos_money(t.total)) || E'\n^' ||
       public.pos_line('RESTA', 'Ref ' || public.pos_money(due - paid), 24) || E'\n\nNo es factura fiscal.');
     insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'abono', p_order, jsonb_build_object('monto', paid));
@@ -784,15 +801,7 @@ begin
   end if;
   over := round(paid - due, 2);
   if over > 0.02 then
-    if coalesce(p_change_currency, 'REF') = 'BS' and rt is not null then
-      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
-      values (p_order, 'efectivo_bs', 'BS', -round(over * rt, 2), -over, rt, 'vuelto', p_emp, sess, who);
-      chg := jsonb_build_object('currency', 'BS', 'amount', round(over * rt, 2));
-    else
-      insert into public.pos_payments (order_id, method, currency, amount, amount_ref, reference, created_by, session_id, person)
-      values (p_order, 'efectivo_usd', 'REF', -over, -over, 'vuelto', p_emp, sess, who);
-      chg := jsonb_build_object('currency', 'REF', 'amount', over);
-    end if;
+    chg := public.pos_give_change(p_order, over, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who);
   end if;
   update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = now(), session_id = sess, rate = rt where id = p_order;
   perform public.pos_print('caja', public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
@@ -1688,6 +1697,7 @@ revoke execute on function public.pos_next_number() from authenticated;
 revoke execute on function public.pos_ranking(date, date) from authenticated;
 revoke execute on function public.pos_week_report(date) from authenticated;
 revoke execute on function public.pos_customer_id(text) from anon, public, authenticated;
+revoke execute on function public.pos_give_change(bigint, numeric, text, numeric, bigint, bigint, int) from anon, public, authenticated;
 -- Ayudantes internos: los usan otras funciones; ningún equipo los llama directo.
 revoke execute on function public.pos_tab_balance(bigint) from anon, public, authenticated;
 revoke execute on function public.pos_emp_name(bigint) from anon, public, authenticated;

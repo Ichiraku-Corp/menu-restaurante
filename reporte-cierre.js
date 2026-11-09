@@ -31,6 +31,7 @@ ${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulad
     ["Descuentos", "Ref " + fm(t.discounts)], ["Servicio 10 %", "Ref " + fm(t.service)], ["Delivery", "Ref " + fm(t.delivery)], ["<b>Total cobrado</b>", "<b>Ref " + fm(t.total) + "</b>"],
     ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
 ${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
+${cnt._billetes ? `<p style="margin:-10px 0 16px;color:#555">Efectivo $ contado por billetes: ${Object.keys(cnt._billetes).map((k) => he(k === "otros" ? "monedas y otros $ " + fm(cnt._billetes[k]) : k + " × " + fq(cnt._billetes[k]))).join(" · ")}</p>` : ""}
 ${H("Cobros por persona")}${table(["Quién cobró", "Método", "Pagos", "Monto", "En Ref"], (d.cashiers || []).map((x) => [he(x.name), MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [2, 3, 4])}
 ${(d.outs || []).length ? H("Salidas de caja") + table(["Hora", "Motivo", "Monto", "Quién"], d.outs.map((x) => [hh(x.at), he(x.reason), (x.method === "efectivo_bs" ? "Bs " : "$ ") + fm(x.amount), he(x.by)]), [2]) : ""}
 ${H("Conteo de afuera")}${table(["Producto", "Según sistema", "Contado", "Diferencia"], (Array.isArray(cnt._inv) ? cnt._inv : []).map((x) => {

@@ -241,6 +241,9 @@
     if (al.length && U && U.charge) h += '<div class="banner alert"><b>⚠ Cobros hechos fuera de la caja (' + al.length + ")</b><ul>" + al.map(function (a) {
       return "<li>" + new Date(a.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · <b>" + esc(a.by || "") + "</b> cobró " + esc(a.label) + " · " + ref(num(a.amount_ref)) + " desde «" + esc(a.device) + "»</li>";
     }).join("") + '</ul><button type="button" id="alertsSeen">Visto</button></div>';
+    // Mesas esperando: pidieron la cuenta hace más de 10 min sin cobrar, o abiertas más de 10 min sin ningún plato
+    var wait = ST.orders.filter(function (o) { return waitInfo(o); });
+    if (wait.length) h += '<div class="banner warn"><b>Mesas esperando (' + wait.length + "):</b> " + wait.map(function (o) { return esc(o.label) + " — " + waitInfo(o); }).join(" · ") + "</div>";
     $("banners").innerHTML = h;
     var sbtn = $("alertsSeen"); if (sbtn) sbtn.onclick = function () { rpc("pos_alerts_seen").then(refreshState).catch(fail); };
     document.querySelectorAll("#banners [data-verify]").forEach(function (b) { b.onclick = function () {
@@ -330,8 +333,14 @@
     return '<button type="button" class="' + cls + '" ' + attr + '><span class="st">' + (o.precuenta_at ? "Pidió la cuenta" : o.items ? "Comiendo" : "Abierta") + '</span><span class="num">' + title + "</span>" +
       '<span class="amt">' + ref(num(o.total) - num(o.paid)) + "</span><small>" + esc(o.opened_by || "") + ' · <span class="' + (m >= 60 ? "late" : "") + '">' + mins(o.opened_at) + "</span></small>" + badges(o) + "</button>";
   }
+  function minsSince(t) { return Math.round((Date.now() - new Date(t).getTime()) / 60000); }
+  function waitInfo(o) {
+    if (o.precuenta_at && num(o.total) - num(o.paid) > 0.02 && minsSince(o.precuenta_at) >= 10) return "pidió la cuenta hace " + minsSince(o.precuenta_at) + " min";
+    if (!o.items && minsSince(o.opened_at) >= 10) return "sin pedido hace " + minsSince(o.opened_at) + " min";
+    return "";
+  }
   function badges(o) {
-    return (o.pending ? '<span class="pend">sin enviar</span>' : "") + (num(o.paid) > 0 ? '<span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "");
+    return (waitInfo(o) ? '<span class="pill wait">esperando</span>' : "") + (o.pending ? '<span class="pend">sin enviar</span>' : "") + (num(o.paid) > 0 ? '<span class="pill paid">abonó ' + ref(num(o.paid)) + "</span>" : "");
   }
   function tableById(id) { return ST && ST.tables.find(function (t) { return t.id === id; }); }
   function mins(ts) { var m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000)); return m < 60 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min"; }
@@ -770,23 +779,32 @@
           ? '<button type="button" class="vbtn ver" data-ver>✓ ' + esc(p.verified.payer || "Verificado") + " · " + nf2.format(p.verified.amount) + " " + esc(p.verified.currency) + "</button>"
           : '<span class="refbox"><input class="refin" placeholder="Referencia" value="' + esc(p.reference) + '" aria-label="Referencia del pago"><button type="button" class="vbtn" data-ver title="Buscar el pago entre los recibidos">Buscar</button></span>')
         : '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>') +
-        '<button type="button" class="danger del" aria-label="Quitar">✕</button></div>';
+        '<button type="button" class="danger del" aria-label="Quitar">✕</button>' +
+        (p.method === "efectivo_usd" && !p.tip ? '<span class="bills" aria-label="Billetes que entregó el cliente">' + [1, 5, 10, 20, 50, 100].map(function (b) { return '<button type="button" data-bill="' + b + '">$' + b + "</button>"; }).join("") +
+          '<button type="button" class="bclr" data-bill="0" title="Borrar el monto">Borrar</button></span>' : "") + "</div>";
     }).join("");
     updatePaySums();
   }
   // Equivalente de cada pago en la otra moneda (para responder «¿cuánto son 13 $ en bolívares?»)
   function isRefMethod(k) { var m = minfo(k); return m && m[2] === "REF"; }
   function eqOf(p) { if (!ST || !ST.rate || String(p.amount).trim() === "") return ""; return (isRefMethod(p.method) ? num(p.amount) * ST.rate : num(p.amount) / ST.rate).toFixed(2); }
+  // Vuelto en $, en Bs o mixto (dólares enteros + el resto en bolívares), igual que lo registra el servidor
+  function changeText(ch) {
+    if (changeCur === "MIX" && ST.rate && Math.floor(ch) >= 1 && ch - Math.floor(ch) > 0.009) return "$ " + Math.floor(ch) + " + " + bs(Math.round((ch - Math.floor(ch)) * ST.rate * 100) / 100);
+    if (changeCur === "MIX" && ST.rate && Math.floor(ch) >= 1) return "$ " + nf2.format(ch);
+    return (changeCur === "BS" || changeCur === "MIX") && ST.rate ? bs(Math.round(ch * ST.rate * 100) / 100) : "$ " + nf2.format(ch);
+  }
+  function chgTxt(c) { return c.currency === "MIX" ? "$ " + nf2.format(c.usd) + " + " + bs(c.bs) : c.currency === "BS" ? bs(c.amount) : "$ " + nf2.format(c.amount); }
   function updatePaySums() {
     var s = paySums();
     $("payPaid").textContent = ref(s.paid) + (tipSum() > 0 ? " + propina " + ref(tipSum()) : "");
     if (s.rest > 0.009) { $("payRestLbl").textContent = "Falta"; $("payRest").textContent = ref(s.rest) + (ST.rate ? " · " + bs(Math.round(s.rest * ST.rate * 100) / 100) : ""); show("changeBox", false); }
     else if (s.rest < -0.009) {
       $("payRestLbl").textContent = "Vuelto"; var ch = -s.rest;
-      $("payRest").textContent = changeCur === "BS" && ST.rate ? bs(Math.round(ch * ST.rate * 100) / 100) : "$ " + nf2.format(ch);
+      $("payRest").textContent = changeText(ch);
       show("changeBox", true);
     } else { $("payRestLbl").textContent = "Completo"; $("payRest").textContent = "✓"; show("changeBox", false); }
-    document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = b.dataset.cur === "BS" && !ST.rate; });
+    document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = b.dataset.cur !== "REF" && !ST.rate; });
     $("payOk").disabled = !pays.length || s.rest > 0.02;
     show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson);
     $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
@@ -800,7 +818,7 @@
   $("payPartial").addEventListener("click", function () { doPay(true); });
   $("payLines").addEventListener("input", function (e) {
     var row = e.target.closest("[data-i]"); if (!row) return; var p = pays[Number(row.dataset.i)];
-    if (e.target.classList.contains("amt")) { p.amount = e.target.value; row.querySelector(".eq").value = eqOf(p); }
+    if (e.target.classList.contains("amt")) { p.amount = e.target.value; p.billed = true; row.querySelector(".eq").value = eqOf(p); }
     else if (e.target.classList.contains("eq")) {
       var v = e.target.value.trim();
       p.amount = v === "" || !ST.rate ? "" : (isRefMethod(p.method) ? num(v) / ST.rate : num(v) * ST.rate).toFixed(2);
@@ -846,6 +864,12 @@
   $("payLines").addEventListener("click", function (e) {
     var v = e.target.closest("[data-ver]"); if (v) { var ix = Number(v.closest("[data-i]").dataset.i);
       if (pays[ix].incoming_id) { pays[ix].incoming_id = null; pays[ix].verified = null; pays[ix].reference = ""; drawPays(); } else openIncoming(ix); return; } });
+  // Billetes: el primer toque reemplaza el monto sugerido; los siguientes suman (ej.: $20 + $5 = 25)
+  $("payLines").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-bill]"); if (!b) return; var p = pays[Number(b.closest("[data-i]").dataset.i)], v = Number(b.dataset.bill);
+    if (!v) { p.amount = ""; p.billed = false; } else { p.amount = ((p.billed ? num(p.amount) : 0) + v).toFixed(2); p.billed = true; }
+    drawPays();
+  });
   $("payLines").addEventListener("click", function (e) { var b = e.target.closest(".del"); if (!b) return; pays.splice(Number(b.closest("[data-i]").dataset.i), 1); drawPays(); });
   $("changeCur").addEventListener("click", function (e) { var b = e.target.closest("[data-cur]"); if (!b || b.disabled) return; changeCur = b.dataset.cur; updatePaySums(); });
   $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
@@ -860,12 +884,12 @@
     rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
       $("payDlg").close();
       if (r && r.closed === false) {
-        var chp = r.change; if (chp) alert("Entrega de vuelto: " + (chp.currency === "BS" ? bs(chp.amount) : "$ " + nf2.format(chp.amount)));
+        var chp = r.change; if (chp) alert("Entrega de vuelto: " + chgTxt(chp));
         toast((payPerson ? pname(payPerson) + " pagó " : "Abono de ") + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder();
       }
       var ch = r && r.change;
-      toast("Cobrado " + ref(r.total) + (ch ? " · Vuelto " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)) : ""));
-      if (ch) alert("Entrega de vuelto: " + (ch.currency === "BS" ? bs(ch.amount) : "$ " + nf2.format(ch.amount)));
+      toast("Cobrado " + ref(r.total) + (ch ? " · Vuelto " + chgTxt(ch) : ""));
+      if (ch) alert("Entrega de vuelto: " + chgTxt(ch));
       goTables();
     }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
       .then(function () { paying = false; if (cur.data) updatePaySums(); });
@@ -892,7 +916,11 @@
           EXPECTED[m[0]] = Math.round(exp * 100) / 100;
           var list = (sm.payments || []).filter(function (p) { return p.method === m[0]; });
           return '<tr data-row="' + m[0] + '"><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
-            '</td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px"><div class="cdiff" data-diff="' + m[0] + '"></div></td></tr>' +
+            '</td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px">' +
+            (m[0] === "efectivo_usd" ? '<button type="button" class="seepay" data-bills="1">contar billetes</button>' : "") + '<div class="cdiff" data-diff="' + m[0] + '"></div></td></tr>' +
+            (m[0] === "efectivo_usd" ? '<tr class="paylist hidden" data-billrow><td colspan="3"><div class="billgrid">' + BILLS.map(function (d) {
+              return '<label>' + (d ? "$" + d : "Monedas y otros $") + '<input class="bcnt n" data-den="' + d + '" inputmode="' + (d ? "numeric" : "decimal") + '" placeholder="' + (d ? "cuántos" : "$") + '"></label>'; }).join("") +
+              '</div><p class="muted" style="margin:4px 0 0">Escribe cuántos billetes hay de cada uno; el total se pone solo.</p></td></tr>' : "") +
             '<tr class="paylist hidden" data-list="' + m[0] + '"><td colspan="3">' + list.map(function (p) {
               return '<div class="pl"><span>' + new Date(p.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · " + esc(p.label || "") + (p.ref ? " · ref. " + esc(p.ref) : "") + " · " + esc(p.by || "") + '</span><b class="n">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(num(p.amount)) + "</b></div>";
             }).join("") + "</td></tr>";
@@ -900,6 +928,7 @@
         h += '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
           '<div class="tot"><span>Pedidos cobrados</span><b>' + sm.orders + '</b></div><div class="tot"><span>Ventas (con IVA)</span><b>' + ref(num(sm.sales)) + '</b></div><div class="tot"><span>Servicio</span><b>' + ref(num(sm.service)) + "</b></div>" +
           (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") +
+          bsReminder() +
           '<div class="row between" style="margin-top:12px"><h3 style="margin:0">Cierre: escribe lo que hay en cada método</h3><button type="button" id="cashOutBtn">Salida de caja</button></div>' +
           ((sm.outs || []).length ? '<p class="muted" style="margin:6px 0">Salidas: ' + sm.outs.map(function (o) { return esc(o.reason) + " " + (o.method === "efectivo_usd" ? "$ " : "Bs ") + nf2.format(num(o.amount)) + " (" + esc(o.by || "") + ")"; }).join(" · ") + " — ya restadas del esperado.</p>" : "") +
           '<p class="muted" style="margin:6px 0">Bs: pago móvil, punto y efectivo Bs se cuentan en <b>bolívares</b>. El punto: escribe el total del <b>cierre de lote</b>.</p>' +
@@ -929,6 +958,7 @@
     } else if (id === "tabsBtn") { openTabs();
     } else if (id === "buyBtn") { openPurchase();
     } else if (id === "cashOutBtn") { cashOut();
+    } else if (e.target.dataset.bills) { var br = document.querySelector("#cashBody [data-billrow]"); if (br) { br.classList.toggle("hidden"); var f = br.querySelector(".bcnt"); if (f && !br.classList.contains("hidden")) f.focus(); }
     } else if (e.target.dataset.see) { var lt = document.querySelector('#cashBody [data-list="' + e.target.dataset.see + '"]'); if (lt) lt.classList.toggle("hidden");
     } else if (id === "soldOut") { openSoldOut();
     } else if (id === "invCount") { openCount();
@@ -939,7 +969,7 @@
       var td = cashDiff();
       if (td.uncounted && !confirm("No escribiste lo contado en " + td.uncounted + " métodos que tienen dinero esperado. ¿Seguir así?")) return;
       if (Math.abs(td.total) > 5 && $("cashNotes").value.trim().length < 5) { toast("La caja no cuadra por " + ref(td.total) + ": explica la diferencia en las notas", true); $("cashNotes").focus(); return; }
-      counted._inv = inv;
+      counted._inv = inv; var bb = billBreakdown(); if (bb) counted._billetes = bb.detail;
       closing = { counted: counted, notes: $("cashNotes").value.trim() };
       rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
         closing.recipients = d.recipients || "";
@@ -949,6 +979,13 @@
       }).catch(fail);
     }
   });
+  // Bolívares sin dormir: cuánto entró hoy en Bs, para cambiarlo o usarlo en compras antes de que pierda valor
+  function bsReminder() {
+    var bsTot = ["efectivo_bs", "pago_movil", "punto_debito", "punto_credito"].reduce(function (a, k) { return a + (EXPECTED[k] || 0); }, 0);
+    if (bsTot < 1 || !ST.rate) return "";
+    return '<div class="banner" style="margin-top:10px"><b>Bolívares de hoy: ' + bs(Math.round(bsTot * 100) / 100) + "</b> (≈ " + ref(bsTot / ST.rate) + " a la tasa de hoy). " +
+      "Conviene cambiarlos a divisas o usarlos en compras hoy mismo para que no pierdan valor.</div>";
+  }
   // ---- Arqueo inteligente: diferencia en vivo, moneda equivocada y total en Ref
   var CASH = null, EXPECTED = {};
   function cashDiff() {
@@ -968,7 +1005,17 @@
     if (box) box.innerHTML = '<span>Diferencia total</span><span class="' + (Math.abs(total) < 0.5 ? "ok" : total > 0 ? "plus" : "minus") + '">' + (Math.abs(total) < 0.005 ? "Ref 0,00 ✓" : (total > 0 ? "+" : "−") + ref(Math.abs(total))) + "</span>";
     return { total: Math.round(total * 100) / 100, uncounted: uncounted };
   }
-  $("cashBody").addEventListener("input", function (e) { if (e.target.classList.contains("cnt")) cashDiff(); });
+  // Arqueo por billetes: cuántos de cada uno → total del efectivo $ (y el detalle queda en el cierre)
+  var BILLS = [100, 50, 20, 10, 5, 1, 0];
+  function billBreakdown() {
+    var out = {}, total = 0, any = false;
+    document.querySelectorAll("#cashBody .bcnt").forEach(function (i) { if (i.value.trim() === "") return; any = true; var d = Number(i.dataset.den), v = num(i.value); out[d ? "$" + d : "otros"] = v; total += d ? d * v : v; });
+    return any ? { total: Math.round(total * 100) / 100, detail: out } : null;
+  }
+  $("cashBody").addEventListener("input", function (e) {
+    if (e.target.classList.contains("bcnt")) { var b = billBreakdown(), c = document.querySelector('#cashBody .cnt[data-m="efectivo_usd"]'); if (c) c.value = b ? b.total.toFixed(2) : ""; cashDiff(); return; }
+    if (e.target.classList.contains("cnt")) cashDiff();
+  });
   function cashOut() {
     ask({ title: "Salida de caja: monto", help: "Dinero que sale del cajón (pago delivery semanal, compra, adelanto). Escribe el monto; después eliges si es en $ o Bs.", value: "", type: "number" }).then(function (a) {
       if (a === null || !(num(a) > 0)) return;

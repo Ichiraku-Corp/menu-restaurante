@@ -24,7 +24,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
   const page = await (await browser.newContext({ viewport: { width: 1180, height: 900 } })).newPage();
   const errores = [];
   page.on("pageerror", (e) => errores.push(e.message));
-  page.on("dialog", (d) => d.accept());
+  page.on("dialog", (d) => d.accept().catch(() => {}));
   const menu = fs.readFileSync(path.join(ROOT, "data", "menu.json"), "utf8");
   await page.route("**/vendor/supabase-js-*/supabase.js", (r) => r.fulfill({ contentType: "application/javascript",
     body: "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8") }));
@@ -50,8 +50,16 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
     await page.click("#send"); await page.waitForTimeout(300);
     ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
-    await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]'); await page.click("#payOk"); await page.waitForTimeout(400);
+    await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]');
+    await page.click('#payLines [data-bill="20"]'); await page.click('#payLines [data-bill="5"]');
+    ok((await page.locator("#payLines .amt").first().inputValue()) === "25.00", "billetes $20 + $5 ponen 25 en el monto");
+    await page.click('#changeCur [data-cur="MIX"]');
+    const vuelto = await page.textContent("#payRest");
+    ok(/^\$ \d+ \+ Bs/.test(vuelto.trim()), "vuelto mixto: dólares enteros más bolívares (" + vuelto.trim() + ")");
+    let aviso = ""; page.once("dialog", (d) => { aviso = d.message(); });
+    await page.click("#payOk"); await page.waitForTimeout(400);
     ok(await S(() => window.__S.orders.some((o) => o.status === "cobrada")), "la mesa se cobra en efectivo");
+    ok(/Entrega de vuelto: \$ [\d.,]+ \+ Bs/.test(aviso), "avisa el vuelto mixto al cobrar (" + aviso + ")");
 
     // Mesa abierta por error: se borra al salir
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("6")'); await page.waitForSelector("#orderView:not(.hidden)");
@@ -68,7 +76,10 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
 
     // Cierre: arqueo con diferencia pide nota
     await page.click("#btnCaja"); await page.waitForTimeout(300);
-    await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').fill("15");
+    ok(await page.locator("#cashBody .banner", { hasText: "Bolívares de hoy" }).count() > 0, "recuerda los bolívares del día en la caja");
+    await page.click('#cashBody [data-bills="1"]');
+    await page.locator('#cashBody .bcnt[data-den="10"]').fill("1"); await page.locator('#cashBody .bcnt[data-den="5"]').fill("1");
+    ok((await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').inputValue()) === "15.00", "contar billetes: 1 de $10 + 1 de $5 = 15");
     await page.locator('#cashBody .cnt[data-m="pago_movil"]').fill("247.98");
     await page.locator('#cashBody .cnt[data-m="pago_movil"]').dispatchEvent("input");
     ok(await page.locator("#cashBody .cwarn").count() > 0, "avisa si el pago móvil parece escrito en dólares");
