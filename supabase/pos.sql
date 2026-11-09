@@ -1711,3 +1711,24 @@ begin
     execute format('revoke truncate, references, trigger on public.%I from anon, authenticated', t);
   end loop;
 end $$;
+
+-- ---------------------------------------------------------------- Revisión de seguridad de Supabase (asesor)
+-- Funciones auxiliares con search_path fijo (no dependen de quién las llama).
+do $$
+declare f text;
+begin
+  foreach f in array array['unit_family(text)', 'unit_factor(text)', 'touch_updated_at()', 'pos_now_txt()', 'pos_line(text, text, integer)',
+                           'pos_money(numeric)', 'pos_person_name(integer)', 'pos_doc(text)'] loop
+    if to_regprocedure('public.' || f) is not null then execute format('alter function public.%s set search_path = public', f); end if;
+  end loop;
+  -- Sin sesión iniciada no se llama a nada de esto (los disparadores siguen funcionando: no necesitan este permiso).
+  foreach f in array array['can_manage()', 'can_manage_or_service()', 'inv_check()', 'log_price_change()'] loop
+    if to_regprocedure('public.' || f) is not null then execute format('revoke execute on function public.%s from anon, public', f); end if;
+  end loop;
+  -- Las políticas de las tablas usan estas dos con la sesión iniciada: se dejan para authenticated.
+  grant execute on function public.can_manage() to authenticated;
+  if to_regprocedure('public.can_manage_or_service()') is not null then grant execute on function public.can_manage_or_service() to authenticated; end if;
+  foreach f in array array['inv_check()', 'log_price_change()', 'touch_updated_at()'] loop
+    if to_regprocedure('public.' || f) is not null then execute format('revoke execute on function public.%s from authenticated', f); end if;
+  end loop;
+end $$;
