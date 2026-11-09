@@ -74,5 +74,5 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Nex (sin red: Claude y Supabase simulados)
+      - name: "Nex: herramientas sin red, con Claude y Supabase simulados"
         run: deno test -A supabase/functions/tests/nex_test.ts && deno check supabase/functions/nex/index.ts
