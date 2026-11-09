@@ -35,6 +35,12 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     // Equipo y PIN
     await page.goto("http://localhost:8799/pos.html");
     await page.fill("#devEmail", "tablet@ejemplo.test"); await page.fill("#devPass", "x"); await page.click("#device button");
+    // Asistencia: marcar llegada con el PIN, sin entrar a la tablet
+    await page.click("#markMode"); await pin(1, "1111"); await page.waitForSelector("#markDlg[open]", { timeout: 5000 });
+    ok(/Llegué/.test(await page.textContent("#markOpts")), "al marcar, le ofrece «Llegué»");
+    await page.click('#markOpts [data-mark="in"]'); await page.waitForTimeout(300);
+    ok(await S(() => (window.__S.marks || []).some((m) => m.emp === 1 && m.kind === "in")), "la llegada queda marcada");
+    ok(!(await page.isVisible("#tablesView")), "marcar no entra a la tablet");
     await pin(2, "2222"); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });
     ok(true, "la cajera entra con su PIN");
 
@@ -76,6 +82,10 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
 
     // Cierre: arqueo con diferencia pide nota
     await page.click("#btnCaja"); await page.waitForTimeout(300);
+    await page.click("#uniBtn"); await page.waitForSelector("#uniDlg[open]");
+    await page.click('#uniBody [data-uni="1"] [data-ok="1"]'); await page.waitForTimeout(200);
+    ok(await S(() => window.__S.uni && window.__S.uni[1] === true), "la cajera anota el uniforme de quien llegó");
+    await page.click("#uniClose");
     ok(await page.locator("#cashBody .banner", { hasText: "Bolívares de hoy" }).count() > 0, "recuerda los bolívares del día en la caja");
     await page.click('#cashBody [data-bills="1"]');
     await page.locator('#cashBody .bcnt[data-den="10"]').fill("1"); await page.locator('#cashBody .bcnt[data-den="5"]').fill("1");

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TI1CMmVSmod65fl3z50piRarB6CN4N3lqRnDv2kd+/k='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-9tiDIAIxhL+zGsY3ijP99AWTOTYMwG4fKoKhZtymnRk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -97,6 +97,9 @@
   .legend i { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:5px; background:var(--accent); }
   .legend i.proj { background:repeating-linear-gradient(45deg, var(--accent) 0 2px, transparent 2px 5px); border:1.5px solid var(--accent); }
   details.tview { margin-top:8px; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  .perfrules { margin:6px 0 10px; padding:10px; border-radius:12px; background:var(--raised, rgba(127,127,127,.08)); }
+  .perfrules label { font-size:13px; display:flex; flex-direction:column; gap:2px; }
+  .perfrules input { width:110px; }
 </style>
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
@@ -253,6 +256,7 @@
         <div class="scroll" id="svcGastos"></div>
         <p><button id="svcAddGasto">+ Gasto</button></p>
         <h3>Bonos del personal</h3>
+        <div id="perfRules" class="perfrules"></div>
         <div class="scroll" id="svcPersonas"></div>
         <p class="muted" style="font-size:13px">Rendimiento: <b>ventas</b> del mes en el sistema de ventas · <b>días</b> con marca en el equipo de asistencia · velocidad de cocina: próximamente con los cronómetros.</p>
         <p id="svcErr" class="muted" style="color:var(--danger)"></p>
@@ -500,7 +504,9 @@
   $("svcMonth").addEventListener("change", function () { openSvcMonth(this.value); });
   function openSvcMonth(ym) {
     if (!ym) return Promise.resolve();
-    return q(sb.rpc("svc_month", { p_month: ym + "-01" })).then(function (d) { SV.data = d; SV.raw = {}; drawSvcLiq(); }).catch(fail);
+    return Promise.all([q(sb.rpc("svc_month", { p_month: ym + "-01" })), q(sb.rpc("perf_month", { p_month: ym + "-01" })).catch(function () { return null; })])
+      .then(function (r) { SV.data = r[0]; SV.raw = {}; SV.perf = {}; SV.perfInfo = r[1];
+        ((r[1] && r[1].people) || []).forEach(function (p) { SV.perf[p.employee_id] = p; }); drawSvcLiq(); }).catch(fail);
   }
   function svcCalc() {
     var d = SV.data, i = d.info || {}, closed = i.status === "liquidado";
@@ -518,6 +524,35 @@
   }
   // Lo que se está escribiendo se respeta tal cual (p. ej. «3,» a medio escribir) mientras todo se recalcula en vivo
   function rv(key, val) { return SV.raw && SV.raw[key] != null ? SV.raw[key] : val; }
+  // Rendimiento del mes (asistencia, descansos, uniforme) según las reglas del servicio
+  function perfCell(l) {
+    var p = SV.perf && l.employee_id ? SV.perf[l.employee_id] : null;
+    if (!p) return '<td><span class="muted">—</span></td>';
+    var det = p.worked + " días · " + p.late + " tarde · " + p.absent + " faltas · " + p.break_over + " desc. pasados · " + p.no_uniform + " sin uniforme";
+    return '<td title="' + esc(det) + '">' + (p.ok ? '<b style="color:var(--ok)">✓ Cumple</b>' : '<b style="color:var(--danger)">✗ No cumple</b><div class="muted" style="font-size:12px">' + esc(p.reasons.join(", ")) + "</div>") +
+      '<div class="muted" style="font-size:12px">' + esc(det) + "</div></td>";
+  }
+  function drawPerfRules(closed) {
+    var info = SV.perfInfo; if (!info) { $("perfRules").innerHTML = ""; return; }
+    var r = info.rules || {}, dis = closed ? " disabled" : "", f = function (k, lbl) { return '<label>' + lbl + '<input class="n" data-rule="' + k + '" inputmode="numeric" value="' + esc(r[k] != null ? r[k] : "") + '"' + dis + "></label>"; };
+    var bad = (info.people || []).filter(function (p) { return !p.ok && SV.data.lines.some(function (l) { return l.employee_id === p.employee_id && num(l.pct) > 0; }); });
+    var nod = info.no_data ? '<p class="muted" style="margin:6px 0 0">Este mes no tiene marcas de asistencia: el rendimiento se empieza a medir desde la primera marca (tablet o terminal facial).</p>' : "";
+    $("perfRules").innerHTML = '<p style="margin:0 0 6px"><b>Reglas para cobrar servicio</b> <span class="muted">(m\u00e1ximo en el mes; vac\u00edo = sin l\u00edmite)</span></p><div class="row" style="flex-wrap:wrap;gap:8px">' +
+      f("max_late", "Llegadas tarde") + f("max_absent", "Faltas") + f("max_break_over", "Descansos pasados") + f("max_no_uniform", "Días sin uniforme") +
+      '<label>Descanso permitido (min)<input class="n" id="brkMin" inputmode="numeric" value="' + esc(info.break_minutes) + '"' + dis + "></label></div>" +
+      (closed ? "" : '<p class="row" style="gap:8px;margin:8px 0 0"><button type="button" id="perfSave">Guardar reglas</button>' +
+        (bad.length ? '<button type="button" id="perfZero" class="danger">Poner 0 % a quienes no cumplen (' + bad.length + ")</button>" : "") + "</p>") + nod;
+  }
+  $("perfRules").addEventListener("click", function (e) {
+    if (e.target.id === "perfSave") {
+      var rules = {}; document.querySelectorAll("#perfRules [data-rule]").forEach(function (i) { if (i.value.trim() !== "") rules[i.dataset.rule] = Math.max(0, Math.round(num(i.value))); });
+      q(sb.rpc("perf_rules_save", { p_rules: rules, p_break_minutes: Math.round(num($("brkMin").value)) || null })).then(function () { toast("Reglas guardadas"); return openSvcMonth($("svcMonth").value); }).catch(fail);
+    } else if (e.target.id === "perfZero") {
+      svcReadForm(); SV.raw = {};
+      SV.data.lines.forEach(function (l) { var p = l.employee_id && SV.perf[l.employee_id]; if (p && !p.ok) l.pct = 0; });
+      drawSvcLiq(); toast("Listo: revisa y reparte lo que qued\u00f3 sin asignar");
+    }
+  });
   function bsOf(v, rate) { return rate ? "Bs " + nf2.format(Math.round(v * rate * 100) / 100) : "—"; }
   function drawSvcLiq() {
     var d = SV.data, i = d.info || {}, k = svcCalc(), dis = k.closed ? " disabled" : "";
@@ -541,20 +576,20 @@
         '></td><td class="n">' + money(l.c.bonus) + '</td><td class="n">' + bsOf(l.c.bonus, k.rate) + "</td><td>" + (k.closed ? "" : '<button class="danger delg" title="Quitar">✕</button>') + "</td></tr>"; }).join("") +
       '<tr class="total"><td>Total gastos</td><td class="n">' + nf2.format(g.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(g.reduce(function (a, l) { return a + l.c.bonus; }, 0)) + "</td><td></td><td></td></tr></tbody></table>";
     var tot = { bonus: 0, tip: 0, fb: 0, tp: 0, pay: 0 };
-    $("svcPersonas").innerHTML = '<table class="tbl"><thead><tr><th>Persona</th><th class="n">Ventas</th><th class="n">Días</th><th class="n">%</th><th class="n">Bono</th><th class="n">Propina</th><th class="n">Deuda + daños</th><th class="n">Del bono</th><th class="n">A nómina</th><th class="n">A pagar</th><th class="n">En Bs</th></tr></thead><tbody>' +
+    $("svcPersonas").innerHTML = '<table class="tbl"><thead><tr><th>Persona</th><th class="n">Ventas</th><th class="n">Días</th><th>Rendimiento</th><th class="n">%</th><th class="n">Bono</th><th class="n">Propina</th><th class="n">Deuda + daños</th><th class="n">Del bono</th><th class="n">A nómina</th><th class="n">A pagar</th><th class="n">En Bs</th></tr></thead><tbody>' +
       pe.map(function (l) {
         ["bonus", "tip", "fb", "tp", "pay"].forEach(function (x) { tot[x] += l.c[x]; });
         return '<tr data-line="' + d.lines.indexOf(l) + '"' + (l.active === false ? ' class="off"' : "") + '><td><b>' + esc(l.alias || l.label) + '</b><div class="muted" style="font-size:12px">' + esc(l.label) + (l.job ? " · " + esc(l.job) : "") + "</div></td>" +
-          '<td class="n">' + (l.sales != null ? money(l.sales) : '<span class="muted">—</span>') + '</td><td class="n">' + (num(l.days) || '<span class="muted">—</span>') + "</td>" +
+          '<td class="n">' + (l.sales != null ? money(l.sales) : '<span class="muted">—</span>') + '</td><td class="n">' + (num(l.days) || '<span class="muted">—</span>') + "</td>" + perfCell(l) +
           '<td class="n"><input class="pct n" inputmode="decimal" style="width:70px" value="' + esc(rv("p" + d.lines.indexOf(l), num(l.pct))) + '"' + dis + "></td>" +
           '<td class="n">' + money(l.c.bonus) + '</td><td class="n">' + money(l.c.tip) + '</td>' +
           '<td class="n">' + money(l.c.debt) + '<div><input class="dmg n" inputmode="decimal" placeholder="daños" title="Daños del mes" style="width:70px;margin-top:4px" value="' + esc(rv("d" + d.lines.indexOf(l), num(l.damages) ? num(l.damages) : "")) + '"' + dis + "></div></td>" +
           '<td class="n">' + (l.c.fb ? "−" + money(l.c.fb) : "—") + '</td><td class="n" style="color:' + (l.c.tp ? "var(--danger)" : "inherit") + '">' + (l.c.tp ? money(l.c.tp) : "—") + "</td>" +
           '<td class="n"><b>' + money(l.c.pay) + '</b></td><td class="n">' + bsOf(l.c.pay, k.rate) + "</td></tr>";
       }).join("") +
-      '<tr class="total"><td>Total personal</td><td></td><td></td><td class="n">' + nf2.format(pe.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(tot.bonus) + '</td><td class="n">' + money(tot.tip) +
+      '<tr class="total"><td>Total personal</td><td></td><td></td><td></td><td class="n">' + nf2.format(pe.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(tot.bonus) + '</td><td class="n">' + money(tot.tip) +
       '</td><td></td><td class="n">−' + money(tot.fb) + '</td><td class="n">' + money(tot.tp) + '</td><td class="n"><b>' + money(tot.pay) + '</b></td><td class="n">' + bsOf(tot.pay, k.rate) + "</td></tr></tbody></table>";
-    $("svcAddGasto").hidden = k.closed;
+    $("svcAddGasto").hidden = k.closed; drawPerfRules(k.closed);
     $("svcActions").innerHTML = k.closed
       ? '<span class="muted">Liquidado el ' + new Date(i.closed_at).toLocaleString("es-VE") + " por " + esc(i.closed_by) + '</span><span class="row"><button id="svcPrint">Imprimir</button><button class="danger" id="svcReopen">Reabrir (deshace los descuentos)</button></span>'
       : '<button id="svcSave">Guardar borrador</button><span class="row"><button id="svcPrint">Imprimir</button><button class="primary" id="svcClose">Liquidar y descontar deudas</button></span>';
@@ -576,7 +611,7 @@
     var el = key && document.querySelector(key);
     if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) { /* nada */ } }
   }
-  $("svcLiq").addEventListener("input", function (e) { if (e.target.matches("input:not([type=month])")) { svcReadForm(); svcRedraw(); } });
+  $("svcLiq").addEventListener("input", function (e) { if (e.target.matches("input:not([type=month])") && !e.target.closest("#perfRules")) { svcReadForm(); svcRedraw(); } });
   $("svcLiq").addEventListener("click", function (e) {
     var id = e.target.id, d = SV.data;
     if (id === "svcFill" || id === "svcZero") {

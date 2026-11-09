@@ -13,13 +13,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=cb5a253065">
+<link rel="stylesheet" href="pos.css?v=fd4abdc839">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=ac703fa2f3"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos.js?v=f2c5ba931c" defer></script>
+<script src="pos.js?v=df6ea58462" defer></script>
 </head>
 <body>
 <header>
@@ -47,7 +47,7 @@
 
   <!-- 2. ¿Quién eres? + PIN -->
   <section id="pin" class="hidden" style="max-width:720px;margin:10px auto">
-    <h2>¿Quién está usando la tablet?</h2>
+    <div class="row between"><h2 id="pinTitle" style="margin:0">¿Quién está usando la tablet?</h2><button type="button" id="markMode" class="markbtn">🕘 Marcar llegada o salida</button></div>
     <div class="people" id="people"></div>
     <div id="padBox" class="hidden">
       <p class="dots n" id="dots"></p>
@@ -148,6 +148,22 @@
   <p class="muted" style="margin:6px 0 0;font-size:13px">Pedidos del personal para llevar van en «Para llevar», no aquí.</p>
   <p id="dErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><button type="button" id="dCancel">Cancelar</button><button type="button" class="primary" id="dOk">Guardar</button></div>
+</dialog>
+
+<!-- Asistencia: marcar llegada, descanso y salida -->
+<dialog id="markDlg">
+  <h2 id="markTitle">Asistencia</h2>
+  <p class="muted" id="markToday"></p>
+  <div class="markopts" id="markOpts"></div>
+  <div class="row between" style="margin-top:12px"><span></span><button type="button" id="markClose">Cerrar</button></div>
+</dialog>
+
+<!-- Uniformes de hoy -->
+<dialog id="uniDlg">
+  <h2>Uniformes de hoy</h2>
+  <p class="muted">Quienes marcaron llegada hoy. Toca si vino con el uniforme completo o no; cuenta para el servicio del mes.</p>
+  <div id="uniBody"></div>
+  <div class="row between" style="margin-top:12px"><span></span><button type="button" id="uniClose">Listo</button></div>
 </dialog>
 
 <!-- Lista con casillas (agotados) o cantidades (inventario) -->

@@ -335,3 +335,11 @@
 .pill.ready { background:var(--ok); color:#fff; }
 .readybtn { width:100%; margin:6px 0; padding:12px; border:0; border-radius:12px; background:var(--ok); color:#fff; font-weight:800; animation:readyPulse 1.6s ease-in-out infinite; }
 @keyframes readyPulse { 50% { filter:brightness(1.15); } }
+.markbtn { font-weight:800; }
+body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-radius:16px; }
+.markopts { display:grid; gap:10px; }
+.markopts button { min-height:64px; font-size:20px; font-weight:800; }
+.unirow { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); }
+.unirow b { flex:1; }
+.unirow button.on.yes { background:var(--ok); color:#fff; }
+.unirow button.on.no { background:var(--danger); color:#fff; }

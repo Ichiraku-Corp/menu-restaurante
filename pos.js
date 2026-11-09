@@ -103,7 +103,7 @@
     U = null; pinBuf = ""; selected = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
     ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
     $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + avatar(s.name, s.id) + "<span>" + esc(s.name) + "</span></button>"; }).join("");
-    closeDialogs();
+    closeDialogs(); if (typeof setMarking === "function" && marking) setMarking(false);
   }
   var selected = null, pinBuf = "";
   $("people").addEventListener("click", function (e) {
@@ -122,8 +122,37 @@
     drawDots();
     if (pinBuf.length === 4) tryPin();
   });
+  // ---- Asistencia: marcar con el PIN, sin entrar a la tablet
+  var marking = false, markWho = null;
+  var MARKS = { "in": "Llegué", break_start: "Salgo a descanso", break_end: "Volví del descanso", out: "Me voy" };
+  function setMarking(on) {
+    marking = on; document.body.classList.toggle("marking", on);
+    $("pinTitle").textContent = on ? "¿Quién va a marcar?" : "¿Quién está usando la tablet?";
+    $("markMode").textContent = on ? "← Volver" : "🕘 Marcar llegada o salida";
+    selected = null; pinBuf = ""; show("padBox", false); document.querySelectorAll("#people button").forEach(function (x) { x.classList.remove("on"); });
+  }
+  $("markMode").addEventListener("click", function () { setMarking(!marking); });
+  function drawMark(st) {
+    $("markTitle").textContent = st.name || markWho.name;
+    $("markToday").textContent = st.events.length ? "Hoy: " + st.events.map(function (e) { return MARKS[e.kind] ? MARKS[e.kind].toLowerCase() + " " + new Date(e.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) : ""; }).filter(Boolean).join(" · ") : "Todavía no has marcado hoy.";
+    $("markOpts").innerHTML = st.next.map(function (k) { return '<button type="button" class="' + (k === "in" || k === "break_end" ? "ok" : k === "out" ? "danger" : "") + '" data-mark="' + k + '">' + MARKS[k] + "</button>"; }).join("");
+  }
+  $("markOpts").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-mark]"); if (!b || !markWho) return; b.disabled = true;
+    q(sb.rpc("pos_mark", { p_emp: markWho.id, p_pin: markWho.pin, p_kind: b.dataset.mark, p_device: devName() })).then(function () {
+      toast(MARKS[b.dataset.mark] + " · " + new Date().toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " ✓");
+      $("markDlg").close(); markWho = null; setMarking(false);
+    }).catch(function (err) { b.disabled = false; toast(errMsg(err), true); });
+  });
+  $("markClose").addEventListener("click", function () { $("markDlg").close(); markWho = null; setMarking(false); });
   function tryPin() {
     var emp = selected, pin = pinBuf;
+    if (marking) {
+      q(sb.rpc("pos_mark_status", { p_emp: emp.id, p_pin: pin })).then(function (st) {
+        pinBuf = ""; drawDots(); markWho = { id: emp.id, name: emp.name, pin: pin }; drawMark(st); $("markDlg").showModal();
+      }).catch(function (err) { pinBuf = ""; drawDots(); $("pinErr").textContent = /PIN/.test(errMsg(err)) ? "PIN incorrecto" : errMsg(err); });
+      return;
+    }
     q(sb.rpc("pos_check_pin", { p_emp: emp.id, p_pin: pin })).then(function (r) {
       if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
       U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
@@ -947,7 +976,7 @@
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
       h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
-        (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button>' : "") + "</div></div>";
+        (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button><button type="button" id="uniBtn" class="grow">Uniformes de hoy</button>' : "") + "</div></div>";
       $("cashBody").innerHTML = h;
       if (!$("cashDlg").open) $("cashDlg").showModal();
     }).catch(fail);
@@ -960,6 +989,7 @@
       }).catch(fail);
     } else if (id === "openCash") {
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
+    } else if (id === "uniBtn") { openUniforms();
     } else if (id === "tabsBtn") { openTabs();
     } else if (id === "buyBtn") { openPurchase();
     } else if (id === "cashOutBtn") { cashOut();
@@ -984,6 +1014,26 @@
       }).catch(fail);
     }
   });
+  // ---- Uniformes de hoy (cuentan para el servicio por rendimiento)
+  function openUniforms() {
+    rpc("pos_uniform_list", {}).then(function (list) {
+      $("uniBody").innerHTML = (list || []).length ? list.map(function (p) {
+        return '<div class="unirow" data-uni="' + p.id + '"><b>' + esc(p.name) + '</b><button type="button" class="yes' + (p.ok === true ? " on" : "") + '" data-ok="1">✓ Con uniforme</button>' +
+          '<button type="button" class="no' + (p.ok === false ? " on" : "") + '" data-ok="0">✗ Sin uniforme</button></div>';
+      }).join("") : '<p class="muted">Nadie ha marcado llegada hoy todavía (botón «Marcar llegada o salida» en la pantalla de PIN).</p>';
+      $("uniDlg").showModal();
+    }).catch(fail);
+  }
+  $("uniBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-ok]"); if (!b) return; var row = b.closest("[data-uni]"), ok = b.dataset.ok === "1";
+    var go = function (note) {
+      rpc("pos_uniform_set", { p_target: Number(row.dataset.uni), p_ok: ok, p_note: note || "" }).then(function () {
+        row.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      }).catch(fail);
+    };
+    if (ok) go(""); else ask({ title: "¿Qué faltó del uniforme?", help: "Ej.: delantal, gorro, camisa.", value: "" }).then(function (n) { if (n !== null) go(n); });
+  });
+  $("uniClose").addEventListener("click", function () { $("uniDlg").close(); });
   // Bolívares sin dormir: cuánto entró hoy en Bs, para cambiarlo o usarlo en compras antes de que pierda valor
   function bsReminder() {
     var bsTot = ["efectivo_bs", "pago_movil", "punto_debito", "punto_credito"].reduce(function (a, k) { return a + (EXPECTED[k] || 0); }, 0);
