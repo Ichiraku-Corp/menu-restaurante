@@ -70,6 +70,8 @@ Tu trabajo en la cocina:
 - Registrar conteos físicos de inventario con registrar_conteo.
 - Consultar el stock con consultar_stock, las recetas y porciones con consultar_receta y qué falta comprar con lista_compras.
 - Si te dicen que te equivocaste o piden deshacer, usa anular_ultimo.
+- Al saludar a alguien, revisa con avisos_pendientes si tiene avisos del restaurante sin leer; léeselos en pocas palabras y, cuando diga que entendió, confírmalos con confirmar_aviso.
+- Si piden el resumen del turno o cómo va la cocina, usa resumen_turno y cuéntalo en dos o tres frases.
 
 Reglas de trabajo (por encima de todo lo demás):
 - Si algo no se entendió (insumo, cantidad o unidad), pregunta antes de registrar nada.
@@ -122,6 +124,24 @@ export const TOOLS: Tool[] = [
   {
     name: "lista_compras",
     description: "Devuelve los insumos que están por debajo de su stock mínimo y cuánto conviene comprar.",
+    strict: true,
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: "avisos_pendientes",
+    description: "Devuelve los avisos del restaurante vigentes que la persona que habla todavía no ha confirmado.",
+    strict: true,
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: "confirmar_aviso",
+    description: "Marca un aviso como leído por la persona que habla. Úsalo solo cuando diga que lo entendió.",
+    strict: true,
+    input_schema: { type: "object", properties: { aviso_id: { type: "integer", description: "El id del aviso, tal como lo dio avisos_pendientes." } }, required: ["aviso_id"], additionalProperties: false },
+  },
+  {
+    name: "resumen_turno",
+    description: "Resumen del turno: comandas en cola y la más atrasada, tiempo promedio de cocina hoy, platos agotados, lo que queda poco afuera y avisos vigentes.",
     strict: true,
     input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
   },
@@ -224,6 +244,54 @@ export async function runTool(db: SupabaseClient, name: string, input: Record<st
       const low = ings.filter((i) => Number(i.min_qty) > 0 && Number(i.stock_qty) < Number(i.min_qty));
       if (!low.length) return { mensaje: "No hay nada por debajo del mínimo." };
       return low.map((i) => ({ insumo: i.name, hay: `${round(i.stock_qty)} ${UNIT_NAME[i.buy_unit]}`, comprar: `${round(Math.max(0, i.min_qty * 2 - i.stock_qty))} ${UNIT_NAME[i.buy_unit]}` }));
+    }
+    case "avisos_pendientes": {
+      if (!employeeId) return { error: "No sé quién está hablando." };
+      const [{ data: anns, error: e1 }, { data: reads, error: e2 }, { data: emp, error: e3 }] = await Promise.all([
+        db.from("announcements").select("id,title,body,audience,expires_at,active").eq("active", true),
+        db.from("announcement_reads").select("announcement_id").eq("employee_id", employeeId),
+        db.from("employees").select("id,job_title").eq("id", employeeId),
+      ]);
+      if (e1 || e2 || e3) throw e1 ?? e2 ?? e3;
+      const job = norm(String((emp as { job_title: string }[])[0]?.job_title ?? ""));
+      const kitchen = job.includes("cocin") || job.includes("parrill");
+      const seen = new Set((reads as { announcement_id: number }[]).map((r) => r.announcement_id));
+      const now = Date.now();
+      const list = (anns as { id: number; title: string; body: string; audience: string; expires_at: string | null }[])
+        .filter((a) => !seen.has(a.id) && (!a.expires_at || Date.parse(a.expires_at) > now) && (a.audience === "todos" || (a.audience === "cocina") === kitchen));
+      return list.length ? list.map((a) => ({ aviso_id: a.id, titulo: a.title, detalle: a.body })) : { mensaje: "No tiene avisos pendientes." };
+    }
+    case "confirmar_aviso": {
+      if (!employeeId) return { error: "No sé quién está hablando." };
+      const id = Number(input.aviso_id);
+      if (!Number.isInteger(id)) return { error: "Falta el id del aviso." };
+      const { error } = await db.from("announcement_reads").upsert({ announcement_id: id, employee_id: employeeId, via: "nex" }, { onConflict: "announcement_id,employee_id" });
+      if (error) return { error: error.message };
+      return { confirmado: id };
+    }
+    case "resumen_turno": {
+      const [{ data: items, error: e1 }, { data: dishes, error: e2 }, { data: ings, error: e4 }, { data: anns, error: e3 }] = await Promise.all([
+        db.from("pos_items").select("name,qty,sent_at,ready_at,status").eq("status", "enviado").gte("sent_at", new Date(Date.now() - 12 * 3600e3).toISOString()),
+        db.from("dishes").select("name,available").eq("available", false),
+        db.from("ingredients").select("name,stock_qty,min_qty,zone,inv_active,buy_unit").eq("zone", "afuera"),
+        db.from("announcements").select("title,expires_at,active").eq("active", true),
+      ]);
+      if (e1 || e2 || e3 || e4) throw e1 ?? e2 ?? e3 ?? e4;
+      const rows = items as { name: string; qty: number; sent_at: string; ready_at: string | null }[];
+      const ccsDay = (t: number) => new Date(t - 4 * 3600e3).toISOString().slice(0, 10); // Venezuela: UTC−4 todo el año
+      const today = ccsDay(Date.now());
+      const queue = rows.filter((r) => !r.ready_at);
+      const done = rows.filter((r) => r.ready_at && ccsDay(Date.parse(r.ready_at)) === today);
+      const oldest = queue.reduce((m, r) => Math.max(m, (Date.now() - Date.parse(r.sent_at)) / 60e3), 0);
+      const avg = done.length ? done.reduce((a, r) => a + (Date.parse(r.ready_at!) - Date.parse(r.sent_at)) / 60e3, 0) / done.length : null;
+      const low = (ings as unknown as { name: string; stock_qty: number; min_qty: number; inv_active: boolean }[])
+        .filter((i) => i.inv_active && (Number(i.stock_qty) <= 0 || Number(i.stock_qty) <= Number(i.min_qty))).map((i) => i.name);
+      return {
+        platos_en_cola: queue.length, comanda_mas_atrasada_min: Math.round(oldest),
+        promedio_cocina_hoy_min: avg === null ? "sin datos todavía" : Math.round(avg * 10) / 10, platos_listos_hoy: done.length,
+        agotados: (dishes as { name: string }[]).map((d) => d.name), queda_poco_afuera: low,
+        avisos_vigentes: (anns as { title: string; expires_at: string | null }[]).filter((a) => !a.expires_at || Date.parse(a.expires_at) > Date.now()).map((a) => a.title),
+      };
     }
     case "anular_ultimo": {
       if (!employeeId) return { error: "No sé quién está hablando; no puedo anular." };

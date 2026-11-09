@@ -15,6 +15,7 @@ function fakeDb(tables: Record<string, Row[]>) {
     from(t: string) {
       let rows = [...(tables[t] ?? [])];
       const q = {
+        upsert(row: Row) { (db as { upserts: { table: string; row: Row }[] }).upserts.push({ table: t, row }); (tables[t] = tables[t] ?? []).push(row); return Promise.resolve({ data: null, error: null }); },
         select() { return q; },
         order(c: string, o?: { ascending?: boolean }) { rows.sort((a, b) => (a[c]! > b[c]! ? 1 : -1) * (o?.ascending === false ? -1 : 1)); return q; },
         eq(c: string, v: unknown) { rows = rows.filter((r) => r[c] === v); return q; },
@@ -24,6 +25,7 @@ function fakeDb(tables: Record<string, Row[]>) {
       };
       return q;
     },
+    upserts: [] as { table: string; row: Row }[],
     rpc(fn: string, args: Row) {
       rpcCalls.push({ fn, args });
       const ing = tables.ingredients.find((i) => String(i.id) === args.p_ingredient)!;
@@ -159,4 +161,41 @@ Deno.test("si Claude rechaza, responde con amabilidad y no guarda nada", async (
   const out = await converse(client, db as any, [{ role: "user", content: "[Habla: Ana] hola" }], 1);
   eq(out.added, [], "nada que guardar");
   assert(out.reply.length > 0, "responde algo");
+});
+
+Deno.test("avisos: lista solo los vigentes no leídos y para su área; confirmar los marca leídos", async () => {
+  const t = { ...baseTables(),
+    employees: [{ id: 7, job_title: "Mesera" }, { id: 8, job_title: "Cocinero" }],
+    announcements: [
+      { id: 1, title: "Delantal negro", body: "Desde el lunes", audience: "todos", expires_at: null, active: true },
+      { id: 2, title: "Solo cocina", body: "", audience: "cocina", expires_at: null, active: true },
+      { id: 3, title: "Vencido", body: "", audience: "todos", expires_at: "2020-01-01T00:00:00Z", active: true },
+    ],
+    announcement_reads: [] as Row[] };
+  const db = fakeDb(t);
+  const r1 = await runTool(db as never, "avisos_pendientes", {}, 7) as { aviso_id: number }[];
+  eq(r1.map((a) => a.aviso_id), [1], "la mesera solo ve el aviso para todos y vigente");
+  const r2 = await runTool(db as never, "avisos_pendientes", {}, 8) as { aviso_id: number }[];
+  eq(r2.map((a) => a.aviso_id), [1, 2], "el cocinero también ve el de cocina");
+  eq(await runTool(db as never, "confirmar_aviso", { aviso_id: 1 }, 7), { confirmado: 1 }, "confirma el aviso");
+  const r3 = await runTool(db as never, "avisos_pendientes", {}, 7) as { mensaje: string };
+  assert(r3.mensaje, "ya no le queda nada pendiente");
+});
+
+Deno.test("resumen del turno: cola de cocina, agotados y lo que queda poco afuera", async () => {
+  const now = Date.now(), iso = (m: number) => new Date(now - m * 60e3).toISOString();
+  const t = { ...baseTables(),
+    pos_items: [
+      { name: "Teuchi", qty: 2, sent_at: iso(25), ready_at: null, status: "enviado" },
+      { name: "Gyozas", qty: 1, sent_at: iso(30), ready_at: iso(20), status: "enviado" },
+    ],
+    dishes: [{ name: "Luffy", available: false }],
+    announcements: [{ title: "Reunión martes", expires_at: null, active: true }] };
+  t.ingredients.push({ id: 99, name: "Agua", buy_unit: "unidad", stock_qty: 2, min_qty: 6, buy_price: 1, buy_qty: 1, zone: "afuera", inv_active: true } as never);
+  const r = await runTool(fakeDb(t) as never, "resumen_turno", {}, 7) as Record<string, unknown>;
+  eq(r.platos_en_cola, 1, "un plato esperando");
+  eq(r.comanda_mas_atrasada_min, 25, "el más atrasado lleva 25 min");
+  eq(r.promedio_cocina_hoy_min, 10, "promedio de hoy 10 min");
+  eq(r.agotados, ["Luffy"], "agotados");
+  eq(r.queda_poco_afuera, ["Agua"], "queda poco afuera");
 });

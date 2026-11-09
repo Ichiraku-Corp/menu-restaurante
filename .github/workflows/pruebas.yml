@@ -65,3 +65,14 @@ jobs:
         run: npm install --no-save --no-package-lock playwright@1.47.2 && npx playwright install --with-deps chromium
       - name: Recorrido de la caja en el navegador
         run: node pruebas-navegador/recorrido-caja.js && node pruebas-navegador/recorrido-cocina.js
+
+  nex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Nex (sin red: Claude y Supabase simulados)
+        run: deno test -A supabase/functions/tests/nex_test.ts && deno check supabase/functions/nex/index.ts

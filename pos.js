@@ -141,7 +141,8 @@
     var b = e.target.closest("[data-mark]"); if (!b || !markWho) return; b.disabled = true;
     q(sb.rpc("pos_mark", { p_emp: markWho.id, p_pin: markWho.pin, p_kind: b.dataset.mark, p_device: devName() })).then(function () {
       toast(MARKS[b.dataset.mark] + " · " + new Date().toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " ✓");
-      $("markDlg").close(); markWho = null; setMarking(false);
+      var who = markWho; $("markDlg").close(); markWho = null; setMarking(false);
+      if (b.dataset.mark === "in") showAnnouncements({ id: who.id, pin: who.pin });
     }).catch(function (err) { b.disabled = false; toast(errMsg(err), true); });
   });
   $("markClose").addEventListener("click", function () { $("markDlg").close(); markWho = null; setMarking(false); });
@@ -158,7 +159,7 @@
       U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
       document.body.classList.toggle("nocharge", !U.charge);
       show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-      touch(); keepAwake(); syncFull(); goTables();
+      touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin });
     }).catch(fail);
   }
   $("btnUser").addEventListener("click", lock);
@@ -976,7 +977,7 @@
           '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
       }
       h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
-        (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button><button type="button" id="uniBtn" class="grow">Uniformes de hoy</button>' : "") + "</div></div>";
+        (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button><button type="button" id="uniBtn" class="grow">Uniformes de hoy</button><button type="button" id="annBtn" class="grow">Publicar aviso</button>' : "") + "</div></div>";
       $("cashBody").innerHTML = h;
       if (!$("cashDlg").open) $("cashDlg").showModal();
     }).catch(fail);
@@ -990,6 +991,7 @@
     } else if (id === "openCash") {
       rpc("pos_cash_open", { p_usd: num($("fUsd").value), p_bs: num($("fBs").value) }).then(function () { toast("Caja abierta"); openCash(); }).catch(fail);
     } else if (id === "uniBtn") { openUniforms();
+    } else if (id === "annBtn") { publishAnnouncement();
     } else if (id === "tabsBtn") { openTabs();
     } else if (id === "buyBtn") { openPurchase();
     } else if (id === "cashOutBtn") { cashOut();
@@ -1014,6 +1016,42 @@
       }).catch(fail);
     }
   });
+  // ---- Avisos del restaurante: se muestran al entrar o al llegar, y cada uno se confirma con «Entendido»
+  var annWho = null;
+  function showAnnouncements(who) {
+    q(sb.rpc("pos_announcements", { p_emp: who.id, p_pin: who.pin })).then(function (list) {
+      if (!list || !list.length) return;
+      annWho = who; drawAnn(list); $("annDlg").showModal();
+    }).catch(function () { /* sin avisos: no bloquea el trabajo */ });
+  }
+  function drawAnn(list) {
+    $("annBody").innerHTML = list.map(function (a) {
+      return '<div class="ann" data-ann="' + a.id + '"><h3>' + esc(a.title) + "</h3>" + (a.body ? "<p>" + esc(a.body) + "</p>" : "") +
+        "<small>" + esc(a.by || "") + " · " + new Date(a.at).toLocaleDateString("es-VE", { day: "2-digit", month: "2-digit" }) + '</small><button type="button" class="primary" data-annok="' + a.id + '">Entendido ✓</button></div>';
+    }).join("");
+    $("annLeft").textContent = list.length + (list.length === 1 ? " aviso" : " avisos");
+  }
+  $("annBody").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-annok]"); if (!b || !annWho) return; b.disabled = true;
+    q(sb.rpc("pos_announcement_read", { p_emp: annWho.id, p_pin: annWho.pin, p_id: Number(b.dataset.annok) })).then(function () {
+      var card = b.closest(".ann"); card.remove(); var left = document.querySelectorAll("#annBody .ann").length;
+      $("annLeft").textContent = left ? left + (left === 1 ? " aviso" : " avisos") : "";
+      if (!left) { $("annDlg").close(); toast("Avisos leídos ✓"); }
+    }).catch(function (err) { b.disabled = false; toast(errMsg(err), true); });
+  });
+  $("annLater").addEventListener("click", function () { $("annDlg").close(); });
+  function publishAnnouncement() {
+    ask({ title: "Nuevo aviso: título", help: "Lo verá cada persona al entrar con su PIN o al marcar su llegada, y debe tocar «Entendido».", value: "" }).then(function (t) {
+      if (t === null || t.trim().length < 2) return;
+      ask({ title: "Detalle del aviso (opcional)", help: "Qué cambia, desde cuándo y qué hay que hacer.", value: "" }).then(function (body) {
+        if (body === null) return;
+        ask({ title: "¿Para quién?", help: "Escribe: todos, sala o cocina.", value: "todos" }).then(function (aud) {
+          if (aud === null) return; aud = String(aud).trim().toLowerCase(); if (["todos", "sala", "cocina"].indexOf(aud) < 0) aud = "todos";
+          rpc("pos_announcement_create", { p_title: t.trim(), p_body: body.trim(), p_audience: aud, p_days: 7 }).then(function () { toast("Aviso publicado para " + aud); }).catch(fail);
+        });
+      });
+    });
+  }
   // ---- Uniformes de hoy (cuentan para el servicio por rendimiento)
   function openUniforms() {
     rpc("pos_uniform_list", {}).then(function (list) {

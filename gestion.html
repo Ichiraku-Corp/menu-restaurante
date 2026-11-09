@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-9tiDIAIxhL+zGsY3ijP99AWTOTYMwG4fKoKhZtymnRk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-IyYANBXdrknwwcSCMC9rbpHXP4zRP26UDMZFIODUdk8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -145,6 +145,7 @@
       <button data-tab="historico">Histórico</button>
       <button data-tab="clientes">Clientes</button>
       <button data-tab="servicio">Servicio y bonos</button>
+      <button data-tab="avisos">Avisos</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -239,6 +240,22 @@
 
     <!-- Gastos -->
     <!-- Servicio y bonos -->
+    <!-- Avisos al personal -->
+    <section data-panel="avisos" hidden>
+      <div class="card">
+        <h2>Nuevo aviso</h2>
+        <p class="muted">Cada persona lo verá al entrar con su PIN o al marcar su llegada, y debe tocar «Entendido». Nex también lo lee en voz alta.</p>
+        <input id="annTitle" maxlength="120" placeholder="Título (ej.: Delantal negro obligatorio desde el lunes)">
+        <textarea id="annBody" maxlength="2000" placeholder="Detalle: qué cambia, desde cuándo y qué hay que hacer" style="margin-top:8px"></textarea>
+        <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+          <label>Para<select id="annAud"><option value="todos">Todos</option><option value="sala">Sala</option><option value="cocina">Cocina</option></select></label>
+          <label>Vigente por<select id="annDays"><option value="1">1 día</option><option value="3">3 días</option><option value="7" selected>7 días</option><option value="30">30 días</option></select></label>
+          <span style="flex:1"></span><button type="button" class="primary" id="annSave">Publicar aviso</button>
+        </div>
+      </div>
+      <div class="card"><h2>Avisos publicados</h2><div id="annList"><p class="muted">Cargando…</p></div></div>
+    </section>
+
     <section data-panel="servicio" hidden>
       <div class="card hidden" id="svcSetup"><p class="muted" style="margin:0">Para usar esta sección hay que ejecutar <code>supabase/servicio.sql</code>.</p></div>
       <div class="card">
@@ -663,6 +680,29 @@
       onSave: function (v) { return q(sb.rpc("svc_tab_move", { p_emp: t.id, p_kind: v.kind, p_amount: num(v.amount), p_note: v.note || "" })).then(loadServicio); } });
   });
 
+  // ---------------------------------------------------------------- Avisos al personal (con confirmación de lectura)
+  function loadAvisos() {
+    return q(sb.rpc("announcements_admin")).then(function (list) {
+      $("annList").innerHTML = (list || []).length ? list.map(function (a) {
+        return '<div class="card" style="margin:8px 0;padding:12px' + (a.active ? "" : ";opacity:.6") + '"><div class="row between"><b>' + esc(a.title) + "</b>" +
+          (a.active ? '<button type="button" data-annclose="' + a.id + '">Quitar</button>' : '<span class="muted">vencido</span>') + "</div>" +
+          (a.body ? '<p style="margin:6px 0;white-space:pre-wrap">' + esc(a.body) + "</p>" : "") +
+          '<p class="muted" style="margin:4px 0">' + esc(a.by) + " · para " + esc(a.audience) + " · " + new Date(a.at).toLocaleString("es-VE") + "</p>" +
+          '<p style="margin:4px 0"><b style="color:var(--ok)">Leyeron (' + a.read.length + "):</b> " + (a.read.map(esc).join(", ") || "nadie todavía") + "</p>" +
+          (a.missing.length ? '<p style="margin:4px 0"><b style="color:var(--danger)">Faltan (' + a.missing.length + "):</b> " + a.missing.map(esc).join(", ") + "</p>" : '<p style="margin:4px 0;color:var(--ok)">Todos lo leyeron ✓</p>') + "</div>";
+      }).join("") : '<p class="muted">Todavía no hay avisos.</p>';
+    }).catch(fail);
+  }
+  $("annSave").addEventListener("click", function () {
+    var t = $("annTitle").value.trim(); if (t.length < 2) return toast("Escribe el título del aviso");
+    q(sb.rpc("announcement_save", { p_title: t, p_body: $("annBody").value.trim(), p_audience: $("annAud").value, p_days: Number($("annDays").value) }))
+      .then(function () { $("annTitle").value = ""; $("annBody").value = ""; toast("Aviso publicado"); return loadAvisos(); }).catch(fail);
+  });
+  $("annList").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-annclose]"); if (!b || !confirm("¿Quitar este aviso? Ya no se le mostrará a nadie.")) return;
+    q(sb.rpc("announcement_close", { p_id: Number(b.dataset.annclose) })).then(loadAvisos).catch(fail);
+  });
+
   // ---------------------------------------------------------------- Pestañas
   $("tabs").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-tab]"); if (!b) return;
@@ -670,6 +710,7 @@
     document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
     try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
     if (b.getAttribute("data-tab") === "historico" && S.histDays !== undefined) renderHistorico(); // los gráficos necesitan el ancho visible
+    if (b.getAttribute("data-tab") === "avisos") loadAvisos();
   });
   try { var t0 = sessionStorage.getItem("gestion-tab"); if (t0) { var b0 = document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); } } catch (e) {}
   $("month").value = $("expMonth").value = ymNow();

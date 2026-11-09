@@ -41,7 +41,12 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#markOpts [data-mark="in"]'); await page.waitForTimeout(300);
     ok(await S(() => (window.__S.marks || []).some((m) => m.emp === 1 && m.kind === "in")), "la llegada queda marcada");
     ok(!(await page.isVisible("#tablesView")), "marcar no entra a la tablet");
+    await S(() => { window.__S.anns = [{ id: 900, title: "Delantal obligatorio", body: "Desde hoy", by: "Gestión", at: new Date().toISOString(), read: [] }]; });
     await pin(2, "2222"); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });
+    await page.waitForSelector("#annDlg[open]", { timeout: 3000 });
+    ok(/Delantal obligatorio/.test(await page.textContent("#annBody")), "al entrar le sale el aviso pendiente");
+    await page.click('#annBody [data-annok="900"]'); await page.waitForTimeout(300);
+    ok(!(await page.isVisible("#annDlg")) && await S(() => window.__S.anns[0].read.includes(2)), "«Entendido» confirma la lectura y cierra");
     ok(true, "la cajera entra con su PIN");
 
     // Abrir caja

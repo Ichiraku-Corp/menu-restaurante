@@ -343,3 +343,7 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 .unirow b { flex:1; }
 .unirow button.on.yes { background:var(--ok); color:#fff; }
 .unirow button.on.no { background:var(--danger); color:#fff; }
+.ann { padding:12px; margin-top:10px; border-radius:14px; background:var(--info-soft); }
+.ann h3 { margin:0 0 4px; }
+.ann p { margin:0 0 8px; white-space:pre-wrap; }
+.ann small { display:block; color:var(--muted); margin-bottom:8px; }

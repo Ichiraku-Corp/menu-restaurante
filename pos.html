@@ -13,13 +13,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=fd4abdc839">
+<link rel="stylesheet" href="pos.css?v=d5afdec9d7">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=ac703fa2f3"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos.js?v=df6ea58462" defer></script>
+<script src="pos.js?v=625ef249f4" defer></script>
 </head>
 <body>
 <header>
@@ -156,6 +156,13 @@
   <p class="muted" id="markToday"></p>
   <div class="markopts" id="markOpts"></div>
   <div class="row between" style="margin-top:12px"><span></span><button type="button" id="markClose">Cerrar</button></div>
+</dialog>
+
+<!-- Avisos del restaurante (se confirman con «Entendido») -->
+<dialog id="annDlg">
+  <h2 id="annTitle">Avisos para ti</h2>
+  <div id="annBody"></div>
+  <div class="row between" style="margin-top:12px"><span class="muted" id="annLeft"></span><button type="button" id="annLater">Después</button></div>
 </dialog>
 
 <!-- Uniformes de hoy -->
