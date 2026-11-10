@@ -6,8 +6,9 @@
 --   · gastos (alcaldía/impuestos, transporte, bolsas de comida, almuerzo, alquiler…)
 --   · personas (bono según rendimiento: puntualidad, ventas, velocidad de cocina)
 -- Las propinas registradas al cobrar se reparten en partes iguales entre las personas con % > 0.
--- Las deudas del personal (cuentas en caja) se descuentan del bono hasta Ref 50;
--- lo que pase de 50 se descuenta en la siguiente nómina.
+-- Las deudas del personal (cuentas en caja) se descuentan del bono hasta Ref 40 (max_from_bonus);
+-- lo que pase se descuenta en la quincena. Con deduct_debts = false el mes se paga completo
+-- y las deudas quedan pendientes en las cuentas para el siguiente pago.
 -- =====================================================================================
 
 create table if not exists public.svc_months (
@@ -40,6 +41,8 @@ create table if not exists public.svc_lines (
   pay_ref      numeric(12,2)
 );
 create index if not exists svc_lines_month on public.svc_lines (month);
+alter table public.svc_months add column if not exists deduct_debts boolean not null default true;
+alter table public.svc_months alter column max_from_bonus set default 40;
 alter table public.svc_months enable row level security;
 alter table public.svc_lines enable row level security;
 do $$
@@ -124,7 +127,9 @@ begin
   if not public.can_manage() then raise exception 'Sin permiso'; end if;
   if (select status from public.svc_months where month = m) = 'liquidado' then raise exception 'Ese mes ya está liquidado'; end if;
   update public.svc_months set service_manual = nullif(p_data ->> 'service_manual', '')::numeric, tips_manual = nullif(p_data ->> 'tips_manual', '')::numeric,
-    rate = coalesce(nullif(p_data ->> 'rate', '')::numeric, rate), notes = coalesce(p_data ->> 'notes', notes) where month = m;
+    rate = coalesce(nullif(p_data ->> 'rate', '')::numeric, rate), notes = coalesce(p_data ->> 'notes', notes),
+    deduct_debts = coalesce((p_data ->> 'deduct_debts')::boolean, deduct_debts),
+    max_from_bonus = coalesce(abs(nullif(p_data ->> 'max_from_bonus', '')::numeric), max_from_bonus) where month = m;
   delete from public.svc_lines where month = m;
   insert into public.svc_lines (month, kind, employee_id, label, pct, damages, note, position)
   select m, x.kind, x.employee_id, coalesce(x.label, ''), coalesce(x.pct, 0), coalesce(x.damages, 0), coalesce(x.note, ''), coalesce(x.position, 0)
@@ -152,12 +157,14 @@ begin
     debt := 0; fb := 0; tp := 0;
     if l.kind = 'persona' and l.employee_id is not null then
       debt := greatest(public.pos_tab_balance(l.employee_id), 0) + l.damages;
-      fb := least(debt, mi.max_from_bonus, bonus + tip);
-      tp := debt - fb;
+      if mi.deduct_debts then
+        fb := least(debt, mi.max_from_bonus, bonus + tip);
+        tp := debt - fb;
+      end if;  -- si no se descuenta, la deuda queda pendiente en la cuenta
       if fb > 0 then insert into public.pos_tab_moves (employee_id, kind, amount_ref, month, note, created_by)
         values (l.employee_id, 'descuento_bono', -fb, m, 'Descontado del bono de servicio ' || to_char(m, 'MM/YYYY'), who); end if;
       if tp > 0 then insert into public.pos_tab_moves (employee_id, kind, amount_ref, month, note, created_by)
-        values (l.employee_id, 'descuento_nomina', -tp, m, 'Pasa a la siguiente nómina (excede Ref ' || mi.max_from_bonus || ')', who); end if;
+        values (l.employee_id, 'descuento_nomina', -tp, m, 'Pasa a la quincena (excede Ref ' || mi.max_from_bonus || ')', who); end if;
       if l.damages > 0 then  -- los daños se suman a la cuenta para que el descuento cuadre
         insert into public.pos_tab_moves (employee_id, kind, amount_ref, month, note, created_by) values (l.employee_id, 'ajuste', l.damages, m, 'Daños ' || to_char(m, 'MM/YYYY'), who);
       end if;
