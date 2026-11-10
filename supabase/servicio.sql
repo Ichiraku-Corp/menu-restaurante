@@ -43,6 +43,8 @@ create table if not exists public.svc_lines (
 create index if not exists svc_lines_month on public.svc_lines (month);
 alter table public.svc_months add column if not exists deduct_debts boolean not null default true;
 alter table public.svc_months alter column max_from_bonus set default 40;
+-- false = lo que el bono no cubre queda pendiente en la cuenta (se descuenta en el siguiente pago) en vez de pasar a quincena
+alter table public.svc_months add column if not exists rest_to_payroll boolean not null default true;
 alter table public.svc_months enable row level security;
 alter table public.svc_lines enable row level security;
 do $$
@@ -129,6 +131,7 @@ begin
   update public.svc_months set service_manual = nullif(p_data ->> 'service_manual', '')::numeric, tips_manual = nullif(p_data ->> 'tips_manual', '')::numeric,
     rate = coalesce(nullif(p_data ->> 'rate', '')::numeric, rate), notes = coalesce(p_data ->> 'notes', notes),
     deduct_debts = coalesce((p_data ->> 'deduct_debts')::boolean, deduct_debts),
+    rest_to_payroll = coalesce((p_data ->> 'rest_to_payroll')::boolean, rest_to_payroll),
     max_from_bonus = coalesce(abs(nullif(p_data ->> 'max_from_bonus', '')::numeric), max_from_bonus) where month = m;
   delete from public.svc_lines where month = m;
   insert into public.svc_lines (month, kind, employee_id, label, pct, damages, note, position)
@@ -159,7 +162,7 @@ begin
       debt := greatest(public.pos_tab_balance(l.employee_id), 0) + l.damages;
       if mi.deduct_debts then
         fb := least(debt, mi.max_from_bonus, bonus + tip);
-        tp := debt - fb;
+        tp := case when mi.rest_to_payroll then debt - fb else 0 end;
       end if;  -- si no se descuenta, la deuda queda pendiente en la cuenta
       if fb > 0 then insert into public.pos_tab_moves (employee_id, kind, amount_ref, month, note, created_by)
         values (l.employee_id, 'descuento_bono', -fb, m, 'Descontado del bono de servicio ' || to_char(m, 'MM/YYYY'), who); end if;

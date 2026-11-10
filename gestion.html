@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-cdkCCeomE/Dk7wCXEPuIMqV3jUhWxCkD5z+BW14Gq6I='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-dmivm3PtAv1sSCZvfUVCSrM497pftwP8q0BSI3LOt7I='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -534,14 +534,14 @@
     var d = SV.data, i = d.info || {}, closed = i.status === "liquidado";
     var auto = num(d.service_hist) + num(d.service_pos), svc = i.service_manual != null && i.service_manual !== "" ? num(i.service_manual) : auto;
     var tipsAuto = num(d.tips_pos), tips = i.tips_manual != null && i.tips_manual !== "" ? num(i.tips_manual) : tipsAuto;
-    var n = d.lines.filter(function (l) { return l.kind === "persona" && num(l.pct) > 0; }).length, cap = i.max_from_bonus != null ? num(i.max_from_bonus) : 40, ded = i.deduct_debts !== false;
+    var n = d.lines.filter(function (l) { return l.kind === "persona" && num(l.pct) > 0; }).length, cap = i.max_from_bonus != null ? num(i.max_from_bonus) : 40, ded = i.deduct_debts !== false, rtp = i.rest_to_payroll !== false;
     d.lines.forEach(function (l) {
       if (closed && l.bonus_ref != null) { l.c = { bonus: num(l.bonus_ref), tip: num(l.tip_ref), debt: num(l.debt_ref), fb: num(l.from_bonus), tp: num(l.to_payroll), pay: num(l.pay_ref) }; return; }
       var bonus = Math.round(svc * num(l.pct)) / 100, tip = l.kind === "persona" && num(l.pct) > 0 && n ? Math.round(tips / n * 100) / 100 : 0;
-      var debt = l.kind === "persona" ? Math.max(0, num(l.debt_now)) + num(l.damages) : 0, fb = ded ? Math.min(debt, cap, bonus + tip) : 0, tp = ded ? Math.round((debt - fb) * 100) / 100 : 0;
+      var debt = l.kind === "persona" ? Math.max(0, num(l.debt_now)) + num(l.damages) : 0, fb = ded ? Math.min(debt, cap, bonus + tip) : 0, tp = ded && rtp ? Math.round((debt - fb) * 100) / 100 : 0;
       l.c = { bonus: bonus, tip: tip, debt: debt, fb: Math.round(fb * 100) / 100, tp: tp, pay: Math.round((bonus + tip - fb) * 100) / 100 };
     });
-    return { svc: svc, auto: auto, tips: tips, tipsAuto: tipsAuto, closed: closed, rate: num(i.rate), cap: cap, ded: ded,
+    return { svc: svc, auto: auto, tips: tips, tipsAuto: tipsAuto, closed: closed, rate: num(i.rate), cap: cap, ded: ded, rtp: rtp,
              pct: d.lines.reduce(function (a, l) { return a + num(l.pct); }, 0) };
   }
   // Lo que se está escribiendo se respeta tal cual (p. ej. «3,» a medio escribir) mientras todo se recalcula en vivo
@@ -586,6 +586,8 @@
       '<div class="kpi"><span>Tasa BCV para pagar</span><b>' + (k.rate ? nf2.format(k.rate) : "—") + '</b><label class="muted" style="font-size:12px">Bs por 1 €<input id="svcRate" class="n" inputmode="decimal" value="' + esc(rv("r", i.rate || "")) + '"' + dis + "></label></div>" +
       '<div class="kpi"><span>Deudas del personal</span><label style="display:flex;gap:6px;align-items:center;margin:6px 0;color:var(--text);font-size:14px"><input type="checkbox" id="svcDed"' + (k.ded ? " checked" : "") + dis + '> Descontar este mes</label>' +
         '<label class="muted" style="font-size:12px">Tope del bono (Ref); lo demás va a quincena<input id="svcCap" class="n" inputmode="decimal" value="' + esc(rv("c", k.cap)) + '"' + (k.ded ? dis : " disabled") + "></label>" +
+        '<label style="display:flex;gap:6px;align-items:center;margin:6px 0 0;color:var(--text);font-size:13px"><input type="checkbox" id="svcRtp"' + (k.rtp ? " checked" : "") + (k.ded ? dis : " disabled") + '> Lo que no alcance pasa a quincena</label>' +
+        (k.ded && !k.rtp ? '<span class="muted" style="font-size:12px">Lo que no alcance queda pendiente en la cuenta</span>' : "") +
         (k.ded ? "" : '<span style="color:var(--warn)">Se paga el bono completo; las deudas quedan pendientes</span>') + "</div>" +
       '<div class="kpi"><span>Porcentaje asignado</span><b style="color:' + (k.pct > 100.0001 ? "var(--danger)" : "inherit") + '">' + nf2.format(k.pct) + ' %</b><span>' + (left > 0 ? "Sin asignar: " + nf2.format(left) + " % (" + money(k.svc * left / 100) + ")" : left < 0 ? "¡Pasa del 100 %!" : "Todo asignado") + "</span></div>";
     var g = d.lines.filter(function (l) { return l.kind === "gasto"; }), pe = d.lines.filter(function (l) { return l.kind === "persona"; });
@@ -609,7 +611,7 @@
           '<td class="n"><input class="pct n" inputmode="decimal" style="width:70px" value="' + esc(rv("p" + d.lines.indexOf(l), num(l.pct))) + '"' + dis + "></td>" +
           '<td class="n">' + money(l.c.bonus) + '</td><td class="n">' + money(l.c.tip) + '</td>' +
           '<td class="n">' + money(l.c.debt) + '<div><input class="dmg n" inputmode="decimal" placeholder="daños" title="Daños del mes" style="width:70px;margin-top:4px" value="' + esc(rv("d" + d.lines.indexOf(l), num(l.damages) ? num(l.damages) : "")) + '"' + dis + "></div></td>" +
-          '<td class="n">' + (l.c.fb ? "−" + money(l.c.fb) : "—") + '</td><td class="n" style="color:' + (l.c.tp ? "var(--danger)" : "inherit") + '">' + (l.c.tp ? money(l.c.tp) : "—") + "</td>" +
+          '<td class="n">' + (l.c.fb ? "−" + money(l.c.fb) : "—") + '</td><td class="n" style="color:' + (l.c.tp ? "var(--danger)" : "inherit") + '">' + (l.c.tp ? money(l.c.tp) : l.c.debt - l.c.fb > 0.004 ? '<span class="muted">queda ' + money(l.c.debt - l.c.fb) + "</span>" : "—") + "</td>" +
           '<td class="n"><b>' + money(l.c.pay) + '</b></td><td class="n">' + bsOf(l.c.pay, k.rate) + "</td></tr>";
       }).join("") +
       '<tr class="total"><td>Total personal</td><td></td><td></td><td></td><td class="n">' + nf2.format(pe.reduce(function (a, l) { return a + num(l.pct); }, 0)) + ' %</td><td class="n">' + money(tot.bonus) + '</td><td class="n">' + money(tot.tip) +
@@ -623,7 +625,7 @@
     var d = SV.data, i = d.info || (d.info = {});
     SV.raw = {};
     if ($("svcManual")) { SV.raw.m = $("svcManual").value; SV.raw.t = $("svcTips").value; SV.raw.r = $("svcRate").value; i.service_manual = $("svcManual").value.trim() === "" ? null : num($("svcManual").value); i.tips_manual = $("svcTips").value.trim() === "" ? null : num($("svcTips").value); i.rate = num($("svcRate").value) || i.rate;
-      i.deduct_debts = $("svcDed").checked; SV.raw.c = $("svcCap").value; if ($("svcCap").value.trim() !== "") i.max_from_bonus = Math.max(0, num($("svcCap").value)); }
+      i.deduct_debts = $("svcDed").checked; i.rest_to_payroll = $("svcRtp").checked; SV.raw.c = $("svcCap").value; if ($("svcCap").value.trim() !== "") i.max_from_bonus = Math.max(0, num($("svcCap").value)); }
     document.querySelectorAll("#svcLiq [data-line]").forEach(function (tr) {
       var l = d.lines[Number(tr.dataset.line)]; var lb = tr.querySelector(".lbl"), pc = tr.querySelector(".pct"), dm = tr.querySelector(".dmg");
       if (lb) l.label = lb.value; if (pc) { l.pct = num(pc.value); SV.raw["p" + tr.dataset.line] = pc.value; } if (dm) { l.damages = num(dm.value); SV.raw["d" + tr.dataset.line] = dm.value; }
@@ -657,11 +659,11 @@
       svcReadForm(); $("svcErr").textContent = "";
       var k = svcCalc(); if (k.pct > 100.0001) { $("svcErr").textContent = "Los porcentajes suman más de 100 %."; return; }
       var payload = { service_manual: d.info.service_manual == null ? "" : String(d.info.service_manual), tips_manual: d.info.tips_manual == null ? "" : String(d.info.tips_manual), rate: String(d.info.rate || ""),
-        deduct_debts: d.info.deduct_debts !== false, max_from_bonus: String(d.info.max_from_bonus != null ? d.info.max_from_bonus : 40),
+        deduct_debts: d.info.deduct_debts !== false, rest_to_payroll: d.info.rest_to_payroll !== false, max_from_bonus: String(d.info.max_from_bonus != null ? d.info.max_from_bonus : 40),
         lines: d.lines.map(function (l, ix) { return { kind: l.kind, employee_id: l.employee_id || null, label: l.label, pct: num(l.pct), damages: num(l.damages), note: l.note || "", position: ix }; }) };
       var p = q(sb.rpc("svc_month_save", { p_month: String(d.month), p_data: payload }));
       if (id === "svcClose") {
-        if (!confirm("¿Liquidar " + svLabel(String(d.month)) + "? " + (k.ded ? "Se descontarán las deudas de las cuentas del personal (hasta Ref " + nf2.format(k.cap) + " del bono; el resto pasa a la quincena)." : "Se paga el bono completo y las deudas quedan pendientes en las cuentas."))) return;
+        if (!confirm("¿Liquidar " + svLabel(String(d.month)) + "? " + (k.ded ? "Se descontarán las deudas de las cuentas del personal (hasta Ref " + nf2.format(k.cap) + " del bono; " + (k.rtp ? "el resto pasa a la quincena)." : "lo que no alcance queda pendiente en la cuenta).") : "Se paga el bono completo y las deudas quedan pendientes en las cuentas."))) return;
         p = p.then(function () { return q(sb.rpc("svc_month_close", { p_month: String(d.month) })); });
       }
       p.then(function () { toast(id === "svcClose" ? "Mes liquidado" : "Borrador guardado"); return loadServicio(); }).catch(function (e2) { $("svcErr").textContent = e2.message || String(e2); });

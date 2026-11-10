@@ -28,3 +28,16 @@ select prueba.ok((:'l'::jsonb ->> 'from_bonus')::numeric = 40 and (:'l'::jsonb -
 reset role;
 select prueba.ok(public.pos_tab_balance(:mesera) = 0, 'descontando, la cuenta queda en cero');
 \echo 'TODAS LAS PRUEBAS DEL SERVICIO PASARON'
+-- Lo que el bono no cubre queda pendiente en la cuenta (no pasa a quincena)
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"dueno@prueba.test","aal":"aal2"}', false);
+select public.svc_month_reopen('2026-01-01');
+select public.svc_month_save('2026-01-01', jsonb_build_object('service_manual', '200', 'deduct_debts', true, 'rest_to_payroll', false,
+  'lines', jsonb_build_array(jsonb_build_object('kind', 'persona', 'employee_id', :mesera, 'pct', 10))));
+select public.svc_month_close('2026-01-01') is not null;
+select (select x from jsonb_array_elements(public.svc_month('2026-01-01') -> 'lines') x where (x ->> 'employee_id')::bigint = :mesera) as l \gset
+select prueba.ok((:'l'::jsonb ->> 'from_bonus')::numeric = 20 and (:'l'::jsonb ->> 'to_payroll')::numeric = 0 and (:'l'::jsonb ->> 'pay_ref')::numeric = 0,
+  'bono de 20 con deuda de 70: se descuentan 20, cobra 0 (nunca negativo)');
+reset role;
+select prueba.ok(public.pos_tab_balance(:mesera) = 50, 'los 50 que faltaron quedan pendientes en la cuenta');
+\echo 'TODAS LAS PRUEBAS DEL SERVICIO (PENDIENTE) PASARON'
