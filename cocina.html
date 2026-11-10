@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Cygh2MQmXAaTjNJX613iXNflJ0lmV1xJ4OukFruuYpw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-K1ZlYOiPs1qOLaurWsVnQsScCwSW9sPUhiMzzfgcd3Q='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#2a1220">
@@ -152,6 +152,12 @@
 (function () {
   "use strict";
   var C = window.MENU_CONFIG || {};
+  if (!C.NEX_ENABLED) {
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:24px">' +
+      '<h1 style="margin:0">Nex está en preparación 🎀</h1><p style="max-width:420px;color:#d7b3c4">Volverá cuando su avatar esté listo. Mientras tanto, la cocina trabaja con la pantalla de comandas.</p>' +
+      '<a href="comandas.html" style="background:#e5206b;color:#fff;padding:14px 22px;border-radius:14px;font-weight:800;text-decoration:none">Abrir pantalla de comandas</a></div>';
+    return;
+  }
   var $ = function (id) { return document.getElementById(id); };
   var IDLE_MS = 3 * 60 * 1000, MAX_MSGS = 60;
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);

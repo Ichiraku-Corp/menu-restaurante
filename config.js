@@ -7,6 +7,8 @@ window.MENU_CONFIG = {
   SUPABASE_ANON_KEY: "sb_publishable_uj5tuhHYTNmJNYaLzQjGjQ_fVJzcHq3",
   // Sentry: avisa de errores de la caja, las tablets y Gestión. La DSN es pública (solo permite enviar errores).
   SENTRY_DSN: "https://53b0d19d069528d77fd7488cb56edac7@o4512402789433344.ingest.us.sentry.io/4512402837798912",
+  // Nex (asistente con voz): apagada hasta tener el avatar VTuber. Para encenderla: true y publicar la función nex.
+  NEX_ENABLED: false,
   RESTAURANT_NAME: "Ichiraku Ramen",
   TAGLINE: "Ramen · Sushi · Postres japoneses",
   // Los precios se muestran como "Ref 2.5". Para usar una moneda normal,
