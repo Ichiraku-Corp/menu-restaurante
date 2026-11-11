@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: "20"
       - name: Sintaxis de los programas
-        run: for f in pos.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
+        run: for f in pos-*.js comandas.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
       - name: Política de seguridad de las páginas al día
         run: node scripts/csp.js --check
       - name: Los reportes por correo se generan sin errores
@@ -69,7 +69,7 @@ jobs:
       - name: Instalar navegador de pruebas
         run: npm install --no-save --no-package-lock playwright@1.47.2 && npx playwright install --with-deps chromium
       - name: Recorrido de la caja en el navegador
-        run: node pruebas-navegador/recorrido-caja.js && node pruebas-navegador/recorrido-cocina.js && node pruebas-navegador/recorrido-whatsapp.js
+        run: node pruebas-navegador/recorrido-caja.js && node pruebas-navegador/recorrido-cocina.js && node pruebas-navegador/recorrido-gestion.js && node pruebas-navegador/recorrido-whatsapp.js
 
   nex:
     runs-on: ubuntu-latest

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-dmivm3PtAv1sSCZvfUVCSrM497pftwP8q0BSI3LOt7I='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-p33wyVFzVIs++ox5PcFnhn1af6YdRQiW9jsz9k3zcDs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -108,7 +108,7 @@
 </style>
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
-<script src="monitoreo.js?v=ac703fa2f3"></script>
+<script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="mfa.js?v=6cc3aca8ac"></script>
 </head>
@@ -156,6 +156,7 @@
       <button data-tab="insumos">Insumos</button>
       <button data-tab="recetas">Recetas</button>
       <button data-tab="areas">Áreas</button>
+      <button data-tab="importar">Cargar datos</button>
     </nav>
 
     <!-- Resumen -->
@@ -349,6 +350,33 @@
         <h2>Costo por receta</h2>
         <p class="muted">Toca un plato para cargar sus ingredientes. Costo de insumos sobre el precio de venta <b>sin IVA</b>: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
         <div class="scroll" id="recList"></div>
+      </div>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Rentabilidad del menú</h2>
+          <select id="meDays" style="width:auto" aria-label="Período"><option value="30">Últimos 30 días</option><option value="60">Últimos 60 días</option><option value="90">Últimos 90 días</option></select></div>
+        <p class="muted">Cruza lo vendido en caja con el costo de cada receta (precios sin IVA). Un plato es <b>popular</b> si vende al menos el 70 % del promedio, y <b>deja bien</b> si su ganancia por plato supera el promedio del menú.</p>
+        <div class="kpis" id="meKpis"></div>
+        <div class="scroll" id="meList" style="margin-top:10px"></div>
+      </div>
+    </section>
+
+    <!-- Cargar datos desde planillas -->
+    <section data-panel="importar" hidden>
+      <div class="card">
+        <h2>Cargar datos desde una planilla</h2>
+        <p class="muted">1) Elige qué vas a cargar · 2) Descarga la plantilla (o usa tu planilla con esos títulos) · 3) Copia las celdas en Excel o Google Sheets, con la fila de títulos, y pégalas aquí, o sube el archivo CSV · 4) Toca <b>Revisar</b>: no se guarda nada hasta que toques <b>Cargar</b>.</p>
+        <div class="row" style="gap:8px">
+          <label style="margin:0">Qué cargar<select id="impKind" style="width:auto">
+            <option value="insumos">Insumos (primero)</option><option value="proveedores">Proveedores</option>
+            <option value="recetas">Recetas (después de los insumos)</option><option value="clientes">Clientes</option></select></label>
+          <button type="button" id="impTpl">Descargar plantilla</button>
+          <label class="btn" style="margin:0;color:var(--text);font-size:15px">Subir CSV<input type="file" id="impFile" accept=".csv,.tsv,.txt,text/csv" hidden></label>
+        </div>
+        <p class="muted" id="impCols"></p>
+        <textarea id="impText" placeholder="Pega aquí las celdas copiadas (con la fila de títulos)" style="min-height:150px;font-family:ui-monospace,monospace;font-size:13px"></textarea>
+        <div class="row" style="margin-top:8px"><button type="button" id="impCheck">Revisar</button><button type="button" class="primary" id="impGo" disabled>Cargar</button></div>
+        <div id="impSum" style="margin-top:10px"></div>
+        <div class="scroll" id="impPrev"></div>
       </div>
     </section>
 
@@ -1422,7 +1450,53 @@
       if (list.length) html += "<h3>" + esc(c.name) + "</h3>" + recTable(list);
     });
     $("recList").innerHTML = html;
+    renderMenuEng();
   }
+  // Rentabilidad del menú: popularidad × ganancia por plato
+  var ME = { days: 30, sales: null, loading: false };
+  function renderMenuEng() {
+    var days = Number($("meDays").value) || 30;
+    if (ME.sales === null || ME.days !== days) {
+      if (ME.loading) return; ME.loading = true; ME.days = days;
+      var to = new Date(), from = new Date(Date.now() - (days - 1) * 86400000), f = function (d) { return d.toLocaleDateString("en-CA", { timeZone: TZ }); };
+      $("meList").innerHTML = '<p class="muted">Cargando ventas…</p>';
+      opt(sb.rpc("menu_sales", { p_from: f(from), p_to: f(to) })).then(function (r) { ME.loading = false; ME.sales = r || []; ME.missing = r === null; renderMenuEng(); });
+      return;
+    }
+    if (ME.missing) { $("meList").innerHTML = '<p class="muted">Para ver esto hay que ejecutar <code>supabase/datos.sql</code>.</p>'; $("meKpis").innerHTML = ""; return; }
+    var by = {}; ME.sales.forEach(function (s) { by[s.dish_id + "|" + (s.variant || "")] = s; });
+    var rows = [], noRecUnits = 0, totUnits = 0, totCost = 0;
+    allRecipes().forEach(function (r) {
+      var s = by[r.dish.id + "|" + r.variant]; if (!s) return;
+      var u = num(s.units);
+      totUnits += u;
+      if (!r.rc || r.rc.broken) { noRecUnits += u; return; }
+      totCost += u * r.rc.cost;
+      rows.push({ r: r, u: u, m: r.margin, contrib: u * r.margin, pct: r.pct });
+    });
+    var withRec = rows.reduce(function (a, x) { return a + x.u; }, 0);
+    var netRec = rows.reduce(function (a, x) { return a + x.u * x.r.price / ivaF(); }, 0);
+    var popMin = rows.length ? 0.7 * withRec / rows.length : 0, mAvg = withRec ? rows.reduce(function (a, x) { return a + x.contrib; }, 0) / withRec : 0;
+    var CL = { star: ["Estrella", "ok", "Cuidar porción y calidad; destacarlo"], horse: ["Popular, deja poco", "warn", "Subir un poco el precio o bajar su costo"],
+               puzzle: ["Deja bien, vende poco", "warn", "Recomendarlo, foto o promoción"], dog: ["Vende poco y deja poco", "bad", "Cambiar la receta o sacarlo de la carta"] };
+    rows.forEach(function (x) { var p = x.u >= popMin, g = x.m >= mAvg; x.cl = p && g ? "star" : p ? "horse" : g ? "puzzle" : "dog"; });
+    rows.sort(function (a, b) { return b.contrib - a.contrib; });
+    var cnt = function (k) { return rows.filter(function (x) { return x.cl === k; }).length; };
+    $("meKpis").innerHTML =
+      '<div class="kpi main"><span>Ganancia de los platos</span><b>' + money(rows.reduce(function (a, x) { return a + x.contrib; }, 0)) + "</b><span>venta sin IVA menos insumos</span></div>" +
+      '<div class="kpi"><span>Costo de insumos</span><b>' + (netRec ? pct(totCost / netRec * 100) : "—") + "</b><span>sobre lo vendido con receta</span></div>" +
+      '<div class="kpi"><span>Vendido sin receta</span><b>' + (totUnits ? pct(noRecUnits / totUnits * 100) : "—") + "</b><span>" + noRecUnits + " de " + totUnits + " platos</span></div>" +
+      '<div class="kpi"><span>Estrellas · a revisar</span><b>' + cnt("star") + " · " + (cnt("horse") + cnt("dog")) + "</b></div>";
+    $("meList").innerHTML = rows.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ganancia c/u</th><th class="n hide-sm">% costo</th><th class="n">Ganancia total</th><th>Qué hacer</th></tr></thead><tbody>' +
+      rows.map(function (x) {
+        var c = CL[x.cl];
+        return '<tr class="click" data-dish="' + x.r.dish.id + '" data-variant="' + esc(x.r.variant) + '"><td><b>' + esc(x.r.dish.name) + "</b>" + (x.r.variant ? ' <span class="muted">' + esc(x.r.variant) + "</span>" : "") +
+          '</td><td class="n">' + nf3.format(x.u) + '</td><td class="n">' + money(x.m) + '</td><td class="n hide-sm">' + pctPill(x.pct) + '</td><td class="n"><b>' + money(x.contrib) + "</b></td>" +
+          '<td><span class="pill ' + c[1] + '">' + c[0] + '</span><div class="muted">' + c[2] + "</div></td></tr>";
+      }).join("") + "</tbody></table>"
+      : '<div class="empty">' + (totUnits ? "Los platos vendidos aún no tienen receta: cárgalas para ver cuánto deja cada uno." : "Sin ventas en caja en este período.") + "</div>";
+  }
+  $("meDays").addEventListener("change", renderMenuEng);
   document.addEventListener("click", function (ev) {
     var tr = ev.target.closest("tr[data-dish]"); if (!tr) return;
     openRecipe(S.dishes.find(function (d) { return d.id === Number(tr.dataset.dish); }), tr.dataset.variant || "");
@@ -1763,6 +1837,7 @@
       fields: [
         { k: "name", label: "Nombre", req: true }, { k: "doc_id", label: "Cédula o RIF", ph: "V12345678" },
         { k: "phone", label: "Teléfono (WhatsApp)", ph: "04141234567" }, { k: "email", label: "Correo", type: "email" },
+        { k: "address", label: "Dirección (delivery)", full: true, ph: "Calle, casa, punto de referencia" },
         { k: "registered_at", label: "Cliente desde", type: "date" },
         { k: "marketing_consent", label: "Aceptó recibir promociones", type: "check", full: true },
         { k: "notes", label: "Notas (preferencias, alergias…)", type: "area", full: true }
@@ -1778,6 +1853,103 @@
       onSave: saver("customers", c && c.id), onDelete: c && deleter("customers", c.id) });
   }
   $("addCli").addEventListener("click", function () { cliForm(null); });
+  // ---------------------------------------------------------------- Cargar datos desde planillas
+  // Columnas de cada tipo: [clave que entiende la base, título de la plantilla, otros títulos aceptados, ejemplo]
+  var IMP = {
+    insumos: { cols: [["nombre", "nombre", ["insumo", "producto", "ingrediente"], "Harina de trigo"], ["unidad", "unidad", ["um", "unid", "unidad_de_compra"], "kg"],
+      ["cantidad_compra", "cantidad_compra", ["cantidad", "presentacion", "contenido"], "1"], ["precio", "precio_ref", ["precio", "costo", "precio_usd", "costo_ref"], "1,50"],
+      ["merma", "merma_%", ["merma", "merma_pct", "desperdicio"], "0"], ["proveedor", "proveedor", [], "Molinos X"], ["minimo", "stock_minimo", ["minimo", "min"], "5"], ["zona", "zona", [], "cocina"]],
+      help: "Unidad: kg, g, l, ml o unidad. Precio en Ref por la cantidad de compra (ej.: 0,9 l de aceite a Ref 3,20). Zona: cocina o afuera." },
+    proveedores: { cols: [["nombre", "nombre", ["proveedor", "empresa"], "Molinos X"], ["whatsapp", "whatsapp", ["telefono", "tlf", "celular"], "04141234567"], ["notas", "notas", ["nota", "observaciones"], "Entrega martes"]],
+      help: "Si el proveedor ya existe se actualiza su WhatsApp y notas." },
+    recetas: { cols: [["plato", "plato", ["nombre_plato"], "Gyozas"], ["variante", "variante", ["tamano", "presentacion_plato"], ""], ["insumo", "insumo", ["ingrediente"], "Harina de trigo"],
+      ["cantidad", "cantidad", ["cant"], "80"], ["unidad", "unidad", ["um"], "g"]],
+      help: "Una fila por ingrediente. El plato se escribe como en la carta; si tiene tamaños, la variante (Peq, Gr…). Cada plato que cargues reemplaza su receta completa." },
+    clientes: { cols: [["nombre", "nombre", ["cliente", "nombre_y_apellido"], "Ana Pérez"], ["cedula", "cedula", ["ci", "rif", "cedula_rif", "documento"], "V-12345678"],
+      ["telefono", "telefono", ["tlf", "celular", "whatsapp"], "0414-1234567"], ["correo", "correo", ["email", "e_mail"], "ana@correo.com"], ["direccion", "direccion", ["dir"], "Calle 1, casa 2"], ["notas", "notas", ["nota", "alergias"], ""]],
+      help: "Hace falta la cédula/RIF o el teléfono. Si ya existe (misma cédula o mismo teléfono) se actualiza, no se duplica." }
+  };
+  var IMPR = null; // filas listas para enviar
+  function impKey(h) { return String(h || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/%/g, "_%").trim().replace(/[\s\-\/]+/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, ""); }
+  // Celdas pegadas de Excel (tabulador) o CSV con ; o , y comillas
+  function impParse(text) {
+    text = String(text || "").replace(/^﻿/, "").replace(/\r\n?/g, "\n");
+    var first = text.split("\n")[0] || "", sep = first.indexOf("\t") >= 0 ? "\t" : (first.split(";").length > first.split(",").length ? ";" : ",");
+    var rows = [], row = [], cell = "", inQ = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (inQ) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else inQ = false; } else cell += ch; }
+      else if (ch === '"' && cell === "") inQ = true;
+      else if (ch === sep) { row.push(cell); cell = ""; }
+      else if (ch === "\n") { row.push(cell); rows.push(row); row = []; cell = ""; }
+      else cell += ch;
+    }
+    row.push(cell); rows.push(row);
+    return rows.filter(function (r) { return r.some(function (c) { return c.trim() !== ""; }); });
+  }
+  function impRows() {
+    var kind = $("impKind").value, cfg = IMP[kind], grid = impParse($("impText").value);
+    if (grid.length < 2) return { error: "Pega la fila de títulos y al menos una fila de datos." };
+    var map = {}, heads = grid[0].map(impKey);
+    cfg.cols.forEach(function (c) { var names = [c[0], impKey(c[1])].concat(c[2]); heads.forEach(function (h, ix) { if (map[c[0]] == null && names.indexOf(h) >= 0) map[c[0]] = ix; }); });
+    var need = cfg.cols[0][0];
+    if (map[need] == null) return { error: "No encuentro la columna «" + cfg.cols[0][1] + "». Revisa que la primera fila tenga los títulos de la plantilla." };
+    var unknown = grid[0].filter(function (h, ix) { return h.trim() && Object.keys(map).every(function (k) { return map[k] !== ix; }); });
+    var rows = grid.slice(1).map(function (r) { var o = {}; Object.keys(map).forEach(function (k) { o[k] = String(r[map[k]] == null ? "" : r[map[k]]).trim(); }); return o; });
+    return { rows: rows, ignored: unknown };
+  }
+  function impCols() {
+    var cfg = IMP[$("impKind").value];
+    $("impCols").innerHTML = "Títulos: <b>" + cfg.cols.map(function (c) { return esc(c[1]); }).join(" · ") + "</b> (el primero es obligatorio). " + esc(cfg.help);
+    IMPR = null; $("impGo").disabled = true; $("impSum").innerHTML = ""; $("impPrev").innerHTML = "";
+  }
+  $("impKind").addEventListener("change", impCols);
+  $("impText").addEventListener("input", function () { IMPR = null; $("impGo").disabled = true; });
+  $("impTpl").addEventListener("click", function () {
+    var kind = $("impKind").value, cfg = IMP[kind];
+    var csv = "﻿" + cfg.cols.map(function (c) { return c[1]; }).join(";") + "\n" + cfg.cols.map(function (c) { return c[3]; }).join(";") + "\n";
+    var a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = "plantilla-" + kind + ".csv";
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  });
+  $("impFile").addEventListener("change", function () {
+    var f = this.files && this.files[0]; if (!f) return;
+    var rd = new FileReader();
+    rd.onload = function () { $("impText").value = rd.result; IMPR = null; $("impGo").disabled = true; toast("Archivo leído: toca Revisar"); };
+    rd.readAsText(f, "utf-8"); this.value = "";
+  });
+  function impShow(res, rows, ignored) {
+    var cfg = IMP[$("impKind").value], keys = cfg.cols.slice(0, 4).map(function (c) { return c[0]; });
+    var LBL = { nuevo: ["nuevo", "ok"], actualiza: ["actualiza", "warn"], error: ["error", "bad"] };
+    $("impSum").innerHTML = '<div class="row" style="gap:6px"><span class="pill ok">' + res.nuevo + " nuevos</span>" + '<span class="pill warn">' + res.actualiza + " se actualizan</span>" +
+      '<span class="pill bad">' + res.error + " con error</span>" + (res.dry ? '<span class="muted">Vista previa: todavía no se guardó nada.</span>' : '<b style="color:var(--ok)">Cargado ✓</b>') + "</div>" +
+      (ignored && ignored.length ? '<p class="muted">Columnas que no se usan: ' + esc(ignored.join(", ")) + "</p>" : "");
+    var sorted = res.rows.slice().sort(function (a, b) { return (a.st === "error" ? 0 : 1) - (b.st === "error" ? 0 : 1) || a.n - b.n; });
+    $("impPrev").innerHTML = '<table class="tbl"><thead><tr><th class="n">Fila</th>' + keys.map(function (k) { return "<th>" + esc(k.replace("_", " ")) + "</th>"; }).join("") + "<th>Resultado</th></tr></thead><tbody>" +
+      sorted.slice(0, 400).map(function (x) {
+        var r = rows[x.n - 1] || {}, l = LBL[x.st] || [x.st, ""];
+        return "<tr><td class=\"n\">" + (x.n + 1) + "</td>" + keys.map(function (k) { return "<td>" + esc(r[k] || "") + "</td>"; }).join("") +
+          '<td><span class="pill ' + l[1] + '">' + l[0] + "</span>" + (x.st === "error" ? ' <span style="color:var(--danger)">' + esc(x.msg) + "</span>" : "") + "</td></tr>";
+      }).join("") + "</tbody></table>" + (sorted.length > 400 ? '<p class="muted">… y ' + (sorted.length - 400) + " filas más.</p>" : "");
+  }
+  $("impCheck").addEventListener("click", function () {
+    var p = impRows(); IMPR = null; $("impGo").disabled = true;
+    if (p.error) { $("impSum").innerHTML = '<p style="color:var(--danger)">' + esc(p.error) + "</p>"; $("impPrev").innerHTML = ""; return; }
+    $("impSum").innerHTML = '<p class="muted">Revisando ' + p.rows.length + " filas…</p>";
+    q(sb.rpc("import_data", { p_kind: $("impKind").value, p_rows: p.rows, p_dry: true })).then(function (res) {
+      impShow(res, p.rows, p.ignored);
+      IMPR = { kind: $("impKind").value, rows: p.rows, ignored: p.ignored, ok: res.nuevo + res.actualiza, bad: res.error };
+      $("impGo").disabled = !IMPR.ok; $("impGo").textContent = "Cargar " + IMPR.ok + (IMPR.ok === 1 ? " fila" : " filas");
+    }).catch(function (e) { $("impSum").innerHTML = '<p style="color:var(--danger)">' + esc(e.message || String(e)) + "</p>"; });
+  });
+  $("impGo").addEventListener("click", function () {
+    if (!IMPR || IMPR.kind !== $("impKind").value) return;
+    if (!confirm("¿Cargar " + IMPR.ok + " filas de " + IMPR.kind + "?" + (IMPR.bad ? " Las " + IMPR.bad + " con error se saltan." : ""))) return;
+    $("impGo").disabled = true;
+    q(sb.rpc("import_data", { p_kind: IMPR.kind, p_rows: IMPR.rows, p_dry: false })).then(function (res) {
+      impShow(res, IMPR.rows, IMPR.ignored); IMPR = null; toast("Datos cargados"); return refresh();
+    }).catch(function (e) { $("impSum").innerHTML = '<p style="color:var(--danger)">' + esc(e.message || String(e)) + "</p>"; });
+  });
+  impCols();
   $("cliSearch").addEventListener("input", renderClientes);
   $("cliList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-cli]"); if (tr) cliForm(S.customers.find(function (x) { return x.id === Number(tr.dataset.cli); })); });
 })();

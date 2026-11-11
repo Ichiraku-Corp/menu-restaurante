@@ -81,6 +81,10 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#areas [data-area="Delivery"]'); await page.click("#newDeliv");
     await page.selectOption("#dChan", "yummy");
     ok(!(await page.isVisible("#dFee")), "en Yummy no se pide costo de delivery");
+    await page.fill("#dPhone", "0414-123.45.67"); await page.waitForTimeout(700);
+    ok(await page.inputValue("#dName") === "Ana Frecuente" && /casa azul/.test(await page.inputValue("#dAddr")), "con el teléfono se llenan el nombre y la dirección del cliente");
+    ok(/3 pedidos[\s\S]*Suele pedir: Gyozas/.test(await page.textContent("#dCard")), "muestra la ficha: pedidos y lo que suele pedir");
+    await page.fill("#dPhone", ""); await page.fill("#dAddr", "");
     await page.fill("#dName", "Cliente Yummy"); await page.click("#dOk"); await page.waitForSelector("#orderView:not(.hidden)");
     ok(await S(() => window.__S.orders.some((o) => o.channel === "yummy" && o.delivery_fee === 0)), "el pedido queda como Yummy");
     await page.click("#back"); await page.waitForTimeout(300);

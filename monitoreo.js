@@ -6,11 +6,14 @@
   if (!S || !C.SENTRY_DSN || navigator.webdriver) return;   // las pruebas automáticas no envían nada
   var host = location.hostname, port = location.port;
   var env = host === "localhost" || host === "127.0.0.1" ? "desarrollo" : port === "8080" ? "laptop" : "produccion";
-  // Versión = huella del programa principal de la página (pos.js?v=…); se lee al enviar, cuando ya cargó
+  // Versión = huellas de los programas propios de la página (pos-*.js?v=…, comandas.js…); se lee al enviar, cuando ya cargó.
+  // La caja está en varias partes: se junta un pedazo de la huella de cada una.
   function version() {
-    var v = "", all = Array.prototype.map.call(document.scripts, function (s) { return s.src; });
-    ["pos", "comandas", "mfa", "reporte-cierre"].some(function (n) { return all.some(function (src) { var m = new RegExp("/" + n + "\\.js\\?v=([0-9a-f]+)").exec(src); if (m) v = m[1]; return !!m; }); });
-    return "ichiraku-" + page + "@" + (v || "sin-version");
+    var hs = [];
+    Array.prototype.forEach.call(document.scripts, function (s) {
+      var m = /\/(pos-[a-z]+|comandas|mfa|reporte-cierre)\.js\?v=([0-9a-f]+)/.exec(s.src || ""); if (m) hs.push(m[2]);
+    });
+    return "ichiraku-" + page + "@" + (hs.length > 1 ? hs.map(function (h) { return h.slice(0, 4); }).join("") : hs[0] || "sin-version");
   }
   var page = (location.pathname.split("/").pop() || "index.html").replace(".html", "");
   var SECRET = /("?p_pin"?\s*[:=]\s*"?)\d+/gi;

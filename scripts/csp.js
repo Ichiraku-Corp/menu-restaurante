@@ -37,10 +37,10 @@ function policy(hashes) {
   ].join("; ");
 }
 
-// Huella de versión en los scripts propios (pos.js?v=abcd1234): así ningún navegador ni tablet se queda
+// Huella de versión en los scripts propios (pos-base.js?v=abcd1234): así ningún navegador ni tablet se queda
 // con una copia vieja después de una actualización.
 function stampVersions(html) {
-  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos|reporte-cierre|mfa|monitoreo|comandas)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
+  return html.replace(/(<script src="|<link rel="stylesheet" href=")((?:pos(?:-[a-z]+)?|reporte-cierre|mfa|monitoreo|comandas)\.(?:js|css))(?:\?v=[0-9a-f]+)?(")/g, (all, a, file, b) => {
     const f = path.join(ROOT, file);
     if (!fs.existsSync(f)) return all;
     const v = crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex").slice(0, 10);
