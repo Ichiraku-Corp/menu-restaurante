@@ -74,6 +74,27 @@ Deno.test("un fallo interno de la base no se le muestra al cliente; una regla de
   }
 });
 
+Deno.test("captura del pago: caja la ve; ids raros o archivos que no son imagen, no", async () => {
+  const calls: string[] = [];
+  const f = ((u: string) => {
+    calls.push(String(u));
+    if (String(u).includes("graph.facebook.com/v23.0/1234567")) return Promise.resolve(new Response(JSON.stringify({ url: "https://lookaside/x", mime_type: "image/jpeg" })));
+    if (String(u).includes("graph.facebook.com/v23.0/7654321")) return Promise.resolve(new Response(JSON.stringify({ url: "https://lookaside/y", mime_type: "application/pdf" })));
+    return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+  }) as typeof fetch;
+  const call = (b: unknown, staffOk = true) => handler(new Request("https://x/whatsapp", { method: "POST", body: JSON.stringify(b) }),
+    { WHATSAPP_TOKEN: "t" }, { db: {} as Db, wa: {} as Wa, staffOk, fetch: f });
+  const ok = await call({ action: "media", id: "1234567" });
+  eq([ok.status, ok.headers.get("content-type"), [...new Uint8Array(await ok.arrayBuffer())]], [200, "image/jpeg", [1, 2, 3]], "la imagen llega a caja");
+  const pdf = await call({ action: "media", id: "7654321" }); await pdf.body?.cancel();
+  eq(pdf.status, 404, "solo imágenes");
+  const bad = await call({ action: "media", id: "../me" }); await bad.body?.cancel();
+  eq(bad.status, 400, "un id raro no llega a Meta");
+  const anon = await call({ action: "media", id: "1234567" }, false); await anon.body?.cancel();
+  eq(anon.status, 403, "sin sesión de caja, nada");
+  assert(!calls.some((u) => u.includes("../me")), "nunca se pidió el id raro");
+});
+
 const HOURS = { "0": ["11:30", "20:30"], "1": ["12:30", "21:30"], "2": ["11:30", "20:30"], "3": ["11:30", "20:30"],
   "4": ["11:30", "20:30"], "5": ["11:30", "20:30"], "6": ["11:30", "20:30"] } as Record<string, [string, string]>;
 

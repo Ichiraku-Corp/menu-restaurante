@@ -13,13 +13,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=d5afdec9d7">
+<link rel="stylesheet" href="pos.css?v=393e8a9dd1">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=ac703fa2f3"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos.js?v=625ef249f4" defer></script>
+<script src="pos.js?v=6759c2f191" defer></script>
 </head>
 <body>
 <header>
@@ -27,6 +27,7 @@
   <span class="rate" id="rate"></span>
   <span class="grow"></span>
   <button id="btnFull" class="hidden" aria-label="Pantalla completa" title="Pantalla completa"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <button id="btnWa" class="hidden" title="Pedidos, reservas y chats de WhatsApp">WhatsApp <span id="waBadge" class="wabadge hidden"></span></button>
   <button id="btnCaja" class="hidden">Caja</button>
   <button id="btnUser" class="hidden"></button>
 </header>
@@ -108,6 +109,18 @@
 </dialog>
 
 <!-- Pedir un texto (motivo, nombre…) o un número -->
+<!-- WhatsApp: pedidos por aceptar, reservas y chats (supabase/whatsapp.sql) -->
+<dialog id="waDlg" style="width:min(820px, calc(100vw - 20px))">
+  <div class="row between"><h2 style="margin:0">WhatsApp</h2><button type="button" id="waClose">Cerrar</button></div>
+  <div class="tabs" id="waTabs" style="margin-top:8px"></div>
+  <div id="waBody" style="margin-top:6px"></div>
+</dialog>
+<dialog id="waImgDlg" style="width:min(560px, calc(100vw - 20px))">
+  <div class="row between"><h2 style="margin:0">Captura del pago</h2><button type="button" id="waImgClose">Cerrar</button></div>
+  <p class="muted" id="waImgHelp">Cargando…</p>
+  <img id="waImg" alt="Captura del pago enviada por el cliente" style="display:block;max-width:100%;max-height:70vh;margin:auto;border-radius:12px">
+</dialog>
+
 <dialog id="askDlg">
   <h2 id="askTitle"></h2>
   <p class="muted" id="askHelp"></p>

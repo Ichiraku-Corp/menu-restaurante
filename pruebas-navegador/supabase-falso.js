@@ -66,10 +66,12 @@
     pos_cash_close:function(a){ auth(a); window.__closeArgs=a; window.__closed=a.p_counted; S.session=null; return {}; },
     pos_set_rate:function(a){ auth(a); S.rate=a.p_rate; }
   };
+  window.__R=R;   // las pruebas pueden añadir funciones (p. ej. las de WhatsApp)
   function Q(t){ this.t=t; } Q.prototype.select=function(){return this}; Q.prototype.order=function(){return this};
   Q.prototype.then=function(res,rej){ var d=this.t==='categories'?menu.categories:menu.dishes; return Promise.resolve({data:JSON.parse(JSON.stringify(d)),error:null}).then(res,rej); };
   window.supabase={createClient:function(){ var cbs=[],session=null; return {
     from:function(t){return new Q(t)},
+    functions:{ invoke:function(n,o){ (window.__invokes=window.__invokes||[]).push({fn:n,body:o&&o.body}); return Promise.resolve({data:{sent:0,failed:0},error:null}); } },
     rpc:function(n,a){ return Promise.resolve().then(function(){ try{ return {data:R[n](a||{}),error:null}; }catch(e){ return {data:null,error:e}; } }); },
     auth:{ onAuthStateChange:function(cb){cbs.push(cb); setTimeout(function(){cb('INITIAL',session)})},
       signInWithPassword:function(){ session={user:{}}; cbs.forEach(function(cb){cb('SIGNED_IN',session)}); return Promise.resolve({error:null}); },

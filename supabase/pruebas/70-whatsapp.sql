@@ -80,6 +80,7 @@ select public.wa_accept(:caja, '1111', :wo) as pid \gset
 select prueba.falla(format('select public.wa_accept(%s, %L, %s)', :caja, '1111', :wo), 'ya fue atendido', 'no se puede aceptar dos veces');
 select prueba.falla(format('select public.wa_reject(%s, %L, %s, %L)', :caja, '1111', :wo2, 'no'), 'motivo', 'rechazar pide un motivo');
 select public.wa_reject(:caja, '1111', :wo2, 'Nos quedamos sin gyozas por hoy');
+select prueba.ok(jsonb_array_length(public.wa_pending(:caja, '1111') -> 'active') = 1, 'el aceptado queda en la lista para avisar «en camino»');
 reset role;
 
 select prueba.ok((select kind = 'delivery' and origin = 'whatsapp' and delivery_fee = 2 and phone = '584141234567'
@@ -126,6 +127,7 @@ set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
 select prueba.falla(format('select public.wa_reply(%s, %L, %s, %L)', :caja, '1111', :conv, 'hola'), '24 horas', 'fuera de las 24 h no se puede escribir texto libre');
 select public.wa_notify_ready(:caja, '1111', :pid);
+select prueba.ok(jsonb_array_length(public.wa_pending(:caja, '1111') -> 'active') = 0, 'después de avisar ya no aparece');
 reset role;
 select prueba.ok((select body from public.wa_outbox where conversation_id = :conv order by id desc limit 1) like '%en camino%', 'aviso de delivery en camino');
 select prueba.ok((select count(distinct event) from public.wa_events where event in ('conversacion', 'carrito', 'pedido_enviado', 'aceptado', 'rechazado', 'reserva')) = 6,

@@ -109,6 +109,7 @@ create table if not exists public.wa_orders (
   handled_at      timestamptz
 );
 create index if not exists wa_orders_status on public.wa_orders (status, submitted_at);
+alter table public.wa_orders add column if not exists ready_at timestamptz;   -- se avisó «listo» o «en camino»
 create unique index if not exists wa_orders_one_draft on public.wa_orders (conversation_id) where status = 'borrador';
 
 create table if not exists public.wa_reservations (
@@ -244,7 +245,7 @@ language sql stable security definer set search_path = public as $$
     'total_bs', round((o.subtotal + o.delivery_fee) * public.pos_rate(), 2), 'rate', public.pos_rate(),
     'address', o.address, 'location', o.location, 'customer_name', o.customer_name, 'doc_id', o.doc_id,
     'scheduled_for', o.scheduled_for, 'payment_method', o.payment_method, 'payment_ref', o.payment_ref,
-    'has_payment_media', o.payment_media <> '', 'phone', c.phone, 'wa_name', c.name, 'submitted_at', o.submitted_at,
+    'has_payment_media', o.payment_media <> '', 'payment_media', o.payment_media, 'ready_at', o.ready_at, 'phone', c.phone, 'wa_name', c.name, 'submitted_at', o.submitted_at,
     'pos_order_id', o.pos_order_id, 'reject_reason', o.reject_reason)
   from public.wa_orders o join public.wa_conversations c on c.id = o.conversation_id
   left join public.wa_zones z on z.id = o.zone_id where o.id = p_order
@@ -530,6 +531,11 @@ begin
                         'reserved_for', r.reserved_for, 'area', r.area, 'notes', r.notes, 'phone', c.phone) order by r.reserved_for)
                         from public.wa_reservations r join public.wa_conversations c on c.id = r.conversation_id
                         where r.status = 'pendiente' and r.reserved_for > now() - interval '2 hours'), '[]'::jsonb),
+    'active', coalesce((select jsonb_agg(public.wa_order_json(w.id) || jsonb_build_object('label', public.pos_order_label(w.pos_order_id))
+                        order by w.handled_at)
+                        from public.wa_orders w join public.pos_orders p on p.id = w.pos_order_id
+                        where w.status = 'aceptado' and w.ready_at is null and p.status <> 'anulada'
+                          and w.handled_at > now() - interval '12 hours'), '[]'::jsonb),
     'unread', (select coalesce(sum(unread), 0) from public.wa_conversations));
 end $$;
 
@@ -594,6 +600,7 @@ begin
   select w.id, w.conversation_id, p.kind as pos_kind into o
   from public.wa_orders w join public.pos_orders p on p.id = w.pos_order_id where w.pos_order_id = p_pos_order;
   if o.id is null then raise exception 'Este pedido no vino por WhatsApp'; end if;
+  update public.wa_orders set ready_at = now() where id = o.id;
   perform public.wa_queue(o.conversation_id, case when o.pos_kind = 'delivery' then '🛵 ¡Tu pedido va en camino!'
                                                   else '🍜 ¡Tu pedido está listo para retirar! Te esperamos.' end);
   perform public.wa_event(o.conversation_id, case when o.pos_kind = 'delivery' then 'en_camino' else 'listo' end, jsonb_build_object('pedido', o.id));
@@ -656,7 +663,7 @@ create or replace function public.wa_set_paused(p_emp bigint, p_pin text, p_conv
 language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
-  update public.wa_conversations set bot_paused = coalesce(p_paused, false) where id = p_conv;
+  update public.wa_conversations set bot_paused = coalesce(p_paused, false), step = case when coalesce(p_paused, false) then step else '' end where id = p_conv;
 end $$;
 
 -- ---------------------------------------------------------------- Permisos de las funciones

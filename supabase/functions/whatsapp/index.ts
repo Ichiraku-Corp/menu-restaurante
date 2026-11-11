@@ -475,12 +475,28 @@ export function metaClient(env: Record<string, string>): Wa {
   };
 }
 
+/** Descarga una imagen que mandó el cliente (dos pasos: Meta da una URL temporal y luego se baja con el token). */
+export async function fetchMedia(env: Record<string, string>, id: string, f: typeof fetch = fetch): Promise<Response | null> {
+  const auth = { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` };
+  try {
+    const meta = await f(`https://graph.facebook.com/${env.WHATSAPP_API_VERSION || "v23.0"}/${id}`, { headers: auth });
+    if (!meta.ok) { await meta.body?.cancel(); return null; }
+    const { url, mime_type } = await meta.json();
+    if (!url || !/^image\//.test(String(mime_type))) return null;
+    const img = await f(url, { headers: auth });
+    if (!img.ok) { await img.body?.cancel(); return null; }
+    return new Response(img.body, { status: 200, headers: { ...CORS, "Content-Type": String(mime_type), "Cache-Control": "private, max-age=600" } });
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------- Entrada HTTP
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 }
 
-export async function handler(req: Request, env = Deno.env.toObject(), deps?: { db?: Db; wa?: Wa; now?: Date; staffOk?: boolean }): Promise<Response> {
+export async function handler(req: Request, env = Deno.env.toObject(), deps?: { db?: Db; wa?: Wa; now?: Date; staffOk?: boolean; fetch?: typeof fetch }): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const url = new URL(req.url);
 
@@ -526,6 +542,13 @@ export async function handler(req: Request, env = Deno.env.toObject(), deps?: { 
   let body: Json = {};
   try { body = JSON.parse(raw || "{}"); } catch { return json({ error: "JSON no válido" }, 400); }
   if (body.action === "flush") return json(await flushOutbox(db, wa));
+  // Captura del pago que mandó el cliente: la caja la ve sin que la imagen pase por ningún otro sitio.
+  if (body.action === "media") {
+    const id = String(body.id ?? "");
+    if (!/^\d{5,30}$/.test(id)) return json({ error: "Imagen no válida" }, 400);
+    const r = await fetchMedia(env, id, deps?.fetch ?? fetch);
+    return r ?? json({ error: "No se pudo traer la imagen (Meta la guarda unos 30 días)" }, 404);
+  }
   return json({ error: "Acción no válida" }, 400);
 }
 
