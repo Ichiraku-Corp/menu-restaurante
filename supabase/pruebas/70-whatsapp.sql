@@ -132,4 +132,14 @@ reset role;
 select prueba.ok((select body from public.wa_outbox where conversation_id = :conv order by id desc limit 1) like '%en camino%', 'aviso de delivery en camino');
 select prueba.ok((select count(distinct event) from public.wa_events where event in ('conversacion', 'carrito', 'pedido_enviado', 'aceptado', 'rechazado', 'reserva')) = 6,
                  'el embudo queda medido');
+-- ---------------------------------------------------------------- Gestión: embudo y anuncios
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select prueba.falla('select public.wa_stats(30)', 'dueño', 'la tablet no ve el embudo');
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"dueno@prueba.test","aal":"aal2"}', false);
+select public.wa_stats(30) as st \gset
+reset role;
+select prueba.ok((:'st'::jsonb -> 'funnel' ->> 'aceptados')::int = 1 and (:'st'::jsonb ->> 'ventas')::numeric = 27, 'Gestión ve el embudo: 1 aceptado por Ref 27');
+select prueba.ok((:'st'::jsonb -> 'anuncios' -> 0 ->> 'source_id') = 'ad_123' and (:'st'::jsonb -> 'anuncios' -> 0 ->> 'ventas')::numeric = 27,
+                 'y que esa venta vino del anuncio ad_123');
 \echo 'TODAS LAS PRUEBAS DE WHATSAPP PASARON'

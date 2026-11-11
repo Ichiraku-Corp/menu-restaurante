@@ -69,7 +69,7 @@ jobs:
       - name: Instalar navegador de pruebas
         run: npm install --no-save --no-package-lock playwright@1.47.2 && npx playwright install --with-deps chromium
       - name: Recorrido de la caja en el navegador
-        run: node pruebas-navegador/recorrido-caja.js && node pruebas-navegador/recorrido-cocina.js && node pruebas-navegador/recorrido-gestion.js && node pruebas-navegador/recorrido-whatsapp.js
+        run: node pruebas-navegador/recorrido-caja.js && node pruebas-navegador/recorrido-cocina.js && node pruebas-navegador/recorrido-gestion.js && node pruebas-navegador/recorrido-whatsapp.js && node pruebas-navegador/recorrido-gestion-whatsapp.js
 
   nex:
     runs-on: ubuntu-latest

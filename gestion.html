@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-p33wyVFzVIs++ox5PcFnhn1af6YdRQiW9jsz9k3zcDs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-osXb+lmnoqTnp6d6WbfNeFV70IyKKJTK17EjrtGBTsk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión de costos</title>
@@ -151,6 +151,7 @@
       <button data-tab="clientes">Clientes</button>
       <button data-tab="servicio">Servicio y bonos</button>
       <button data-tab="avisos">Avisos</button>
+      <button data-tab="whatsapp">WhatsApp</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -361,6 +362,9 @@
     </section>
 
     <!-- Cargar datos desde planillas -->
+    <!-- WhatsApp: lo dibuja gestion-whatsapp.js -->
+    <section data-panel="whatsapp" hidden></section>
+
     <section data-panel="importar" hidden>
       <div class="card">
         <h2>Cargar datos desde una planilla</h2>
@@ -471,6 +475,8 @@
   if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) { show("noconfig", true); return; }
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
   function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
+  // Para las pestañas en archivo propio (gestion-whatsapp.js): misma sesión y mismas ayudas.
+  window.GESTION = { sb: sb, q: q, toast: toast, fail: fail, esc: esc, money: money, ready: function () { return mfaOk; }, onReady: [] };
 
   // ---------------------------------------------------------------- Acceso
   // Contraseña → código de la app (2FA) → comprobar permisos. La base de datos solo entrega
@@ -489,6 +495,7 @@
           if (r.error) { show("nosetup", true); return; }
           if (!r.data) { show("noaccess", true); return; }
           mfaOk = true; show("app", true); refresh();
+          window.GESTION.onReady.forEach(function (f) { try { f(); } catch (e) { console.error(e); } });
         });
       }).catch(fail).then(function () { gating = false; });
     }, 0);
@@ -1954,5 +1961,6 @@
   $("cliList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-cli]"); if (tr) cliForm(S.customers.find(function (x) { return x.id === Number(tr.dataset.cli); })); });
 })();
 </script>
+<script src="gestion-whatsapp.js?v=3bd77fe413"></script>
 </body>
 </html>

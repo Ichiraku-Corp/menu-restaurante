@@ -666,6 +666,40 @@ begin
   update public.wa_conversations set bot_paused = coalesce(p_paused, false), step = case when coalesce(p_paused, false) then step else '' end where id = p_conv;
 end $$;
 
+-- ---------------------------------------------------------------- Gestión (dueño/admin con 2FA)
+-- Embudo de WhatsApp de los últimos días y de qué anuncio vino cada venta (Gestión → WhatsApp).
+create or replace function public.wa_stats(p_days int default 30) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare since timestamptz := now() - make_interval(days => greatest(1, least(coalesce(p_days, 30), 366)));
+begin
+  if not public.can_manage() then raise exception 'Solo el dueño o un administrador con verificación en dos pasos'; end if;
+  return jsonb_build_object(
+    'days', greatest(1, least(coalesce(p_days, 30), 366)),
+    'funnel', (select jsonb_build_object(
+        'conversaciones', count(*) filter (where event = 'conversacion'),
+        'carritos', count(*) filter (where event = 'carrito'),
+        'pedidos', count(*) filter (where event = 'pedido_enviado'),
+        'aceptados', count(*) filter (where event = 'aceptado'),
+        'rechazados', count(*) filter (where event = 'rechazado'),
+        'reservas', count(*) filter (where event = 'reserva'),
+        'humano', count(*) filter (where event = 'humano'))
+      from public.wa_events where created_at >= since),
+    'ventas', (select coalesce(sum(subtotal + delivery_fee), 0) from public.wa_orders where status = 'aceptado' and handled_at >= since),
+    'ticket', (select coalesce(round(avg(subtotal + delivery_fee), 2), 0) from public.wa_orders where status = 'aceptado' and handled_at >= since),
+    'anuncios', coalesce((select jsonb_agg(x order by (x ->> 'ventas')::numeric desc, (x ->> 'conversaciones')::int desc) from (
+        select jsonb_build_object(
+          'anuncio', coalesce(nullif(c.referral ->> 'headline', ''), 'Anuncio ' || coalesce(c.referral ->> 'source_id', '?')),
+          'source_id', c.referral ->> 'source_id',
+          'conversaciones', count(distinct c.id),
+          'pedidos', count(o.id) filter (where o.status = 'aceptado'),
+          'ventas', coalesce(sum(o.subtotal + o.delivery_fee) filter (where o.status = 'aceptado'), 0)) x
+        from public.wa_conversations c
+        left join public.wa_orders o on o.conversation_id = c.id and o.handled_at >= since
+        where c.referral is not null and c.created_at >= since
+        group by c.referral ->> 'source_id', coalesce(nullif(c.referral ->> 'headline', ''), 'Anuncio ' || coalesce(c.referral ->> 'source_id', '?'))) t), '[]'::jsonb),
+    'sin_anuncio', (select count(*) from public.wa_conversations where referral is null and created_at >= since));
+end $$;
+
 -- ---------------------------------------------------------------- Permisos de las funciones
 do $$
 declare f text;
@@ -692,6 +726,8 @@ begin
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
+  revoke execute on function public.wa_stats(integer) from anon, public;
+  grant execute on function public.wa_stats(integer) to authenticated;
   -- La carta (sin sesión) solo puede crear carritos.
   revoke execute on function public.wa_cart_create(jsonb) from public;
   grant execute on function public.wa_cart_create(jsonb) to anon, authenticated;
