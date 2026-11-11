@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: "20"
       - name: Sintaxis de los programas
-        run: for f in pos.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
+        run: for f in pos-*.js comandas.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
       - name: Política de seguridad de las páginas al día
         run: node scripts/csp.js --check
       - name: Los reportes por correo se generan sin errores

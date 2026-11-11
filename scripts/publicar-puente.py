@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Publica una versión nueva del puente para que la laptop de caja se actualice sola.
 
-Uso:  python3 scripts/publicar-puente.py "nota de la versión" puente.js app/pos.js app/pos.html ...
+Uso:  python3 scripts/publicar-puente.py "nota de la versión" puente.js app/pos-base.js app/pos.html ...
 
 Rutas válidas: puente.js, logo.pbm, imprimir-usb.ps1 (de la carpeta puente/) y app/<archivo>
-(se toma del sitio: app/pos.js -> pos.js, app/assets/x.png -> assets/x.png). Nunca config.json.
+(se toma del sitio: app/pos-base.js -> pos-base.js, app/assets/x.png -> assets/x.png). Nunca config.json.
 Se escribe en Supabase con la API de administración (el token lo pone el entorno, no va en el repo).
 """
 import base64, hashlib, json, os, subprocess, sys
