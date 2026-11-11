@@ -4,7 +4,7 @@ Objetivo: que un cliente pida por WhatsApp y el pedido entre **solo** al sistema
 Para llevar, se imprima en cocina, descuente inventario y quede en su ficha de cliente, sin copiar nada a
 mano. Es la base para los anuncios «Click to WhatsApp» y para las apps futuras (usan las mismas funciones).
 
-Estado: **plan, sin código todavía**. Rama `whatsapp-ventas`; `main` no se toca hasta probarlo.
+Estado: **plan, sin código todavía**. Rama `whatsapp-ventas`; la rama principal (la que publica la carta y caja) no se toca hasta probarlo.
 
 ## Principios
 
