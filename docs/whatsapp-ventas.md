@@ -153,11 +153,17 @@ Utilidad: `pedido_recibido`, `pedido_aceptado`, `pedido_en_camino`, `pedido_list
 - Política de privacidad: añadir los mensajes de WhatsApp y cuánto tiempo se guardan.
 - Publicación al cierre del local, nunca en pleno servicio.
 
-## Falta decidir (dueño)
+## Decisiones del dueño (11 nov 2026)
 
-1. ¿Delivery propio con zonas y precios fijos, o caja pone el costo en cada pedido?
-2. ¿Solo retiro y delivery, o también reservas de mesa?
-3. ¿Quién atiende la bandeja en el turno: caja, o una persona de sala?
-4. ¿Se acepta efectivo al recibir el delivery?
-5. ¿Pedido mínimo para delivery?
-6. Horario de atención por WhatsApp (¿el bot responde fuera de horario y toma pedidos para después?).
+1. **Servicios:** para llevar (retiro), delivery y **reservas de mesa**.
+2. **Delivery:** zonas con precio fijo en `wa_settings` (el bot da el total exacto). Zonas y precios: pendientes.
+3. **Pedido mínimo de delivery:** Ref 10, sin contar el envío.
+4. **Pago:** solo pago previo (pago móvil, Zelle, Binance, PayPal). **Sin efectivo al recibir.**
+5. **Quién atiende:** caja (`pos.html`).
+6. **Fuera de horario:** el bot responde siempre, informa el horario y toma pedidos programados y reservas
+   para cuando abra el local.
+7. **Aceptación:** caja acepta siempre, también con pago comprobado; se revisa más adelante.
+8. **IA con clientes (Etapa 3):** Nex, con su identidad, en versión de atención al cliente.
+
+Las reservas añaden una tabla `wa_reservations` (fecha, hora, personas, área preferida, estado) que caja
+confirma, y un recordatorio por plantilla (`reserva_recordatorio`) unas horas antes.
