@@ -18,6 +18,10 @@ create table if not exists public.wa_settings (
   -- Horario por día de la semana (0 = domingo): {"0": ["12:00", "22:00"], ...}; día sin clave = cerrado
   hours         jsonb not null default '{"0":["11:30","20:30"],"1":["12:30","21:30"],"2":["11:30","20:30"],"3":["11:30","20:30"],"4":["11:30","20:30"],"5":["11:30","20:30"],"6":["11:30","20:30"]}'::jsonb,
   address_text  text not null default 'San Diego – Centro Comercial Metrópolis – Nivel Sol – Feria de comida',
+  maps_url      text not null default 'https://maps.google.com/?cid=13659344647129244749',
+  -- Punto exacto del local: el bot lo manda como «ubicación» de WhatsApp (se abre en el mapa del teléfono)
+  lat           numeric(9,6) default 10.184187,
+  lng           numeric(9,6) default -67.973961,
   -- Datos de pago que el bot envía (pago móvil, Zelle, Binance, PayPal). Van aquí y no en el código: el repositorio es público.
   payment_info  text not null default '',
   delivery_min  numeric(10,2) not null default 10 check (delivery_min >= 0),   -- pedido mínimo de delivery, sin el envío
@@ -26,6 +30,9 @@ create table if not exists public.wa_settings (
   updated_at    timestamptz not null default now()
 );
 insert into public.wa_settings (id) values (1) on conflict do nothing;
+alter table public.wa_settings add column if not exists maps_url text not null default 'https://maps.google.com/?cid=13659344647129244749';
+alter table public.wa_settings add column if not exists lat numeric(9,6) default 10.184187;
+alter table public.wa_settings add column if not exists lng numeric(9,6) default -67.973961;
 
 create table if not exists public.wa_zones (
   id       bigint generated always as identity primary key,
@@ -334,7 +341,7 @@ $$;
 create or replace function public.wa_context() returns jsonb
 language sql stable security definer set search_path = public as $$
   select jsonb_build_object('bot_active', s.bot_active, 'welcome', s.welcome, 'menu_url', s.menu_url, 'hours', s.hours,
-    'address', s.address_text, 'payment_info', s.payment_info, 'delivery_min', s.delivery_min, 'allow_cash', s.allow_cash,
+    'address', s.address_text, 'maps_url', s.maps_url, 'lat', s.lat, 'lng', s.lng, 'payment_info', s.payment_info, 'delivery_min', s.delivery_min, 'allow_cash', s.allow_cash,
     'open_now', public.wa_is_open(), 'rate', public.pos_rate(),
     'zones', coalesce((select jsonb_agg(jsonb_build_object('id', z.id, 'name', z.name, 'fee', z.fee) order by z.position, z.name)
                        from public.wa_zones z where z.active), '[]'::jsonb))
