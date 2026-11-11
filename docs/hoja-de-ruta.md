@@ -35,7 +35,7 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la fact
    **9 gastos fijos**, y las pestañas **Histórico** y **Clientes** con datos.
 2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub (GitHub ✅ en curso).
 3. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
-4. Activar la **copia de seguridad diaria**: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
+4. ✅ (11 nov) **Copia de seguridad diaria** activa y probada: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
 ### 📎 Para enviar
