@@ -16,8 +16,8 @@ create table if not exists public.wa_settings (
   welcome       text not null default '¡Irasshaimase! 🍜 Bienvenido a Ichiraku Ramen. ¿En qué te ayudamos?',
   menu_url      text not null default 'https://ichiraku-corp.github.io/menu-restaurante/',
   -- Horario por día de la semana (0 = domingo): {"0": ["12:00", "22:00"], ...}; día sin clave = cerrado
-  hours         jsonb not null default '{"0":["12:00","22:00"],"1":["12:00","22:00"],"2":["12:00","22:00"],"3":["12:00","22:00"],"4":["12:00","22:00"],"5":["12:00","23:00"],"6":["12:00","23:00"]}'::jsonb,
-  address_text  text not null default '',
+  hours         jsonb not null default '{"0":["11:30","20:30"],"1":["12:30","21:30"],"2":["11:30","20:30"],"3":["11:30","20:30"],"4":["11:30","20:30"],"5":["11:30","20:30"],"6":["11:30","20:30"]}'::jsonb,
+  address_text  text not null default 'San Diego – Centro Comercial Metrópolis – Nivel Sol – Feria de comida',
   -- Datos de pago que el bot envía (pago móvil, Zelle, Binance, PayPal). Van aquí y no en el código: el repositorio es público.
   payment_info  text not null default '',
   delivery_min  numeric(10,2) not null default 10 check (delivery_min >= 0),   -- pedido mínimo de delivery, sin el envío

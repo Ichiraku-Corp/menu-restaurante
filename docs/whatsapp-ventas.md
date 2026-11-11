@@ -164,6 +164,8 @@ Utilidad: `pedido_recibido`, `pedido_aceptado`, `pedido_en_camino`, `pedido_list
    para cuando abra el local.
 7. **Aceptación:** caja acepta siempre, también con pago comprobado; se revisa más adelante.
 8. **IA con clientes (Etapa 3):** Nex, con su identidad, en versión de atención al cliente.
+9. **Horario:** lunes 12:30–21:30; martes a domingo 11:30–20:30.
+10. **Dirección:** San Diego – Centro Comercial Metrópolis – Nivel Sol – Feria de comida (falta el enlace de Google Maps).
 
 Las reservas añaden una tabla `wa_reservations` (fecha, hora, personas, área preferida, estado) que caja
 confirma, y un recordatorio por plantilla (`reserva_recordatorio`) unas horas antes.
