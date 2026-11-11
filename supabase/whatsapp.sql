@@ -480,6 +480,43 @@ begin
   end if;
 end $$;
 
+-- Paso de la conversación: qué le preguntó el bot por última vez (dirección, nombre, referencia…) y datos sueltos
+-- de una reserva en curso. Así un texto libre del cliente se entiende según la pregunta.
+alter table public.wa_conversations add column if not exists step text not null default '';
+alter table public.wa_conversations add column if not exists step_data jsonb not null default '{}'::jsonb;
+
+create or replace function public.wa_set_step(p_conv bigint, p_step text, p_data jsonb default null) returns void
+language sql security definer set search_path = public as $$
+  update public.wa_conversations set step = coalesce(p_step, ''),
+    step_data = case when p_data is null then step_data else p_data end
+  where id = p_conv
+$$;
+
+-- Estado de la conversación para el bot: paso, datos y pedido en borrador (si hay).
+create or replace function public.wa_state(p_conv bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('step', c.step, 'step_data', c.step_data, 'bot_paused', c.bot_paused, 'name', c.name,
+    'customer_name', (select cu.name from public.customers cu where cu.id = c.customer_id),
+    'draft', (select public.wa_order_json(o.id) from public.wa_orders o where o.conversation_id = c.id and o.status = 'borrador'))
+  from public.wa_conversations c where c.id = p_conv
+$$;
+
+-- El cliente pide hablar con una persona: el bot se calla en esa conversación hasta que caja lo reactive.
+create or replace function public.wa_handoff(p_conv bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.wa_conversations set bot_paused = true, step = '' where id = p_conv;
+  perform public.wa_event(p_conv, 'humano');
+end $$;
+
+create or replace function public.wa_order_cancel(p_conv bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.wa_orders set status = 'cancelado', handled_at = now() where conversation_id = p_conv and status = 'borrador';
+  update public.wa_conversations set step = '' where id = p_conv;
+  perform public.wa_event(p_conv, 'cancelado');
+end $$;
+
 -- ---------------------------------------------------------------- Caja (tablet o laptop, con PIN)
 -- Pedidos por aceptar, reservas pendientes y conversaciones sin leer.
 create or replace function public.wa_pending(p_emp bigint, p_pin text) returns jsonb
@@ -635,7 +672,8 @@ begin
   foreach f in array array['wa_ingest(text, text, text, text, text, jsonb, jsonb)', 'wa_log_out(bigint, text, text, text, jsonb, text, boolean, text)',
                            'wa_status(text, text, text)', 'wa_context()', 'wa_order_from_cart(bigint, text)', 'wa_order_set(bigint, jsonb)',
                            'wa_order_submit(bigint)', 'wa_reservation_create(bigint, text, integer, timestamptz, text, text)',
-                           'wa_outbox_next(integer)', 'wa_outbox_done(bigint, boolean, text, text)'] loop
+                           'wa_outbox_next(integer)', 'wa_outbox_done(bigint, boolean, text, text)',
+                           'wa_set_step(bigint, text, jsonb)', 'wa_state(bigint)', 'wa_handoff(bigint)', 'wa_order_cancel(bigint)'] loop
     execute format('revoke execute on function public.%s from anon, public, authenticated', f);
     execute format('grant execute on function public.%s to service_role', f);
   end loop;

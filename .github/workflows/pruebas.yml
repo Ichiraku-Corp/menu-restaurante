@@ -31,6 +31,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Esquema y recorrido de caja
         run: supabase/pruebas/correr.sh
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: "WhatsApp: conversación completa contra la base de pruebas (Meta simulada)"
+        run: deno test -A supabase/functions/tests/whatsapp_test.ts && deno check supabase/functions/whatsapp/index.ts
 
   programas:
     runs-on: ubuntu-latest
