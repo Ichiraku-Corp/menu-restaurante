@@ -49,6 +49,7 @@
     pos_void:function(a){ auth(a); var i=S.items.find(function(x){return x.id===a.p_item}); if(i.status==='pendiente'){S.items.splice(S.items.indexOf(i),1);return 'quitado';} if((a.p_reason||'').length<3) throw {message:'Escribe el motivo'}; i.status='anulado'; i.void_reason=a.p_reason; return 'anulado'; },
     pos_discount:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.discount=a.p_amount; o.discount_reason=a.p_reason; },
     pos_precuenta:function(a){ auth(a); S.orders.find(function(x){return x.id===a.p_order}).precuenta_at=new Date().toISOString(); S.jobs.push('caja'); },
+    pos_customer_by_phone:function(a){ auth(a); return String(a.p_phone).replace(/\D/g,'').slice(-10)==='4141234567' ? {id:7,name:'Ana Frecuente',address:'Calle 2, casa azul',notes:'',orders:3,spent:45,last_at:new Date(Date.now()-2*86400000).toISOString(),top:['Gyozas','Ramen']} : null; },
     pos_open_delivery:function(a){ auth(a); var o={id:++id,kind:'delivery',table_id:null,label:a.p_name,phone:a.p_phone,address:a.p_address,delivery_fee:a.p_fee,channel:a.p_channel||'propio',status:'abierta',service_pct:0,opened_at:new Date().toISOString()}; S.orders.push(o); return o.id; },
     pos_set_delivery:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.label=a.p_name; o.phone=a.p_phone; o.address=a.p_address; o.delivery_fee=a.p_fee; if(a.p_channel) o.channel=a.p_channel; },
     pos_set_available:function(a){ auth(a); menu.dishes.find(function(d){return d.id===a.p_dish}).available=a.p_available; },

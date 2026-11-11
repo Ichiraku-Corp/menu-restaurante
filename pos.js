@@ -632,8 +632,31 @@
     delivEdit = d; $("delivTitle").textContent = d ? "Datos del delivery" : "Nuevo delivery"; $("dErr").textContent = "";
     $("dName").value = d ? d.customer : ""; $("dPhone").value = d ? d.phone : ""; $("dAddr").value = d ? d.address : ""; $("dFee").value = d ? num(d.delivery_fee) : "0";
     $("dChan").value = d && d.channel === "yummy" ? "yummy" : "propio"; delivChan();
-    $("delivDlg").showModal(); setTimeout(function () { $("dName").focus(); }, 50);
+    $("dCard").classList.add("hidden"); delivPhoneKey = "";
+    $("delivDlg").showModal(); setTimeout(function () { $(d ? "dName" : "dPhone").focus(); }, 50);
+    if (d && d.phone) delivLookup();
   }
+  // Ficha del cliente: con el teléfono se llenan nombre y dirección y se ve qué suele pedir
+  var delivPhoneKey = "", delivTimer = null;
+  function delivLookup() {
+    var digits = $("dPhone").value.replace(/\D/g, ""), key = digits.length >= 10 ? digits.slice(-10) : "";
+    if (key === delivPhoneKey) return;
+    delivPhoneKey = key;
+    if (!key) { $("dCard").classList.add("hidden"); return; }
+    rpc("pos_customer_by_phone", { p_phone: $("dPhone").value }).then(function (c) {
+      if (key !== delivPhoneKey) return;
+      if (!c) { $("dCard").innerHTML = "Cliente nuevo: se guardará al crear el pedido."; $("dCard").classList.remove("hidden"); return; }
+      if (!$("dName").value.trim() && c.name) $("dName").value = c.name;
+      if (!$("dAddr").value.trim() && c.address) $("dAddr").value = c.address;
+      var n = num(c.orders), last = c.last_at ? Math.round((Date.now() - new Date(c.last_at).getTime()) / 86400000) : null;
+      $("dCard").innerHTML = "<b>" + esc(c.name || "Cliente") + "</b> · " + (n ? n + (n === 1 ? " pedido" : " pedidos") + " · " + ref(c.spent) +
+        (last != null ? " · último " + (last < 1 ? "hoy" : last === 1 ? "ayer" : "hace " + last + " días") : "") : "sin pedidos cobrados todavía") +
+        (c.top && c.top.length ? '<div class="muted">Suele pedir: ' + esc(c.top.join(", ")) + "</div>" : "") +
+        (c.notes ? '<div class="muted">Nota: ' + esc(c.notes) + "</div>" : "");
+      $("dCard").classList.remove("hidden");
+    }).catch(function () { $("dCard").classList.add("hidden"); });
+  }
+  $("dPhone").addEventListener("input", function () { clearTimeout(delivTimer); delivTimer = setTimeout(delivLookup, 350); });
   // Yummy cobra su envío en su app: aquí no lleva costo de delivery
   function delivChan() { var y = $("dChan").value === "yummy"; $("dFeeBox").classList.toggle("hidden", y); if (y) $("dFee").value = "0"; }
   $("dChan").addEventListener("change", delivChan);

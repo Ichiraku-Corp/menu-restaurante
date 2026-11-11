@@ -13,13 +13,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=d5afdec9d7">
+<link rel="stylesheet" href="pos.css?v=7d124df4fc">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=ac703fa2f3"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos.js?v=625ef249f4" defer></script>
+<script src="pos.js?v=b1c6e88963" defer></script>
 </head>
 <body>
 <header>
@@ -141,8 +141,9 @@
 <dialog id="delivDlg">
   <h2 id="delivTitle">Nuevo delivery</h2>
   <label class="muted" style="display:block">Tipo<select id="dChan"><option value="propio">Delivery propio (lo lleva nuestro delivery)</option><option value="yummy">Yummy</option></select></label>
+  <input id="dPhone" placeholder="Teléfono (si ya pidió antes, se llenan sus datos)" inputmode="tel" maxlength="30" style="margin-top:8px">
+  <div id="dCard" class="ccard hidden" aria-live="polite"></div>
   <input id="dName" placeholder="Nombre del cliente" maxlength="40" style="margin-top:8px">
-  <input id="dPhone" placeholder="Teléfono" inputmode="tel" maxlength="30" style="margin-top:8px">
   <textarea id="dAddr" placeholder="Dirección" maxlength="200" style="margin-top:8px"></textarea>
   <label class="muted" id="dFeeBox" style="display:block;margin-top:8px">Costo del delivery (Ref)<input id="dFee" inputmode="decimal" value="0"></label>
   <p class="muted" style="margin:6px 0 0;font-size:13px">Pedidos del personal para llevar van en «Para llevar», no aquí.</p>

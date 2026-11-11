@@ -347,3 +347,6 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 .ann h3 { margin:0 0 4px; }
 .ann p { margin:0 0 8px; white-space:pre-wrap; }
 .ann small { display:block; color:var(--muted); margin-bottom:8px; }
+  /* Ficha del cliente en el delivery */
+  .ccard { background:var(--chip); border:1.5px solid var(--line); border-radius:12px; padding:9px 12px; margin-top:8px; font-size:14px; }
+  .ccard .muted { font-size:13px; margin-top:2px; }
