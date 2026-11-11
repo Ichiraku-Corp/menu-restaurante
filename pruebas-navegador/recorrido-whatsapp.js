@@ -56,6 +56,33 @@ const ORDER = { id: 41, status: "por_aceptar", kind: "delivery", zone: "Centro",
   const pin = async (emp, code) => { await page.click(`#people [data-emp="${emp}"]`); for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
 
   try {
+    // ---------------------------------------------------------------- Carta: «Pedir por WhatsApp»
+    const carta = await (await browser.newContext({ viewport: { width: 400, height: 820 } })).newPage();
+    carta.on("pageerror", (e) => errores.push("carta: " + e.message));
+    carta.on("dialog", (d) => { errores.push("carta alerta: " + d.message()); d.accept().catch(() => {}); });
+    const m = JSON.parse(menu);
+    let cartBody = null, waUrl = null;
+    await carta.route("**/config.js", (r) => r.fulfill({ contentType: "application/javascript", body:
+      'window.MENU_CONFIG={SUPABASE_URL:"https://krjryvtnzgwwhanmbdrn.supabase.co",SUPABASE_ANON_KEY:"anon",RESTAURANT_NAME:"Ichiraku Ramen",PRICE_PREFIX:"Ref",CURRENCY:"USD",LOCALE:"es-VE",' +
+      'WHATSAPP_NUMBER:"+58 414 000 0000",WHATSAPP_ORDERS:true,SERVICE_PERCENT:10,ORDER_ACTIONS:false};' }));
+    // Misma dirección que la carta real (la política de seguridad solo permite esa), pero interceptada: nunca sale a internet.
+    await carta.route("https://krjryvtnzgwwhanmbdrn.supabase.co/**", (r) => {
+      const u = r.request().url();
+      if (u.includes("/rpc/wa_cart_create")) { cartBody = JSON.parse(r.request().postData()); return r.fulfill({ contentType: "application/json", body: '{"code":"K7M2P","subtotal":25}' }); }
+      return r.fulfill({ contentType: "application/json", body: JSON.stringify(u.includes("/categories") ? m.categories : m.dishes) });
+    });
+    await carta.route("https://wa.me/**", (r) => { waUrl = r.request().url(); return r.fulfill({ contentType: "text/html", body: "<p>WhatsApp</p>" }); });
+    await carta.addInitScript(() => localStorage.setItem("menu-order-v1", JSON.stringify([{ id: 2, v: "Gr", o: "", n: "", q: 1 }, { id: 4, v: "", o: "", n: "salsa teriyaki", q: 2 }])));
+    await carta.goto("http://localhost:8798/index.html");
+    await carta.click("#orderbar"); await carta.waitForSelector("#orderSheet[open]");
+    ok(await carta.isVisible("#osWaOrder"), "la carta muestra «Pedir por WhatsApp» cuando está activado");
+    await carta.click("#osWaOrder"); await carta.waitForURL(/wa\.me/, { timeout: 5000 });
+    ok(JSON.stringify(cartBody && cartBody.p_items) === JSON.stringify([{ dish_id: 2, variant: "Gr", option: "", notes: "", qty: 1 }, { dish_id: 4, variant: "", option: "", notes: "salsa teriyaki", qty: 2 }]),
+      "manda los platos (sin precios: el servidor los calcula)");
+    ok(/wa\.me\/584140000000\?text=/.test(waUrl || "") && decodeURIComponent(waUrl).includes("pedido K7M2P") && decodeURIComponent(waUrl).includes("2 × Gyozas"),
+      "abre WhatsApp con el código del pedido y el resumen");
+    await carta.context().close();
+
     await page.goto("http://localhost:8798/pos.html");
     await page.fill("#devEmail", "tablet@ejemplo.test"); await page.fill("#devPass", "x"); await page.click("#device button");
     await pin(2, "2222"); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });

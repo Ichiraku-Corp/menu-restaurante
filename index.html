@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-MYSYHqMEfNFX0D5jdWzD9Gdzh9r//iWJl5iLqVA0PyI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-WJ9vdv+1riHy439IfEBLYGdCSzcw+DWMDOfQsTpT1o0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -218,6 +218,8 @@
       <button class="cta wa" type="button" id="osWa" hidden>Enviar por WhatsApp</button>
     </div>
     </div>
+    <button class="cta wa" type="button" id="osWaOrder" hidden style="width:100%;justify-content:center;margin-top:8px">Pedir por WhatsApp · retiro o delivery</button>
+    <p class="fine" id="osWaNote" hidden style="text-align:center;margin:6px 0 0">Para retirar o delivery no se cobra el servicio; el envío depende de tu zona.</p>
     <button class="link" type="button" id="osClear">Vaciar pedido</button>
   </div>
 </dialog>
@@ -464,6 +466,27 @@
     }).join("\n") + "\n\n" + (SVC ? "Subtotal: " + fmt(orderSubtotal()) + "\n" + svcLabel + ": " + fmt(orderService()) + "\n" : "") +
       "Total: " + fmt(orderTotal());
   }
+  // Pedido por WhatsApp (docs/whatsapp-ventas.md): la carta guarda el carrito y manda solo un código.
+  // El servidor recalcula precios y agotados; el bot de WhatsApp sigue con retiro o delivery y el pago.
+  var WA_ORDERS = !!C.WHATSAPP_ORDERS && !!WA && !!C.SUPABASE_URL;
+  $("osWaOrder").hidden = !WA_ORDERS; $("osWaNote").hidden = !WA_ORDERS || !SVC;
+  $("osWaOrder").addEventListener("click", function () {
+    var b = this, label = b.textContent;
+    if (!order.length || b.disabled) return;
+    b.disabled = true; b.textContent = "Preparando tu pedido…";
+    fetch(C.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/rpc/wa_cart_create", {
+      method: "POST",
+      headers: { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_items: order.map(function (l) { return { dish_id: l.id, variant: l.v || "", option: l.o || "", notes: l.n || "", qty: l.q }; }) })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok || !j.code) throw new Error(j.message || "No se pudo preparar el pedido"); return j; });
+    }).then(function (j) {
+      var lines = order.map(function (l) { var d = DISHES[l.id] || { name: "?" }; return l.q + " × " + d.name + (lineDesc(l) ? " (" + lineDesc(l) + ")" : ""); }).join("\n");
+      location.href = "https://wa.me/" + WA + "?text=" + encodeURIComponent("Hola, quiero hacer el pedido " + j.code + "\n\n" + lines);
+    }).catch(function (e) {
+      alert((e && e.message ? e.message : "No se pudo preparar el pedido") + ".\nRevisa tu pedido o intenta de nuevo.");
+    }).then(function () { b.disabled = false; b.textContent = label; });
+  });
   $("osWa").addEventListener("click", function () {
     window.open("https://wa.me/" + WA + "?text=" + encodeURIComponent(orderText()), "_blank", "noopener");
   });

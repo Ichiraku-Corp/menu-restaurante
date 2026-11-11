@@ -20,6 +20,9 @@ window.MENU_CONFIG = {
   // Número de WhatsApp que recibe los pedidos, con código de país (p. ej. "+58 412 1234567").
   // Vacío = el botón "Enviar por WhatsApp" no aparece.
   WHATSAPP_NUMBER: "",
+  // Botón «Pedir por WhatsApp · retiro o delivery» en el carrito (necesita WHATSAPP_NUMBER y el SQL de
+  // supabase/whatsapp.sql instalado). El bot de WhatsApp sigue el pedido. false = oculto.
+  WHATSAPP_ORDERS: false,
   // Foto grande en la ficha del plato. Actívalo (true) cuando las fotos sean de buena calidad.
   BIG_PHOTOS: false,
   // Cargo por servicio que se suma al total del pedido (en %). 0 = sin cargo.
