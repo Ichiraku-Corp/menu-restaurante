@@ -451,6 +451,9 @@ if (require.main === module) {
 const http = require("http");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css", ".json": "application/json",
   ".webmanifest": "application/manifest+json", ".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp", ".jpg": "image/jpeg", ".ico": "image/x-icon" };
+// Estado del servidor de las tablets: se informa a Supabase para ver desde Gestión/soporte si las tablets pueden entrar
+const appState = { state: "apagado", port: null, error: "" };
+function localIps() { return Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === "IPv4" && !i.internal).map((i) => i.address); }
 function serveApp() {
   const root = path.join(DIR, "app");
   if (cfg.app_port === false || !fs.existsSync(path.join(root, "pos.html"))) return;
@@ -468,9 +471,10 @@ function serveApp() {
       return;
     }
     fs.createReadStream(file).pipe(res);
-  }).on("error", (e) => log("ERROR al servir la app: " + e.message))
+  }).on("error", (e) => { appState.state = "error"; appState.error = e.message; log("ERROR al servir la app: " + e.message); })
     .listen(port, "0.0.0.0", () => {
-      const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === "IPv4" && !i.internal).map((i) => i.address);
+      appState.state = "ok"; appState.port = port;
+      const ips = localIps();
       log("App de sala para las tablets: " + ips.map((ip) => `http://${ip}:${port}/pos.html`).join("  ·  "));
     });
 }
@@ -605,7 +609,7 @@ async function checkUpdate() {
   if (updating || cfg.actualizar === false) return; updating = true;
   try {
     const from = currentVersion();
-    const rel = await rpc("pos_bridge_check", { p_version: from, p_info: { node: process.version, host: os.hostname() } });
+    const rel = await rpc("pos_bridge_check", { p_version: from, p_info: { node: process.version, host: os.hostname(), ips: localIps(), app: appState } });
     if (!rel || !rel.version) return;
     let failed = 0; try { failed = parseInt(fs.readFileSync(path.join(DIR, "version-fallida.txt"), "utf8"), 10) || 0; } catch (e) { /* nada */ }
     if (rel.version <= failed) return; // esa versión ya falló aquí
