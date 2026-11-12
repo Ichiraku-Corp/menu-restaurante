@@ -92,9 +92,9 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la fact
   `nex` con la clave de Claude y crear la cuenta de la tablet.
 - **Equipo facial:** instalar el Hikvision (12 V, cable de red), registrar caras con su nº de empleado
   y conectar las marcaciones a n8n (en la nube; si el equipo no envía a HTTPS, puente local).
-- **Ventas por WhatsApp** (en curso, rama `whatsapp-ventas`): pedidos de clientes que entran solos a caja como
+- **Ventas por WhatsApp** (código listo en la rama `whatsapp-ventas`; falta instalar): pedidos de clientes que entran solos a caja como
   Delivery o Para llevar, avisos de estado y, más adelante, Nex atendiendo y anuncios «Click to WhatsApp».
-  Plan: [`docs/whatsapp-ventas.md`](whatsapp-ventas.md).
+  Plan: [`docs/whatsapp-ventas.md`](whatsapp-ventas.md) · Instalación: [`docs/whatsapp-instalacion.md`](whatsapp-instalacion.md).
 - **n8n:** precios de proveedores por WhatsApp Business (API oficial de Meta), ventas diarias y
   avisos.
 - **Nex, fase 3:** avatar Live2D, personalidad oficial e identificación por cara en la tablet.
