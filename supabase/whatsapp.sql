@@ -349,6 +349,31 @@ language sql stable security definer set search_path = public as $$
   from public.wa_settings s where s.id = 1
 $$;
 
+-- Busca la zona de delivery por lo que escribe el cliente («vivo en Valle de Oro», «guacara»…), sin importar
+-- acentos ni mayúsculas. Hasta 10 coincidencias (lo que cabe en una lista de WhatsApp), las más exactas primero.
+create or replace function public.wa_norm(t text) returns text
+language sql immutable set search_path = public as $$
+  select trim(regexp_replace(regexp_replace(translate(lower(coalesce(t, '')), 'áàäâéèëêíìïîóòöôúùüûñ', 'aaaaeeeeiiiioooouuuun'),
+         '[^a-z0-9 ]', ' ', 'g'), '\s+', ' ', 'g'))
+$$;
+
+create or replace function public.wa_zone_search(p_text text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with q as (select ' ' || public.wa_norm(p_text) || ' ' as t),
+  z as (
+    select z.id, z.name, z.fee, ' ' || public.wa_norm(z.name) || ' ' as n from public.wa_zones z where z.active),
+  scored as (
+    select z.*, case
+      when position(z.n in q.t) > 0 then 1                                    -- escribió el nombre completo
+      when length(trim(q.t)) >= 4 and position(q.t in z.n) > 0 then 2         -- escribió parte del nombre
+      when exists (select 1 from regexp_split_to_table(trim(q.t), ' ') w
+                   where length(w) >= 5 and position(' ' || w || ' ' in z.n) > 0) then 3   -- coincide una palabra
+    end as score
+    from z, q)
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name, 'fee', fee) order by score, fee, name), '[]'::jsonb)
+  from (select * from scored where score is not null order by score, fee, name limit 10) s
+$$;
+
 -- El cliente manda el código de la carta: se crea (o reemplaza) su pedido en borrador.
 create or replace function public.wa_order_from_cart(p_conv bigint, p_code text) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -706,7 +731,7 @@ declare f text;
 begin
   -- Ayudantes internos: nadie los llama directo.
   foreach f in array array['wa_check_items(jsonb)', 'wa_items_total(jsonb)', 'wa_event(bigint, text, jsonb)', 'wa_queue(bigint, text, text)',
-                           'wa_is_open(timestamptz)', 'wa_order_json(bigint)', 'wa_phone_norm(text)'] loop
+                           'wa_is_open(timestamptz)', 'wa_order_json(bigint)', 'wa_phone_norm(text)', 'wa_norm(text)'] loop
     execute format('revoke execute on function public.%s from anon, public, authenticated', f);
   end loop;
   -- Solo la función «whatsapp» (service_role).
@@ -714,7 +739,8 @@ begin
                            'wa_status(text, text, text)', 'wa_context()', 'wa_order_from_cart(bigint, text)', 'wa_order_set(bigint, jsonb)',
                            'wa_order_submit(bigint)', 'wa_reservation_create(bigint, text, integer, timestamptz, text, text)',
                            'wa_outbox_next(integer)', 'wa_outbox_done(bigint, boolean, text, text)',
-                           'wa_set_step(bigint, text, jsonb)', 'wa_state(bigint)', 'wa_handoff(bigint)', 'wa_order_cancel(bigint)'] loop
+                           'wa_set_step(bigint, text, jsonb)', 'wa_state(bigint)', 'wa_handoff(bigint)', 'wa_order_cancel(bigint)',
+                           'wa_zone_search(text)'] loop
     execute format('revoke execute on function public.%s from anon, public, authenticated', f);
     execute format('grant execute on function public.%s to service_role', f);
   end loop;

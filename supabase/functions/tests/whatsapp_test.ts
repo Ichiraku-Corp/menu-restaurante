@@ -175,9 +175,15 @@ Deno.test({ name: "conversación completa: carta → delivery → pago → caja 
   assert(sent.some((s) => body(s.p).includes("Ref 20,00")), "el resumen muestra el total real (15 + 5)");
   eq(ids(last(sent)), ["kind:llevar", "kind:delivery"], "pregunta retiro o delivery");
   await say({ type: "interactive", replyId: "kind:delivery" });
-  assert(ids(last(sent)).includes(`zone:${zone}`), "muestra las zonas");
-  await say({ type: "interactive", replyId: `zone:${zone}` });
+  assert(body(last(sent)).includes("urbanización o sector"), "con muchas zonas pide escribir la urbanización");
+  await say({ text: "guacara" });
+  assert(ids(last(sent)).length >= 2 && body(last(sent)).includes("varias zonas"), "si hay varias parecidas, las muestra para elegir");
+  await say({ text: "Marte 3000" });
+  assert(ids(last(sent)).includes("kind:llevar") && ids(last(sent)).includes("menu:humano"), "si no la encuentra, ofrece retiro o una persona");
+  await say({ text: "vivo en zona prueba bot, casa 4" });
+  assert(sent.some((s) => body(s.p).includes("Zona prueba bot: delivery Ref 3,00")), "una sola coincidencia se toma directo y dice el precio");
   assert(body(last(sent)).includes("dirección"), "pide la dirección");
+  void zone;
   await say({ text: "Calle Hokage, casa 7, frente a la academia" });
   eq(ids(last(sent)), ["name:profile"], "ofrece usar el nombre del perfil");
   await say({ type: "interactive", replyId: "name:profile" });

@@ -142,4 +142,15 @@ reset role;
 select prueba.ok((:'st'::jsonb -> 'funnel' ->> 'aceptados')::int = 1 and (:'st'::jsonb ->> 'ventas')::numeric = 27, 'Gestión ve el embudo: 1 aceptado por Ref 27');
 select prueba.ok((:'st'::jsonb -> 'anuncios' -> 0 ->> 'source_id') = 'ad_123' and (:'st'::jsonb -> 'anuncios' -> 0 ->> 'ventas')::numeric = 27,
                  'y que esa venta vino del anuncio ad_123');
+-- ---------------------------------------------------------------- Zonas por nombre (más de 10 sectores)
+insert into public.wa_zones (name, fee) values ('Valle de Oro', 3), ('Guacara Plaza', 5.5), ('Guacara hasta el centro', 5.5), ('Guacara Zona 2', 6),
+  ('Naguanagua', 5), ('Los Guayos hasta la Plaza', 4), ('Guayos zona 2 después de la plaza', 5), ('Mañongo', 4.5), ('La Viña', 4.5), ('Viñedo', 4.5),
+  ('Trigal', 4.5), ('Trigaleña', 4.5);
+select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+select prueba.ok((public.wa_zone_search('Vivo en VALLE DE ORO, casa 5') -> 0 ->> 'name') = 'Valle de Oro', 'encuentra la zona dentro de una frase, sin importar mayúsculas');
+select prueba.ok(jsonb_array_length(public.wa_zone_search('guacara')) = 3, 'una palabra con varias zonas las muestra todas');
+select prueba.ok((public.wa_zone_search('manongo') -> 0 ->> 'name') = 'Mañongo', 'sin ñ ni acentos también la encuentra');
+select prueba.ok((public.wa_zone_search('trigal') -> 0 ->> 'name') = 'Trigal', 'el nombre exacto va primero (Trigal antes que Trigaleña)');
+select prueba.ok(jsonb_array_length(public.wa_zone_search('marte')) = 0, 'un lugar que no existe no devuelve nada');
+select prueba.ok(jsonb_array_length(public.wa_zone_search('la')) <= 10, 'nunca más de 10 resultados');
 \echo 'TODAS LAS PRUEBAS DE WHATSAPP PASARON'

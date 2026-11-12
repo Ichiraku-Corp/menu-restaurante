@@ -281,6 +281,7 @@ export class Bot {
     }
     if (msg.imageId && st.draft && st.step === "pago_ref") { await this.set(conv, { payment_media: msg.imageId }); return this.next(conv, to); }
     if (t && st.draft) {
+      if (st.step === "zona") return this.zoneByText(conv, to, t);
       if (st.step === "direccion") { await this.set(conv, { address: t }); return this.next(conv, to); }
       if (st.step === "nombre") { await this.set(conv, { customer_name: t }); return this.next(conv, to); }
       if (st.step === "cedula") {
@@ -305,6 +306,22 @@ export class Bot {
   }
 
   private set(conv: number, fields: Record<string, unknown>) { return this.call("wa_order_set", { p_conv: conv, p_fields: fields }); }
+
+  /** El cliente escribió su urbanización: una coincidencia se toma directo; varias se muestran; ninguna, se le ofrece salida. */
+  private async zoneByText(conv: number, to: string, t: string) {
+    const found = (await this.call("wa_zone_search", { p_text: t })) as Json[];
+    if (found.length === 1) {
+      await this.set(conv, { zone_id: found[0].id });
+      await this.say(conv, to, text(`📍 ${found[0].name}: delivery ${ref(found[0].fee)}`));
+      return this.next(conv, to);
+    }
+    if (found.length > 1) {
+      return this.say(conv, to, list("Encontré varias zonas parecidas. ¿Cuál es la tuya?", "Elegir zona",
+        found.map((z) => ({ id: "zone:" + z.id, title: z.name, description: ref(z.fee) }))));
+    }
+    return this.say(conv, to, buttons(`No encontré «${t.slice(0, 40)}» en nuestras zonas de delivery 🙏 Escribe otra urbanización o un punto de referencia cercano, o elige:`,
+      [{ id: "kind:llevar", title: "🥡 Retiro en local" }, { id: "menu:humano", title: "🙋 Una persona" }]));
+  }
 
   /** Pregunta lo primero que falte del pedido en borrador. */
   private async next(conv: number, to: string, state?: Json): Promise<void> {
@@ -334,8 +351,12 @@ export class Bot {
         return this.next(conv, to);
       }
       await step("zona");
-      return this.say(conv, to, list(`¿A qué zona va el delivery? (pedido mínimo ${ref(this.ctx.delivery_min)} sin el envío)`, "Elegir zona",
-        zones.map((z) => ({ id: "zone:" + z.id, title: z.name, description: ref(z.fee) }))));
+      if (zones.length <= 10) {
+        return this.say(conv, to, list(`¿A qué zona va el delivery? (pedido mínimo ${ref(this.ctx.delivery_min)} sin el envío)`, "Elegir zona",
+          zones.map((z) => ({ id: "zone:" + z.id, title: z.name, description: ref(z.fee) }))));
+      }
+      // Muchas zonas (WhatsApp muestra máximo 10 opciones): el cliente escribe su urbanización y el bot la busca.
+      return this.say(conv, to, text(`🛵 ¿En qué *urbanización o sector* es la entrega? Escríbelo, por ejemplo: _Valle de Oro_, _Naguanagua_, _Trigal_.\n(Pedido mínimo ${ref(this.ctx.delivery_min)} sin el envío)`));
     }
     if (o.kind === "delivery" && (o.address ?? "").length < 5 && !o.location) {
       await step("direccion");
