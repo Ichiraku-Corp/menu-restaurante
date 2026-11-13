@@ -39,7 +39,7 @@ const FAKE_WA = `
 const ORDER = { id: 41, status: "por_aceptar", kind: "delivery", zone: "Centro", delivery_fee: 2, total: 27, total_bs: 1417.5, subtotal: 25,
   items: [{ dish_id: 1, name: "Pollo Kobayashi", variant: "Gr", option: "", notes: "", qty: 1, unit_price: 15 }, { dish_id: 2, name: "Gyozas", variant: "", option: "", notes: "salsa teriyaki", qty: 2, unit_price: 5 }],
   address: "Calle 5, casa 12", location: { latitude: 10.18, longitude: -67.97 }, customer_name: "Naruto Uzumaki", doc_id: "V12345678",
-  payment_method: "pago_movil", payment_ref: "123456", payment_media: "", has_payment_media: false, phone: "584141234567", wa_name: "Naruto",
+  payment_method: "pago_movil", payment_ref: "123456", payment_media: "998877665544", has_payment_media: true, phone: "584141234567", wa_name: "Naruto",
   submitted_at: new Date().toISOString() };
 
 (async () => {
@@ -103,6 +103,15 @@ const ORDER = { id: 41, status: "por_aceptar", kind: "delivery", zone: "Centro",
     ok(/salsa teriyaki/.test(card) && /Pago móvil/.test(card), "con notas y método de pago");
     ok(await page.isVisible('#waBody a[href*="maps.google.com/?q=10.18"]'), "con enlace a la ubicación");
 
+    // Captura del pago: la función devuelve una imagen y la caja debe mostrarla (no un ícono roto).
+    let mediaBody = null, mediaAuth = null;
+    await page.route("**/functions/v1/whatsapp", (r) => { mediaBody = JSON.parse(r.request().postData() || "{}"); mediaAuth = r.request().headers()["authorization"];
+      return r.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") }); });
+    await page.click('#waBody [data-waimg="998877665544"]'); await page.waitForSelector("#waImgDlg[open]");
+    await page.waitForFunction(() => { const i = document.getElementById("waImg"); return i.complete && i.naturalWidth > 0; }, null, { timeout: 5000 });
+    ok(mediaBody && mediaBody.action === "media" && mediaBody.id === "998877665544" && mediaAuth === "Bearer token-prueba", "pide la captura con la sesión de la caja");
+    ok(/Compárala/.test(await page.textContent("#waImgHelp")), "la captura del pago se ve como imagen");
+    await page.click("#waImgClose"); await page.unroute("**/functions/v1/whatsapp");
     await page.click('#waBody [data-waaccept="41"]'); await page.waitForTimeout(500);
     ok(await S(() => window.__W.calls.some((c) => c.fn === "wa_accept" && c.args.p_order === 41 && c.args.p_pin === "2222")), "Aceptar llama a wa_accept con el PIN de quien acepta");
     ok(await S(() => (window.__invokes || []).some((i) => i.fn === "whatsapp" && i.body.action === "flush")), "y pide enviar el aviso al cliente al momento");

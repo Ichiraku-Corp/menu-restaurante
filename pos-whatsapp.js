@@ -140,11 +140,20 @@ $("waBody").addEventListener("click", function (e) {
       }).catch(fail);
   } else if (b.dataset.waimg) {
     $("waImg").removeAttribute("src"); $("waImgHelp").textContent = "Cargando…"; $("waImgDlg").showModal();
-    sb.functions.invoke("whatsapp", { body: { action: "media", id: b.dataset.waimg } }).then(function (r) {
-      if (r.error || !(r.data instanceof Blob)) { $("waImgHelp").textContent = "No se pudo cargar la captura. Pídesela de nuevo al cliente."; return; }
+    // Pedido directo (no functions.invoke): esa librería entrega las imágenes como texto y se ven rotas.
+    sb.auth.getSession().then(function (s) {
+      var token = s && s.data && s.data.session ? s.data.session.access_token : C.SUPABASE_ANON_KEY;
+      return fetch(C.SUPABASE_URL.replace(/\/$/, "") + "/functions/v1/whatsapp", {
+        method: "POST", headers: { Authorization: "Bearer " + token, apikey: C.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "media", id: b.dataset.waimg })
+      });
+    }).then(function (res) {
+      if (!res.ok || !/^image\//.test(res.headers.get("content-type") || "")) throw new Error("sin imagen");
+      return res.blob();
+    }).then(function (blob) {
       $("waImgHelp").textContent = "Compárala con el pago recibido antes de aceptar.";
-      $("waImg").src = URL.createObjectURL(r.data);
-    }).catch(function () { $("waImgHelp").textContent = "No se pudo cargar la captura."; });
+      $("waImg").src = URL.createObjectURL(blob);
+    }).catch(function () { $("waImgHelp").textContent = "No se pudo cargar la captura. Pídesela de nuevo al cliente."; });
   }
 });
 $("waImgClose").addEventListener("click", function () { $("waImgDlg").close(); var s0 = $("waImg").src; if (s0) URL.revokeObjectURL(s0); });
