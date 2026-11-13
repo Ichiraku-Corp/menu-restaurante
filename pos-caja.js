@@ -316,6 +316,14 @@ function anyDialogOpen() { return Array.prototype.some.call(document.querySelect
 function closeDialogs() { document.querySelectorAll("dialog").forEach(function (d) { if (d.open) d.close(); }); if (askResolve) { var r = askResolve; askResolve = null; r(null); } }
 
 // ---------------------------------------------------------------- Arranque (al final: todas las partes ya están cargadas)
+// Supabase avisa «SIGNED_IN» cada vez que la pestaña vuelve a verse (pantalla que se enciende, volver de otra app)
+// y «TOKEN_REFRESHED» cada hora. Eso no debe cerrar la sesión de quien usa la tablet: el equipo se activa una sola
+// vez y solo vuelve a la pantalla de la cuenta de sala si de verdad se cerró la cuenta.
+var deviceOn = false;
 sb.auth.onAuthStateChange(function (_e, session) {
-  setTimeout(function () { session ? startDevice() : deviceLogin(); }, 0);
+  setTimeout(function () {
+    if (!session) { deviceOn = false; deviceLogin(); return; }
+    if (deviceOn) return;
+    deviceOn = true; startDevice();
+  }, 0);
 });

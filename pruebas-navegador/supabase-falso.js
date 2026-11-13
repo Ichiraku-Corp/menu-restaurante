@@ -75,7 +75,7 @@
     from:function(t){return new Q(t)},
     functions:{ invoke:function(n,o){ (window.__invokes=window.__invokes||[]).push({fn:n,body:o&&o.body}); return Promise.resolve({data:{sent:0,failed:0},error:null}); } },
     rpc:function(n,a){ return Promise.resolve().then(function(){ if(window.__OFFLINE) return {data:null,error:{message:'TypeError: Failed to fetch'}}; try{ return {data:R[n](a||{}),error:null}; }catch(e){ return {data:null,error:e}; } }); },
-    auth:{ onAuthStateChange:function(cb){cbs.push(cb); setTimeout(function(){cb('INITIAL',session)})},
+    auth:{ onAuthStateChange:function(cb){cbs.push(cb); window.__authEmit=function(ev){ cbs.forEach(function(c){c(ev,session)}); }; setTimeout(function(){cb('INITIAL',session)})},
       signInWithPassword:function(){ session={user:{}}; cbs.forEach(function(cb){cb('SIGNED_IN',session)}); return Promise.resolve({error:null}); },
       getSession:function(){ return Promise.resolve({ data:{ session: session ? { access_token:'token-prueba' } : null }, error:null }); },
       signOut:function(){ session=null; cbs.forEach(function(cb){cb('SIGNED_OUT',null)}); } } }; }};

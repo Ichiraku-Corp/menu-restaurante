@@ -48,6 +48,9 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#annBody [data-annok="900"]'); await page.waitForTimeout(300);
     ok(!(await page.isVisible("#annDlg")) && await S(() => window.__S.anns[0].read.includes(2)), "«Entendido» confirma la lectura y cierra");
     ok(true, "la cajera entra con su PIN");
+    // La pantalla se apaga y se vuelve a encender (Supabase avisa SIGNED_IN) o se renueva la conexión: la sesión sigue
+    await S(() => { window.__authEmit("SIGNED_IN"); window.__authEmit("TOKEN_REFRESHED"); }); await page.waitForTimeout(400);
+    ok(await page.isVisible("#tablesView") && !(await page.isVisible("#pin")), "al volver a encender la pantalla no se cierra la sesión");
 
     // Abrir caja
     await page.click("#btnCaja"); await page.waitForTimeout(200); await page.click("#openCash"); await page.waitForTimeout(300);
