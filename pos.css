@@ -367,3 +367,7 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 .walist button b { display:block; }
 
 #waDlg a { color:var(--info); font-weight:600; }
+
+/* Modo sin internet: franja fija arriba */
+.srbar { position:sticky; top:0; z-index:60; background:var(--warn, #b45309); color:#fff; padding:9px 14px; font-size:15px; line-height:1.35; }
+.srbar a { color:#fff; font-weight:800; text-decoration:underline; }
