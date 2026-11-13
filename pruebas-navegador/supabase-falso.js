@@ -65,15 +65,16 @@
       return {payments:[{method:'pago_movil',amount:253550.56,ref:'1234',at:new Date().toISOString(),label:'Tokio 3',by:'Ana'},{method:'punto_debito',amount:419655.43,ref:'',at:new Date().toISOString(),label:'Edo 1',by:'Cajera'}],outs:[],id:1,status:'abierta',opened_at:S.session.opened_at,opened_by:'Cajera',opening_usd:20,opening_bs:0,methods:m,orders:S.orders.filter(function(o){return o.status==='cobrada'}).length,sales:10,service:1,discounts:[],voids:S.items.filter(function(i){return i.status==='anulado'}).map(function(i){return {order:'x',item:i.name,qty:i.qty,amount:i.qty*i.unit_price,reason:i.void_reason,by:'Cajera'}}),open_orders:S.orders.filter(function(o){return o.status==='abierta'}).length}; },
     pos_cash_open:function(a){ auth(a); S.session={id:1,opened_at:new Date().toISOString(),opened_by:'Cajera'}; return 1; },
     pos_cash_close:function(a){ auth(a); window.__closeArgs=a; window.__closed=a.p_counted; S.session=null; return {}; },
-    pos_set_rate:function(a){ auth(a); S.rate=a.p_rate; }
+    pos_set_rate:function(a){ auth(a); S.rate=a.p_rate; },
+    pos_lan_token:function(){ return {token:'llave-de-prueba', ips:['192.168.0.122'], port:8080}; }
   };
   window.__R=R;   // las pruebas pueden añadir funciones (p. ej. las de WhatsApp)
   function Q(t){ this.t=t; } Q.prototype.select=function(){return this}; Q.prototype.order=function(){return this};
-  Q.prototype.then=function(res,rej){ var d=this.t==='categories'?menu.categories:menu.dishes; return Promise.resolve({data:JSON.parse(JSON.stringify(d)),error:null}).then(res,rej); };
+  Q.prototype.then=function(res,rej){ if(window.__OFFLINE) return Promise.resolve({data:null,error:{message:'TypeError: Failed to fetch'}}).then(res,rej); var d=this.t==='categories'?menu.categories:menu.dishes; return Promise.resolve({data:JSON.parse(JSON.stringify(d)),error:null}).then(res,rej); };
   window.supabase={createClient:function(){ var cbs=[],session=null; return {
     from:function(t){return new Q(t)},
     functions:{ invoke:function(n,o){ (window.__invokes=window.__invokes||[]).push({fn:n,body:o&&o.body}); return Promise.resolve({data:{sent:0,failed:0},error:null}); } },
-    rpc:function(n,a){ return Promise.resolve().then(function(){ try{ return {data:R[n](a||{}),error:null}; }catch(e){ return {data:null,error:e}; } }); },
+    rpc:function(n,a){ return Promise.resolve().then(function(){ if(window.__OFFLINE) return {data:null,error:{message:'TypeError: Failed to fetch'}}; try{ return {data:R[n](a||{}),error:null}; }catch(e){ return {data:null,error:e}; } }); },
     auth:{ onAuthStateChange:function(cb){cbs.push(cb); setTimeout(function(){cb('INITIAL',session)})},
       signInWithPassword:function(){ session={user:{}}; cbs.forEach(function(cb){cb('SIGNED_IN',session)}); return Promise.resolve({error:null}); },
       signOut:function(){ session=null; cbs.forEach(function(cb){cb('SIGNED_OUT',null)}); } } }; }};

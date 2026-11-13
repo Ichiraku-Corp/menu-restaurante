@@ -211,17 +211,25 @@ function send(ip, port, data) {
 }
 
 // ---------------------------------------------------------------- Cola de impresión
+// Todo lo que se imprime pasa en fila (comandas normales y las de sin internet), sin mezclarse.
+let printChain = Promise.resolve();
+function queuePrint(p, body) {
+  const job = printChain.then(async () => { await sendTo(p, render(body)); await new Promise((r) => setTimeout(r, 400)); });
+  printChain = job.catch(() => {});
+  return job;
+}
+let lastOnline = 0; // última vez que Supabase respondió
 let busy = false, lastErr = "";
 async function tick() {
   if (busy) return; busy = true;
   try {
     const jobs = await rpc("pos_print_next", { p_limit: 10 });
+    lastOnline = Date.now();
     for (const j of jobs || []) {
       const p = (cfg.printers || {})[j.printer];
       if (!p) { await rpc("pos_print_done", { p_id: j.id, p_ok: false, p_error: `No hay impresora «${j.printer}» en config.json` }); continue; }
       try {
-        await sendTo(p, render(j.body));
-        await new Promise((r) => setTimeout(r, 400)); // pausa entre tickets: que la impresora termine antes del siguiente
+        await queuePrint(p, j.body); // con pausa entre tickets: que la impresora termine antes del siguiente
         await rpc("pos_print_done", { p_id: j.id, p_ok: true });
         log(`Impreso #${j.id} en ${j.printer}`);
       } catch (e) {
@@ -463,6 +471,7 @@ function serveApp() {
   const port = cfg.app_port || 8080;
   http.createServer((req, res) => {
     let rel = decodeURIComponent((req.url || "/").split("?")[0]);
+    if (rel.startsWith("/api/sinred/")) { srApi(req, res, rel).catch((e) => srJson(res, 500, { ok: false, error: e.message })); return; }
     if (rel === "/" || rel === "") rel = "/pos.html";
     const file = path.normalize(path.join(root, rel));
     if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); res.end("No encontrado"); return; }
@@ -650,6 +659,96 @@ async function checkUpdate() {
   } finally { updating = false; }
 }
 
+// ---------------------------------------------------------------- Modo sin internet (parte 1: pedidos y comandas)
+// Si se cae el internet, las tablets (abiertas desde http://LAPTOP:8080/pos.html) mandan aquí cada envío a cocina:
+// se guarda en sin-internet.jsonl, se imprime la comanda y, cuando vuelve el internet, se sube con pos_offline_sync.
+const SR_FILE = path.join(DIR, "sin-internet.jsonl"), SR_DONE = path.join(DIR, "sin-internet-subidos.txt"), SR_TOKEN = path.join(DIR, "llave-red-local.txt");
+let srToken = ""; try { srToken = fs.readFileSync(SR_TOKEN, "utf8").trim(); } catch (e) { /* aún no hay llave */ }
+async function srRefreshToken() {
+  try { const t = await rpc("pos_lan_token"); if (t && t.token && t.token !== srToken) { srToken = t.token; fs.writeFileSync(SR_TOKEN, srToken); } } catch (e) { /* sin internet: se usa la guardada */ }
+}
+function srEntries() {
+  let txt = ""; try { txt = fs.readFileSync(SR_FILE, "utf8"); } catch (e) { return []; }
+  return txt.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
+}
+function srDoneSet() { try { return new Set(fs.readFileSync(SR_DONE, "utf8").split("\n").filter(Boolean)); } catch (e) { return new Set(); } }
+function srPending() { const done = srDoneSet(); return srEntries().filter((e) => !done.has(e.uuid)); }
+function srJson(res, code, obj) { res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }); res.end(JSON.stringify(obj)); }
+function srBody(req) {
+  return new Promise((resolve, reject) => {
+    let n = 0; const chunks = [];
+    req.on("data", (c) => { n += c.length; if (n > 100e3) { reject(new Error("Pedido demasiado grande")); req.destroy(); } else chunks.push(c); });
+    req.on("end", () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8"))); } catch (e) { reject(new Error("Datos no válidos")); } });
+    req.on("error", reject);
+  });
+}
+const srTxt = (v, max) => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim().slice(0, max);
+function srValid(e) {
+  if (!e || typeof e !== "object") return "Datos no válidos";
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(String(e.uuid || ""))) return "Falta el identificador del envío";
+  if (!Number.isInteger(e.emp) || !/^\d{4,8}$/.test(String(e.pin || ""))) return "Falta quién lo envía";
+  if (!e.order || typeof e.order !== "object" || !(e.order.id || /^sr-[A-Za-z0-9]{4,40}$/.test(String(e.order.tmp || "")))) return "Falta el pedido";
+  if (!Array.isArray(e.items) || !e.items.length || e.items.length > 60) return "No hay platos";
+  for (const i of e.items) if (!Number.isInteger(i.dish_id) || !(i.qty > 0 && i.qty <= 99) || !i.name) return "Plato no válido";
+  return "";
+}
+function srHora(at) { return new Date(at).toLocaleString("es-VE", { timeZone: "America/Caracas", hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(",", ""); }
+// Comandas con el mismo formato que las del sistema (pos_send), marcadas «SIN INTERNET»
+function srComandas(e) {
+  const lines = e.items.map((i) => "^" + i.qty + " " + i.name + (i.variant ? " " + i.variant : "") + (i.option ? "\n  " + i.option : "") + (i.notes ? "\n  >> " + i.notes : "")).join("\n");
+  const hora = srHora(e.at), hhmm = hora.slice(-5);
+  return {
+    cocina: "^" + e.order.label + "\n" + (e.added ? "^+ AGREGADO\n" : "") + "~SIN INTERNET\n" + hora + "  " + (e.emp_name || "") + "\n=\n" + lines + "\n=",
+    caja: "^ORDEN SIN INTERNET" + (e.added ? " (+ agregado)" : "") + "\n^" + e.order.label + "\nHora: " + hhmm + "   Maid: " + (e.emp_name || "") + "\n=\n" + lines + "\n=",
+  };
+}
+async function srApi(req, res, rel) {
+  if (rel === "/api/sinred/hola") return srJson(res, 200, { ok: true, puente: currentVersion() }); // para saber si la laptop está a la vista
+  if (!srToken || req.headers["x-sinred"] !== srToken) return srJson(res, 403, { ok: false, error: "Esta tablet no tiene la llave de la caja. Ábrela una vez con internet." });
+  if (rel === "/api/sinred/estado" && req.method === "GET") {
+    return srJson(res, 200, { ok: true, online: Date.now() - lastOnline < 20e3, pendientes: srPending().length });
+  }
+  if (rel === "/api/sinred/pedidos" && req.method === "GET") {
+    return srJson(res, 200, { ok: true, pedidos: srPending().map((e) => ({ uuid: e.uuid, at: e.at, device: e.device, emp_name: e.emp_name, order: e.order, items: e.items })) });
+  }
+  if (rel === "/api/sinred/enviar" && req.method === "POST") {
+    const b = await srBody(req), bad = srValid(b);
+    if (bad) return srJson(res, 400, { ok: false, error: bad });
+    if (srEntries().some((x) => x.uuid === b.uuid)) return srJson(res, 200, { ok: true, repetido: true });
+    const e = {
+      uuid: b.uuid, at: new Date().toISOString(), device: srTxt(b.device, 30), emp: b.emp, emp_name: srTxt(b.emp_name, 40), pin: String(b.pin), added: !!b.added,
+      order: { id: Number.isInteger(b.order.id) ? b.order.id : null, tmp: b.order.tmp ? String(b.order.tmp) : "", kind: ["mesa", "llevar", "delivery"].includes(b.order.kind) ? b.order.kind : "llevar",
+               table_id: Number.isInteger(b.order.table_id) ? b.order.table_id : null, label: srTxt(b.order.label, 40) || "Sin internet", phone: srTxt(b.order.phone, 30), address: srTxt(b.order.address, 200) },
+      items: b.items.map((i) => ({ dish_id: i.dish_id, name: srTxt(i.name, 60), variant: srTxt(i.variant, 30), option: srTxt(i.option, 40), notes: srTxt(i.notes, 120), qty: Number(i.qty), unit_price: Number(i.unit_price) || 0 })),
+    };
+    fs.appendFileSync(SR_FILE, JSON.stringify(e) + "\n"); // primero se guarda: aunque falle la impresora, el pedido no se pierde
+    log(`Sin internet: ${e.order.label} · ${e.items.length} plato(s) de ${e.emp_name || "?"}`);
+    const c = srComandas(e), errs = [];
+    for (const [printer, body] of [["cocina", c.cocina], ["caja", c.caja]]) {
+      const p = (cfg.printers || {})[printer];
+      if (!p) continue;
+      try { await queuePrint(p, body); } catch (err) { errs.push(err.message); log("ERROR imprimiendo sin internet: " + err.message); }
+    }
+    return srJson(res, 200, { ok: true, impreso: !errs.length, error: errs.join(" · ") });
+  }
+  return srJson(res, 404, { ok: false, error: "No encontrado" });
+}
+// Cuando vuelve el internet: se sube cada envío, en orden; lo subido se anota para no repetirlo
+let srSyncing = false;
+async function srSync() {
+  if (srSyncing || Date.now() - lastOnline > 20e3) return;
+  const list = srPending(); if (!list.length) return;
+  srSyncing = true;
+  try {
+    for (const e of list) {
+      const r = await rpc("pos_offline_sync", { p_entry: e });
+      fs.appendFileSync(SR_DONE, e.uuid + "\n");
+      log(`Subido el pedido sin internet de ${e.order.label}` + (r && r.nota ? ` (${r.nota})` : ""));
+    }
+  } catch (err) { log("No se pudo subir lo hecho sin internet (se reintenta): " + err.message); }
+  finally { srSyncing = false; }
+}
+
 function startBridge() {
   serveApp();
   {
@@ -664,8 +763,11 @@ function startBridge() {
     // Si arrancó una actualización en prueba y lleva 2 min bien, queda confirmada
     if (fs.existsSync(TRIAL_FILE)) setTimeout(() => { try { fs.unlinkSync(TRIAL_FILE); log("Actualización confirmada: funciona bien"); } catch (e) { /* nada */ } }, 120e3);
     setTimeout(checkUpdate, 20e3); setInterval(checkUpdate, 10 * 60e3);
+    srRefreshToken(); setInterval(srRefreshToken, 10 * 60e3);
+    setInterval(srSync, 15e3);
+    if (srPending().length) log(`Hay ${srPending().length} envío(s) hechos sin internet por subir`);
     checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { srApi, srComandas, srValid, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
