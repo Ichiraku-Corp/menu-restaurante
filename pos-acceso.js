@@ -130,8 +130,11 @@ $("bottomNav").addEventListener("click", function (e) {
   drawTables(); window.scrollTo(0, 0);
 });
 $("obToggle").addEventListener("click", function () { $("toggleMenu").click(); syncOrderBar(); window.scrollTo(0, 0); });
+var obChanged = 0;
 $("obSend").addEventListener("click", function () {
-  var m = this.dataset.mode; if (m === "pay") $("pay").click(); else if (m === "bill") $("precuenta").click(); else $("send").click();
+  var m = this.dataset.mode;
+  // Al enviar, este mismo botón pasa a «Precuenta» o «Cobrar»: un segundo toque seguido no debe imprimir ni cobrar
+  if (m !== "send" && Date.now() - obChanged < 2500) { toast("Listo. Si quieres la " + (m === "pay" ? "cuenta" : "precuenta") + ", vuelve a tocar en un momento"); return; } if (m === "pay") $("pay").click(); else if (m === "bill") $("precuenta").click(); else $("send").click();
 });
 function syncOrderBar() {
   if (!cur.data) return;
@@ -142,7 +145,9 @@ function syncOrderBar() {
   $("obToggle").textContent = showingMenu ? "Ver cuenta" : "Ver carta";
   // Botón principal según el momento: enviar lo nuevo → cobrar (o pedir la precuenta si no puede cobrar)
   var hasItems = cur.data.items.some(function (i) { return i.status !== "anulado"; }), b = $("obSend");
-  b.dataset.mode = pending ? "send" : !hasItems ? "none" : U && U.charge ? "pay" : "bill";
+  var mode = pending ? "send" : !hasItems ? "none" : U && U.charge ? "pay" : "bill";
+  if (b.dataset.mode !== mode) obChanged = Date.now(); // el botón cambió: no se acepta un toque «de rebote»
+  b.dataset.mode = mode;
   b.disabled = b.dataset.mode === "none";
   b.textContent = { send: "Enviar (" + pending + ")", pay: "Cobrar", bill: "Precuenta", none: "Enviar" }[b.dataset.mode];
   b.className = b.dataset.mode === "pay" ? "ok" : "primary";
