@@ -106,9 +106,9 @@ function tryPin() {
   }).catch(fail);
 }
 $("btnUser").addEventListener("click", lock);
-// Bloqueo automático tras 3 minutos sin uso.
+// Bloqueo automático tras 10 minutos sin uso.
 var idle;
-function touch() { clearTimeout(idle); if (U) idle = setTimeout(function () { toast("Sesión bloqueada por inactividad"); lock(); }, 180000); }
+function touch() { clearTimeout(idle); if (U) idle = setTimeout(function () { toast("Sesión bloqueada por inactividad"); lock(); }, 600000); }
 ["pointerdown", "keydown"].forEach(function (ev) { document.addEventListener(ev, touch, true); });
 
 // ---------------------------------------------------------------- Teléfono: barras inferiores y pantalla encendida
