@@ -686,6 +686,8 @@ create or replace function public.pos_precuenta(p_emp bigint, p_pin text, p_orde
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
+  -- Dos toques seguidos (o dos tablets a la vez) imprimen una sola precuenta
+  if exists (select 1 from public.pos_orders where id = p_order and precuenta_at > now() - interval '5 seconds') then return; end if;
   update public.pos_orders set precuenta_at = now() where id = p_order;
   -- Las mesas de Edo (arriba) imprimen la precuenta en su propia impresora.
   perform public.pos_print(case when exists (select 1 from public.pos_orders o join public.pos_tables t on t.id = o.table_id where o.id = p_order and t.area = 'Edo')

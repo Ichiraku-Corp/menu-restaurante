@@ -166,7 +166,9 @@ function logoBytes() {
 
 // Marcas en el texto de los tickets:  "=" línea  ·  "@logo" imagen  ·  "^" grande  ·  "~" centrado (se pueden combinar: "~^")
 function render(body) {
-  const parts = [Buffer.from([ESC, 0x40])]; // reiniciar
+  // Reiniciar y dejar un margen: algunas impresoras pierden los primeros bytes mientras se reinician,
+  // y si eran el inicio del logo, el logo sale como letras sueltas. Los ceros (NUL) se ignoran.
+  const parts = [Buffer.from([ESC, 0x40]), Buffer.alloc(64, 0)];
   for (const raw of String(body).split("\n")) {
     if (raw === "=") { parts.push(Buffer.from("-".repeat(WIDTH) + "\n", "ascii")); continue; }
     if (raw.trim() === "@logo") { parts.push(logoBytes()); continue; }
@@ -219,6 +221,7 @@ async function tick() {
       if (!p) { await rpc("pos_print_done", { p_id: j.id, p_ok: false, p_error: `No hay impresora «${j.printer}» en config.json` }); continue; }
       try {
         await sendTo(p, render(j.body));
+        await new Promise((r) => setTimeout(r, 400)); // pausa entre tickets: que la impresora termine antes del siguiente
         await rpc("pos_print_done", { p_id: j.id, p_ok: true });
         log(`Impreso #${j.id} en ${j.printer}`);
       } catch (e) {
