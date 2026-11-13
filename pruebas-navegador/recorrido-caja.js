@@ -65,6 +65,11 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#payLines [data-bill="20"]'); await page.click('#payLines [data-bill="5"]');
     ok((await page.locator("#payLines .amt").first().inputValue()) === "25.00", "billetes $20 + $5 ponen 25 en el monto");
     await page.click('#changeCur [data-cur="MIX"]');
+    // Dos pases de punto: el primero por la mitad, «+ Otro pase» pone lo que falta
+    const pagos0 = await page.locator("#payLines .pay").count();
+    await page.click('#payMethods [data-m="punto_debito"]');
+    ok(/Sobran|Cubre todo/.test(await page.locator("#payLines .pay").nth(pagos0).locator("[data-after]").textContent()), "cada pago dice cuánto queda después de él");
+    await page.locator("#payLines .pay").nth(pagos0).locator(".del").click();
     const vuelto = await page.textContent("#payRest");
     ok(/^\$ \d+ \+ Bs/.test(vuelto.trim()), "vuelto mixto: dólares enteros más bolívares (" + vuelto.trim() + ")");
     let aviso = ""; page.once("dialog", (d) => { aviso = d.message(); });

@@ -371,3 +371,8 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 /* Modo sin internet: franja fija arriba */
 .srbar { position:sticky; top:0; z-index:60; background:var(--warn, #b45309); color:#fff; padding:9px 14px; font-size:15px; line-height:1.35; }
 .srbar a { color:#fff; font-weight:800; text-decoration:underline; }
+/* Cobro: lo que queda después de cada pago y «+ Otro pase» */
+.pay .after { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; color:var(--muted); padding:0 4px; }
+.pay .after.done { color:var(--ok); font-weight:700; }
+.pay .after .again { min-height:34px; padding:4px 12px; font-size:14px; }
+.pay .after.done .again { visibility:hidden; }

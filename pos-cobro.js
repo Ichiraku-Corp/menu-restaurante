@@ -13,7 +13,7 @@ $("pay").addEventListener("click", function () {
     var t = cur.data.totals;
     $("payTitle").textContent = "Cobrar · " + cur.data.label;
     var dueNow = num(t.total) - num(t.paid); splitEq = 0;
-    $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
+    $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " · ya abonó " + ref(num(t.paid)) + " de " + ref(num(t.total)) : "");
     $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
     $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
     $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
@@ -34,7 +34,7 @@ function drawPayPersons() {
       '<b><i class="pdot' + (r.person ? "" : " none") + '"></i>' + esc(pname(r.person)) + "</b><small>" + (done ? "pagado ✓" : "debe " + ref(due)) + "</small></button>";
   }).join("") + '<button type="button" data-pp="0"' + (payPerson === 0 ? ' class="on"' : "") + '><b>Toda la mesa</b><small>' + ref(num(cur.data.totals.total) - num(cur.data.totals.paid)) + "</small></button>";
   var t = cur.data.totals, due0 = payPerson ? personDue(payPerson) : num(t.total) - num(t.paid);
-  $("payTotal").textContent = ref(due0) + (payPerson ? " · " + pname(payPerson) : num(t.paid) ? " (de " + ref(num(t.total)) + ")" : "");
+  $("payTotal").textContent = ref(due0) + (payPerson ? " · " + pname(payPerson) : num(t.paid) ? " · ya abonó " + ref(num(t.paid)) + " de " + ref(num(t.total)) : "");
   $("payTotalBs").textContent = ST.rate ? bs(Math.round(due0 * ST.rate * 100) / 100) : "";
   $("payOk").textContent = payPerson ? "Cobrar a " + pname(payPerson) : "Confirmar cobro";
 }
@@ -53,7 +53,7 @@ $("payMethods").addEventListener("click", function (e) {
   var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   var m = minfo(b.dataset.m), s = paySums(), rest = Math.max(0, s.rest);
   if (splitEq > 1) rest = Math.min(rest, Math.ceil(s.total / splitEq * 100) / 100);
-  pays.push({ method: m[0], amount: m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2), reference: "" });
+  pays.push({ method: m[0], amount: splitEq > 1 ? (m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2)) : suggest(m[0]), reference: "" });
   drawPays();
   var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); }
 });
@@ -76,6 +76,7 @@ function drawPays() {
         : '<span class="refbox"><input class="refin" placeholder="Referencia" value="' + esc(p.reference) + '" aria-label="Referencia del pago"><button type="button" class="vbtn" data-ver title="Buscar el pago entre los recibidos">Buscar</button></span>')
       : '<input class="refin" placeholder="' + (needRef ? "Referencia (opcional)" : "—") + '" value="' + esc(p.reference) + '"' + (needRef ? "" : " disabled") + '>') +
       '<button type="button" class="danger del" aria-label="Quitar">✕</button>' +
+      (p.tip ? "" : '<div class="after"><span data-after></span><button type="button" class="again" data-again title="Añadir otro pago igual con lo que falta">+ Otro pase</button></div>') +
       (p.method === "efectivo_usd" && !p.tip ? '<span class="bills" aria-label="Billetes que entregó el cliente">' + [1, 5, 10, 20, 50, 100].map(function (b) { return '<button type="button" data-bill="' + b + '">$' + b + "</button>"; }).join("") +
         '<button type="button" class="bclr" data-bill="0" title="Borrar el monto">Borrar</button></span>' : "") + "</div>";
   }).join("");
@@ -91,10 +92,31 @@ function changeText(ch) {
   return (changeCur === "BS" || changeCur === "MIX") && ST.rate ? bs(Math.round(ch * ST.rate * 100) / 100) : "$ " + nf2.format(ch);
 }
 function chgTxt(c) { return c.currency === "MIX" ? "$ " + nf2.format(c.usd) + " + " + bs(c.bs) : c.currency === "BS" ? bs(c.amount) : "$ " + nf2.format(c.amount); }
+function bsOf(r) { return ST && ST.rate ? bs(Math.round(r * ST.rate * 100) / 100) : ""; }
+// Bolívares que faltan, contados en bolívares: total en Bs menos lo escrito (así dos pases de punto cuadran al céntimo)
+function paidBsOf(list) { return list.reduce(function (t, p) { return t + (p.tip ? 0 : isRefMethod(p.method) ? num(p.amount) * (ST.rate || 0) : num(p.amount)); }, 0); }
+function restBs(list) { return Math.round((Math.round(paySums().total * (ST.rate || 0) * 100) / 100 - paidBsOf(list)) * 100) / 100; }
+function suggest(method) {
+  var rest = Math.max(0, paySums().rest);
+  if (isRefMethod(method)) return rest.toFixed(2);
+  return Math.max(0, restBs(pays)).toFixed(2);
+}
 function updatePaySums() {
   var s = paySums();
-  $("payPaid").textContent = ref(s.paid) + (tipSum() > 0 ? " + propina " + ref(tipSum()) : "");
-  if (s.rest > 0.009) { $("payRestLbl").textContent = "Falta"; $("payRest").textContent = ref(s.rest) + (ST.rate ? " · " + bs(Math.round(s.rest * ST.rate * 100) / 100) : ""); show("changeBox", false); }
+  // Lo que queda después de cada pago, en Ref y en Bs (para ir abonando: «pasa 5.000 aquí y 5.000 en la otra»)
+  var left = s.total;
+  pays.forEach(function (p, i) {
+    if (p.tip) return; left = Math.round((left - payRef(p)) * 100) / 100;
+    var el = document.querySelector('#payLines [data-i="' + i + '"] [data-after]'); if (!el) return;
+    var lb = restBs(pays.slice(0, i + 1));
+    var full = left <= 0.009 || (ST.rate && Math.abs(lb) < 0.005);
+    el.textContent = left < -0.009 && lb < -0.009 ? "Sobran " + ref(-left) + " (vuelto)" : full ? "Cubre todo ✓" : "Quedan " + (ST.rate ? bs(lb) + " · " : "") + ref(left);
+    el.parentNode.classList.toggle("done", !!full);
+  });
+  // Pagado en Bs: los bolívares tal como se escribieron (sin ida y vuelta por la tasa, que redondea)
+  var paidBs = paidBsOf(pays);
+  $("payPaid").textContent = ref(s.paid) + (ST.rate && s.paid ? " · " + bs(Math.round(paidBs * 100) / 100) : "") + (tipSum() > 0 ? " + propina " + ref(tipSum()) : "");
+  if (s.rest > 0.009 && !(ST.rate && Math.abs(restBs(pays)) < 0.005)) { $("payRestLbl").textContent = "Falta"; $("payRest").innerHTML = (ST.rate ? "<b>" + esc(bs(Math.max(0, restBs(pays)))) + "</b> · " : "") + esc(ref(s.rest)); show("changeBox", false); }
   else if (s.rest < -0.009) {
     $("payRestLbl").textContent = "Vuelto"; var ch = -s.rest;
     $("payRest").textContent = changeText(ch);
@@ -167,6 +189,15 @@ $("payLines").addEventListener("click", function (e) {
   drawPays();
 });
 $("payLines").addEventListener("click", function (e) { var b = e.target.closest(".del"); if (!b) return; pays.splice(Number(b.closest("[data-i]").dataset.i), 1); drawPays(); });
+// «+ Otro pase»: otro pago con el mismo método por lo que falta (ej.: la tarjeta no pasa completa, se divide en dos)
+$("payLines").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-again]"); if (!b) return;
+  var p = pays[Number(b.closest("[data-i]").dataset.i)], rest = Math.max(0, paySums().rest);
+  if (rest <= 0.009) { toast("Ya está cubierto todo"); return; }
+  pays.push({ method: p.method, amount: suggest(p.method), reference: "" });
+  drawPays();
+  var ins = document.querySelectorAll("#payLines .amt"); if (ins.length) { ins[ins.length - 1].focus(); ins[ins.length - 1].select(); }
+});
 $("changeCur").addEventListener("click", function (e) { var b = e.target.closest("[data-cur]"); if (!b || b.disabled) return; changeCur = b.dataset.cur; updatePaySums(); });
 $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
 var paying = false;
