@@ -49,15 +49,22 @@ alter table public.dishes     enable row level security;
 
 drop policy if exists "categories public read" on public.categories;
 create policy "categories public read" on public.categories for select using (true);
-drop policy if exists "categories admin write" on public.categories;
-create policy "categories admin write" on public.categories for all
-  to authenticated using (true) with check (true);
-
 drop policy if exists "dishes public read" on public.dishes;
 create policy "dishes public read" on public.dishes for select using (true);
-drop policy if exists "dishes admin write" on public.dishes;
-create policy "dishes admin write" on public.dishes for all
-  to authenticated using (true) with check (true);
+
+-- Escribir en la carta: aquí NO se abre a nadie. gestion.sql pone la regla real (solo dueño/admin con 2FA).
+-- Si la regla ya existe no se toca, así volver a ejecutar este archivo nunca afloja la seguridad.
+do $$
+declare t text;
+begin
+  foreach t in array array['categories', 'dishes'] loop
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = t and policyname = t || ' admin write') then
+      execute format('create policy %I on public.%I for all to authenticated using (false) with check (false)', t || ' admin write', t);
+    end if;
+  end loop;
+end $$;
+-- El público solo lee la carta: sin permiso de escritura ni siquiera a nivel de tabla
+revoke insert, update, delete, truncate on public.categories, public.dishes from anon;
 
 -- Almacenamiento de fotos (bucket público de lectura)
 insert into storage.buckets (id, name, public)
@@ -67,15 +74,17 @@ on conflict (id) do nothing;
 drop policy if exists "dish photos public read" on storage.objects;
 create policy "dish photos public read" on storage.objects for select
   using (bucket_id = 'dishes');
-drop policy if exists "dish photos admin insert" on storage.objects;
-create policy "dish photos admin insert" on storage.objects for insert
-  to authenticated with check (bucket_id = 'dishes');
-drop policy if exists "dish photos admin update" on storage.objects;
-create policy "dish photos admin update" on storage.objects for update
-  to authenticated using (bucket_id = 'dishes');
-drop policy if exists "dish photos admin delete" on storage.objects;
-create policy "dish photos admin delete" on storage.objects for delete
-  to authenticated using (bucket_id = 'dishes');
+-- Subir, cambiar o borrar fotos: igual que la carta, cerrado aquí; gestion.sql pone la regla real (dueño/admin con 2FA)
+do $$
+declare p text;
+begin
+  foreach p in array array['insert', 'update', 'delete'] loop
+    if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects' and policyname = 'dish photos admin ' || p) then
+      execute format(case p when 'insert' then 'create policy %I on storage.objects for insert to authenticated with check (false)'
+                            else 'create policy %I on storage.objects for ' || p || ' to authenticated using (false)' end, 'dish photos admin ' || p);
+    end if;
+  end loop;
+end $$;
 
 -- IMPORTANTE: en Authentication → Providers → Email, desactiva
 -- "Allow new users to sign up" y crea tu usuario admin a mano en
