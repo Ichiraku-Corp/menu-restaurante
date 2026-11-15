@@ -125,7 +125,8 @@ function drawTicket() {
     (d.client ? esc(d.client.name) : "Cliente") + "</span>";
   $("btnClient").classList.toggle("has", !!d.client);
   var so = ST && ST.orders.find(function (x) { return x.id === d.id; }), rd = so ? so.ready || 0 : 0;
-  show("served", rd > 0); $("servedTxt").textContent = rd + (rd === 1 ? " plato listo en cocina" : " platos listos en cocina");
+  // Para llevar se «entrega» (y sale de la pantalla de pedidos listos); en mesa se «sirve»
+  show("served", rd > 0); $("servedTxt").textContent = rd + (rd === 1 ? " plato listo en cocina" : " platos listos en cocina") + (d.kind === "llevar" ? " · Ya lo entregué" : " · Ya lo serví");
   $("orderMeta").innerHTML = d.kind === "mesa" ? "Servicio " + num(d.service_pct) + " %" : d.kind === "delivery"
     ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
     : "Para llevar (sin servicio)";

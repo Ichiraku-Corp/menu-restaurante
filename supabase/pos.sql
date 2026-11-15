@@ -1842,6 +1842,27 @@ begin
   get diagnostics n = row_count; return n;
 end $$;
 
+-- Pantalla de pedidos para llevar (TV o tablet de cara al cliente): «Preparando» y «¡Listo! Pasa a retirar»
+-- con el número del pedido del día. Sale de «Listo» al marcarlo entregado en la caja o a los 30 minutos.
+create or replace function public.pos_listos() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  with o as (
+    select o.id, o.day_number n, min(i.sent_at) enviado,
+           count(*) filter (where i.ready_at is null) falta, count(*) filter (where i.ready_at is not null and i.served_at is null) por_entregar, max(i.ready_at) listo_at
+    from public.pos_orders o join public.pos_items i on i.order_id = o.id and i.status = 'enviado'
+    where o.kind = 'llevar' and o.status <> 'anulada' and o.opened_at > now() - interval '12 hours' and o.day_number is not null
+    group by o.id, o.day_number
+  )
+  select jsonb_build_object('now', now(),
+    'preparando', coalesce((select jsonb_agg(jsonb_build_object('n', n) order by enviado) from o where falta > 0), '[]'::jsonb),
+    'listos', coalesce((select jsonb_agg(jsonb_build_object('n', n, 'at', listo_at) order by listo_at desc)
+                        from o where falta = 0 and por_entregar > 0 and listo_at > now() - interval '30 minutes'), '[]'::jsonb)) into r;
+  return r;
+end $$;
+
 -- La mesera confirma que ya llevó a la mesa lo que estaba listo
 create or replace function public.pos_served(p_emp bigint, p_pin text, p_order bigint) returns int
 language plpgsql security definer set search_path = public as $$
@@ -1959,7 +1980,7 @@ begin
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
     'pos_purchase(bigint, text, jsonb, text)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
-    'pos_cash_out(bigint, text, text, numeric, text, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen(bigint)', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
+    'pos_cash_out(bigint, text, text, numeric, text, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen(bigint)', 'pos_listos()', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

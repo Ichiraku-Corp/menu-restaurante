@@ -30,6 +30,11 @@
       var listos=S.items.filter(function(i){return i.ready_at&&(!a.p_station||stOf(i)===a.p_station);});
       return {now:new Date().toISOString(),station:a.p_station||null,stations:STS.map(function(x){return {id:x.id,name:x.name,pending:pend.filter(function(i){return stOf(i)===x.id;}).length};}),
         orders:Object.keys(by).map(function(k){return by[k];}),recent:listos.map(function(i){return {id:i.id,name:i.name,qty:i.qty,label:'x',minutes:1};}),today:{count:listos.length,avg:1}}; },
+    pos_listos:function(){ var by={}; S.items.filter(function(i){return i.status==='enviado';}).forEach(function(i){ var o=S.orders.find(function(x){return x.id===i.order_id;});
+        if(!o||o.kind!=='llevar'||o.status==='anulada') return; var b=by[o.id]=by[o.id]||{n:o.day_number||o.id,falta:0,por:0,at:null};
+        if(!i.ready_at) b.falta++; else if(!i.served_at){ b.por++; if(!b.at||i.ready_at>b.at) b.at=i.ready_at; } });
+      var L=Object.keys(by).map(function(k){return by[k];});
+      return {now:new Date().toISOString(),preparando:L.filter(function(b){return b.falta>0;}).map(function(b){return {n:b.n};}),listos:L.filter(function(b){return b.falta===0&&b.por>0;}).map(function(b){return {n:b.n,at:b.at};})}; },
     pos_kitchen_ready:function(a){ var n=0; S.items.forEach(function(i){ if(a.p_items.indexOf(i.id)>=0){ i.ready_at=a.p_ready?new Date().toISOString():null; i.served_at=null; n++; } }); return n; },
     pos_served:function(a){ auth(a); var n=0; S.items.forEach(function(i){ if(i.order_id===a.p_order&&i.ready_at&&!i.served_at){ i.served_at=new Date().toISOString(); n++; } }); return n; },
     pos_cash_out:function(a){ auth(a); window.__out=a; },
