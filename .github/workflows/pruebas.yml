@@ -49,6 +49,8 @@ jobs:
         run: for f in pos-*.js comandas.js reporte-cierre.js mfa.js config.js puente/puente.js scripts/*.js; do node --check "$f"; done
       - name: Política de seguridad de las páginas al día
         run: node scripts/csp.js --check
+      - name: Reporte del correo al día con el de la caja
+        run: node scripts/reporte-correo.js --check
       - name: Puente sin internet (impresora simulada)
         run: node pruebas-navegador/puente-sinred.js
       - name: Los reportes por correo se generan sin errores
@@ -82,4 +84,4 @@ jobs:
         with:
           deno-version: v2.x
       - name: "Nex: herramientas sin red, con Claude y Supabase simulados"
-        run: deno test -A supabase/functions/tests/nex_test.ts && deno check supabase/functions/nex/index.ts
+        run: deno test -A supabase/functions/tests/nex_test.ts supabase/functions/tests/correo_test.ts && deno check supabase/functions/correo/index.ts && deno check supabase/functions/nex/index.ts

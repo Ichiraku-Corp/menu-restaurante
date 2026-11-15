@@ -1020,17 +1020,27 @@ language sql stable security definer set search_path = public as $$
   )
 $$;
 
-create or replace function public.pos_report_next() returns setof public.pos_reports
+-- Quien envía (el servidor con la función «correo», o la laptop como respaldo) aparta cada reporte por 5 minutos:
+-- así dos no mandan el mismo correo. p_min_age: la laptop solo toma los que llevan un rato sin salir.
+alter table public.pos_reports add column if not exists claimed_at timestamptz;
+drop function if exists public.pos_report_next();
+create or replace function public.pos_report_next(p_min_age int default 0) returns setof public.pos_reports
 language plpgsql security definer set search_path = public as $$
 begin
-  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
-  return query select * from public.pos_reports where status = 'pendiente' or (status = 'error' and attempts < 10) order by id limit 5;
+  if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
+  return query update public.pos_reports r set claimed_at = now()
+    where r.id in (select x.id from public.pos_reports x
+                   where (x.status = 'pendiente' or (x.status = 'error' and x.attempts < 10))
+                     and (x.claimed_at is null or x.claimed_at < now() - interval '5 minutes')
+                     and x.created_at <= now() - make_interval(secs => greatest(coalesce(p_min_age, 0), 0))
+                   order by x.id limit 5 for update skip locked)
+    returning r.*;
 end $$;
 create or replace function public.pos_report_done(p_id bigint, p_ok boolean, p_error text default '') returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
-  update public.pos_reports set status = case when p_ok then 'enviado' else 'error' end, attempts = attempts + 1,
+  if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
+  update public.pos_reports set status = case when p_ok then 'enviado' else 'error' end, attempts = attempts + 1, claimed_at = null,
     error = case when p_ok then '' else left(coalesce(p_error, ''), 300) end, sent_at = case when p_ok then now() end where id = p_id;
 end $$;
 
@@ -1718,7 +1728,7 @@ create or replace function public.pos_week_queue() returns boolean
 language plpgsql security definer set search_path = public as $$
 declare nowc timestamp := now() at time zone 'America/Caracas'; d1 date; rcp text;
 begin
-  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
   d1 := date_trunc('week', nowc)::date - 7;
   if extract(isodow from nowc) = 1 and extract(hour from nowc) < 8 then return false; end if;
   if exists (select 1 from public.pos_reports where data ->> 'kind' = 'semanal' and data ->> 'from' = d1::text) then return false; end if;
@@ -1743,7 +1753,7 @@ begin
     'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
     'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
-    'pos_session_report(bigint)', 'pos_report_next()', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
+    'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',

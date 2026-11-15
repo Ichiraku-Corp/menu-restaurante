@@ -415,7 +415,8 @@ async function sendReports() {
   if (!cfg.correo || !cfg.correo.host) return;
   try { if (await rpc("pos_week_queue")) log("Resumen semanal listo para enviar"); } catch (e) { /* base sin la función todavía */ }
   try {
-    const list = await rpc("pos_report_next");
+    // El servidor (función «correo») envía al momento; la laptop es el respaldo de lo que lleve 10 minutos sin salir
+    const list = await rpc("pos_report_next", { p_min_age: 600 });
     for (const r of list || []) {
       const to = String(r.recipients).split(/[,;\s]+/).filter((x) => /@/.test(x));
       try {
