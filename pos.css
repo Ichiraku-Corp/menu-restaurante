@@ -376,3 +376,5 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 .pay .after.done { color:var(--ok); font-weight:700; }
 .pay .after .again { min-height:34px; padding:4px 12px; font-size:14px; }
 .pay .after.done .again { visibility:hidden; }
+/* Cierre: la nota es obligatoria cuando la caja no cuadra */
+#cashNotes.need { border-color:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }

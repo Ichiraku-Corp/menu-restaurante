@@ -44,6 +44,7 @@ function openCash() {
           OUTS.map(function (r) { return "<tr><td>" + esc(r.name) + '</td><td class="r">' + (r.active ? fmtQ(r.stock) + " " + esc(r.unit) : '<span class="muted">primer conteo</span>') +
             '</td><td><input class="icnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px"></td></tr>'; }).join("") + "</tbody></table>" : "") +
         '<textarea id="cashNotes" placeholder="Notas del cierre (obligatorias si la diferencia pasa de Ref 5)" style="margin-top:10px"></textarea>' +
+        '<div id="closeErr" class="banner warn hidden" role="alert"></div>' +
         '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
     }
     h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
@@ -75,7 +76,14 @@ $("cashBody").addEventListener("click", function (e) {
     if (missing && !confirm("Faltan " + missing + " productos de afuera por contar. ¿Seguir sin contarlos?")) return;
     var td = cashDiff();
     if (td.uncounted && !confirm("No escribiste lo contado en " + td.uncounted + " métodos que tienen dinero esperado. ¿Seguir así?")) return;
-    if (Math.abs(td.total) > 5 && $("cashNotes").value.trim().length < 5) { toast("La caja no cuadra por " + ref(td.total) + ": explica la diferencia en las notas", true); $("cashNotes").focus(); return; }
+    if (Math.abs(td.total) > 5 && $("cashNotes").value.trim().length < 5) {
+      // Antes era un aviso de 2 segundos y parecía que el botón no hacía nada: ahora queda escrito junto al botón
+      var ce = $("closeErr");
+      ce.innerHTML = "<b>Falta la nota para cerrar.</b> La caja no cuadra por " + esc(ref(Math.abs(td.total))) + " (" + (td.total > 0 ? "sobra" : "falta") + "). Escribe en «Notas del cierre» qué pasó (ej.: vuelto dado por pago móvil, propina, error al cobrar) y vuelve a tocar el botón.";
+      ce.classList.remove("hidden"); $("cashNotes").classList.add("need");
+      $("cashNotes").scrollIntoView({ block: "center" }); $("cashNotes").focus(); return;
+    }
+    $("closeErr").classList.add("hidden");
     counted._inv = inv; var bb = billBreakdown(); if (bb) counted._billetes = bb.detail;
     closing = { counted: counted, notes: $("cashNotes").value.trim() };
     rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
@@ -160,7 +168,8 @@ function cashDiff() {
     if (raw === "") { cell.innerHTML = ""; if (Math.abs(exp) > 0.009) uncounted++; return; }
     var c = num(raw), d = Math.round((c - exp) * 100) / 100, dRef = isBs ? (rate ? d / rate : 0) : d;
     total += dRef;
-    var warn = isBs && exp > 1000 && c > 0 && c < exp / 50 ? '<div class="cwarn">⚠ ¿Lo escribiste en dólares? Este método se cuenta en <b>bolívares</b> (≈ Bs ' + nf2.format(rate ? c * rate : 0) + ").</div>" : "";
+    var neg = exp < -0.009 ? '<div class="cwarn">⚠ El esperado es negativo: se registraron vueltos en efectivo ' + (isBs ? "en bolívares" : "en dólares") + ' que no salieron de esta gaveta. Si los diste por pago móvil o en otra moneda, explícalo en las notas.</div>' : "";
+    var warn = neg + (isBs && exp > 1000 && c > 0 && c < exp / 50 ? '<div class="cwarn">⚠ ¿Lo escribiste en dólares? Este método se cuenta en <b>bolívares</b> (≈ Bs ' + nf2.format(rate ? c * rate : 0) + ").</div>" : "");
     cell.innerHTML = (Math.abs(d) < 0.01 ? '<span class="ok">✓ cuadra</span>' : '<span class="' + (d > 0 ? "plus" : "minus") + '">' + (d > 0 ? "sobra " : "falta ") + (isBs ? "Bs " : "$ ") + nf2.format(Math.abs(d)) +
       (isBs && rate ? " (≈ Ref " + nf2.format(Math.abs(dRef)) + ")" : "") + "</span>") + warn;
   });
@@ -176,6 +185,7 @@ function billBreakdown() {
   return any ? { total: Math.round(total * 100) / 100, detail: out } : null;
 }
 $("cashBody").addEventListener("input", function (e) {
+  if (e.target.id === "cashNotes" && e.target.value.trim().length >= 5) { e.target.classList.remove("need"); var ce = $("closeErr"); if (ce) ce.classList.add("hidden"); }
   if (e.target.classList.contains("bcnt")) { var b = billBreakdown(), c = document.querySelector('#cashBody .cnt[data-m="efectivo_usd"]'); if (c) c.value = b ? b.total.toFixed(2) : ""; cashDiff(); return; }
   if (e.target.classList.contains("cnt")) cashDiff();
 });

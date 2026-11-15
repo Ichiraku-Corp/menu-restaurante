@@ -112,6 +112,11 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.locator("#cashBody .cwarn").count() > 0, "avisa si el pago móvil parece escrito en dólares");
     await page.click("#doClose"); await page.waitForTimeout(300);
     ok(!(await S(() => !!window.__closed)), "no deja cerrar con diferencia grande sin nota");
+    ok(await page.isVisible("#closeErr") && /Falta la nota para cerrar/.test(await page.textContent("#closeErr")), "explica junto al botón que falta la nota (no solo un aviso que se va)");
+    await page.fill("#cashNotes", "Vuelto dado por pago móvil"); await page.locator("#cashNotes").dispatchEvent("input");
+    ok(!(await page.isVisible("#closeErr")), "al escribir la nota desaparece el aviso");
+    await page.click("#doClose"); await page.waitForSelector("#repDlg[open]", { timeout: 5000 });
+    ok(true, "con la nota escrita, el cierre avanza a la revisión");
   } catch (e) {
     fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
   }
