@@ -1,16 +1,18 @@
-// Modo sin internet (parte 1): si se cae el internet, los pedidos van por la laptop de caja y salen en cocina.
+// Modo sin internet: si se cae el internet, los pedidos y los cobros van por la laptop de caja.
 // Funciona cuando la caja se abre desde la laptop (http://IP-DE-LA-LAPTOP:8080/pos.html), que está en el wifi del local.
-// Cómo: se envuelve sb.rpc. Con internet todo va a Supabase como siempre (y se guarda una copia de mesas, carta y
-// personal). Sin internet, las funciones de pedido se atienden aquí y cada envío a cocina se manda al puente,
-// que imprime la comanda y lo sube cuando vuelve la conexión. Cobrar, descontar y anular esperan al internet.
+// Cómo: se envuelve sb.rpc. Con internet todo va a Supabase como siempre (y se guarda una copia de mesas, carta,
+// personal y de cada cuenta que se abre). Sin internet, las funciones de pedido se atienden aquí: cada envío a cocina
+// y cada cobro se manda al puente, que imprime la comanda o el recibo y lo sube cuando vuelve la conexión.
+// Todas las tablets ven lo de las demás leyendo la lista de la laptop. Sin internet se cobra la cuenta completa
+// (sin abonos, partes ni cargos a cuenta de empleado); descontar y anular esperan al internet.
 "use strict";
-var SR = { on: false, token: "", url: "", tmp: {}, pend: {}, sent: {}, checking: false, lastTry: 0 };
+var SR = { on: false, token: "", url: "", tmp: {}, pend: {}, sent: {}, mine: [], remote: [], paid: {}, checking: false, lastTry: 0, syncing: 0 };
 var SR_LOCAL = location.port === "8080" || /^(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
 function srGet(k) { try { return JSON.parse(localStorage.getItem("sr-" + k) || "null"); } catch (e) { return null; } }
 function srSet(k, v) { try { localStorage.setItem("sr-" + k, JSON.stringify(v)); } catch (e) { /* sin espacio: se sigue sin copia */ } }
 SR.token = srGet("token") || ""; SR.url = srGet("url") || "";
-(function () { var s = srGet("orders"); if (s) { SR.tmp = s.tmp || {}; SR.sent = s.sent || {}; } })();
-function srSaveOrders() { srSet("orders", { tmp: SR.tmp, sent: SR.sent }); }
+(function () { var s = srGet("orders"); if (s) { SR.tmp = s.tmp || {}; SR.sent = s.sent || {}; SR.mine = s.mine || []; SR.paid = s.paid || {}; } })();
+function srSaveOrders() { srSet("orders", { tmp: SR.tmp, sent: SR.sent, mine: SR.mine, paid: SR.paid }); }
 
 // SHA-256 (para recordar en esta tablet los PIN que ya entraron con internet; el servidor los vuelve a verificar al subir)
 function srSha256(msg) {
@@ -59,8 +61,8 @@ function srGoOffline() {
   }
   return srBridge("/api/sinred/estado").then(function () {
     SR.on = true; SR.checking = false;
-    srShow("<b>Sin internet.</b> Los pedidos van por la laptop y salen en cocina. Cobrar, descontar y anular se hace cuando vuelva la conexión.");
-    toast("Sin internet: los pedidos siguen por la laptop");
+    srShow("<b>Sin internet.</b> Los pedidos y los cobros van por la laptop (la comanda y el recibo salen ahí). Descontar y anular se hace cuando vuelva la conexión.");
+    toast("Sin internet: los pedidos y los cobros siguen por la laptop");
     if (U) refreshState().catch(function () {});
     return true;
   }).catch(function (e) {
@@ -75,39 +77,95 @@ setInterval(function () {
   srRealRpc("pos_staff").then(function (r) {
     if (srNetErr(r)) return;
     var was = SR.on; SR.on = false; srShow("");
-    SR.tmp = {}; SR.pend = {}; SR.sent = {}; srSaveOrders();
+    SR.tmp = {}; SR.pend = {}; SR.sent = {}; SR.mine = []; SR.paid = {}; srSaveOrders();
     if (was) {
-      toast("Volvió el internet. Lo pedido sin internet se sube en unos segundos.");
+      toast("Volvió el internet. Lo hecho sin internet se sube en unos segundos.");
       if (cur.order && cur.order < 0) goTables();
       if (U) refreshState().catch(function () {});
+      srWaitSync();
     }
   });
 }, 8000);
 
+// Al volver el internet, la laptop tarda unos segundos en subir lo hecho sin internet: mientras tanto se avisa y no se
+// deja cobrar de nuevo una cuenta que ya se cobró sin internet.
+function srWaitSync() {
+  if (!SR_LOCAL || !SR.token) return;
+  srBridge("/api/sinred/pedidos").then(function (j) {
+    SR.remote = j.pedidos || []; SR.syncing = SR.remote.length;
+    if (SR.syncing) {
+      srShow("<b>Subiendo lo hecho sin internet</b> (" + SR.syncing + " pendiente" + (SR.syncing === 1 ? "" : "s") + "). Espera antes de cobrar las cuentas que se cobraron sin internet.");
+      setTimeout(srWaitSync, 5000);
+    } else { srShow(""); if (U) refreshState().catch(function () {}); }
+  }).catch(function () { SR.syncing = 0; srShow(""); });
+}
+function srPaidOffline(orderId) { return SR.remote.some(function (e) { return e.type === "pago" && e.order && e.order.id === orderId; }); }
+
 // ---------------------------------------------------------------- Lo que se atiende sin internet
 function srTableLabel(t) { return t ? t.area + " " + t.number : "Mesa"; }
 function srNewId() { return -(Date.now() % 1e9 * 10 + Math.floor(Math.random() * 10)); }
+function srTmpOf(id) { return "sr-" + Math.abs(id); }
+function srIdOfTmp(tmp) { return -Number(String(tmp).slice(3)); }
+function srKeyOf(id) { return id > 0 ? "id:" + id : "tmp:" + srTmpOf(id); }
+function srKey(o) { return o.id ? "id:" + o.id : "tmp:" + o.tmp; }
+function srSvcPct() { var s = srGet("st") || ST || {}; return s.service_pct != null ? num(s.service_pct) : 10; }
+function srSum(list) { return list.reduce(function (a, i) { return a + num(i.qty) * num(i.unit_price); }, 0); }
+// Lo que está en la laptop (de todas las tablets) más lo que esta tablet mandó y la laptop aún no listó
+function srRemote() { return srBridge("/api/sinred/pedidos").then(function (j) { SR.remote = j.pedidos || []; }, function () { /* se usa la última lista */ }); }
+function srEntriesAll() { var seen = {}, all = SR.remote.concat(SR.mine); return all.filter(function (e) { if (seen[e.uuid]) return false; seen[e.uuid] = true; return true; }); }
+function srPaidKeys() { var k = {}; srEntriesAll().forEach(function (e) { if (e.type === "pago") k[srKey(e.order)] = true; }); Object.keys(SR.paid).forEach(function (x) { k[x] = true; }); return k; }
+function srItemsOf(key) {
+  var out = [];
+  srEntriesAll().forEach(function (e) { if (e.type !== "pago" && srKey(e.order) === key) (e.items || []).forEach(function (i) {
+    out.push({ dish_id: i.dish_id, name: i.name, variant: i.variant || "", option: i.option || "", notes: i.notes || "", qty: num(i.qty), unit_price: num(i.unit_price) }); }); });
+  return out;
+}
 function srOrderInfo(id) {
   if (SR.tmp[id]) return SR.tmp[id];
   var o = ST && ST.orders.find(function (x) { return x.id === id; });
   if (!o) return null;
-  return { id: o.id, kind: o.kind, table_id: o.table_id, label: o.kind === "mesa" ? srTableLabel(tableById(o.table_id)) : o.label, opened_at: o.opened_at, opened_by: o.opened_by, existing: true };
+  return { id: o.id, kind: o.kind, table_id: o.table_id, label: o.kind === "mesa" ? srTableLabel(tableById(o.table_id)) : o.label, opened_at: o.opened_at, opened_by: o.opened_by,
+           phone: o.phone || "", address: o.address || "", existing: id > 0 };
 }
-function srSentItems(id) { return SR.sent[id] || []; }
+function srSentItems(id) { return srItemsOf(srKeyOf(id)); }
+// El vuelto, igual que lo calcula el servidor (pos_give_change / pos_change_to_tip)
+function srChange(over, cc, rate) {
+  if (cc === "PROPINA") return { currency: "PROPINA", amount: over };
+  if (cc === "MIX" && rate && Math.floor(over) >= 1 && over - Math.floor(over) > 0.009) { var usd = Math.floor(over); return { currency: "MIX", amount: over, usd: usd, bs: Math.round((over - usd) * rate * 100) / 100 }; }
+  if (cc === "MOVIL" && rate) return { currency: "MOVIL", amount: Math.round(over * rate * 100) / 100 };
+  if ((cc === "BS" || cc === "MIX") && rate && !(cc === "MIX" && over - Math.floor(over) <= 0.009)) return { currency: "BS", amount: Math.round(over * rate * 100) / 100 };
+  return { currency: "REF", amount: over };
+}
 var SRH = {
   pos_staff: function () { return srGet("staff") || []; },
+  // Mesas y cuentas: la copia de cuando había internet, más lo pedido y cobrado sin internet en todas las tablets
   pos_state: function () {
-    var s = JSON.parse(JSON.stringify(srGet("st") || ST || { tables: [], orders: [] }));
-    s.orders = s.orders || [];
-    Object.keys(SR.tmp).forEach(function (k) {
-      var t = SR.tmp[k], sum = srSentItems(t.id).reduce(function (a, i) { return a + i.qty * i.unit_price; }, 0);
-      s.orders.push({ id: t.id, kind: t.kind, table_id: t.table_id, label: t.label, opened_at: t.opened_at, opened_by: t.opened_by, total: sum, paid: 0, items: srSentItems(t.id).length, ready: 0, offline: true });
+    return srRemote().then(function () {
+      var s = JSON.parse(JSON.stringify(srGet("st") || ST || { tables: [], orders: [] })), paid = srPaidKeys(), pct = srSvcPct(), tmps = {};
+      s.orders = (s.orders || []).filter(function (o) { return o.id > 0 && !paid["id:" + o.id]; });
+      s.orders.forEach(function (o) {
+        var its = srItemsOf("id:" + o.id); if (!its.length) return;
+        o.total = Math.round((num(o.total) + srSum(its) * (100 + (o.kind === "mesa" ? pct : 0)) / 100) * 100) / 100; o.items = num(o.items) + its.length;
+      });
+      srEntriesAll().forEach(function (e) {
+        if (e.type === "pago" || !e.order || !e.order.tmp || paid["tmp:" + e.order.tmp] || tmps[e.order.tmp]) return;
+        tmps[e.order.tmp] = { order: e.order, at: e.at, by: e.emp_name || "" };
+      });
+      Object.keys(SR.tmp).forEach(function (id) {
+        var t = SR.tmp[id], tmp = srTmpOf(t.id);
+        if (!paid["tmp:" + tmp] && !tmps[tmp]) tmps[tmp] = { order: { tmp: tmp, kind: t.kind, table_id: t.table_id, label: t.label, phone: t.phone, address: t.address }, at: t.opened_at, by: t.opened_by };
+      });
+      Object.keys(tmps).forEach(function (tmp) {
+        var x = tmps[tmp], its = srItemsOf("tmp:" + tmp), svc = x.order.kind === "mesa" ? pct : 0;
+        s.orders.push({ id: srIdOfTmp(tmp), kind: x.order.kind, table_id: x.order.table_id, label: x.order.label, phone: x.order.phone || "", address: x.order.address || "",
+                        opened_at: x.at, opened_by: x.by, total: Math.round(srSum(its) * (100 + svc)) / 100, paid: 0, items: its.length, ready: 0, offline: true });
+      });
+      return s;
     });
-    return s;
   },
   pos_check_pin: function (a) {
     var known = (srGet("pins") || {})[a.p_emp];
-    if (known && known.h === srPinKey(a.p_emp, a.p_pin)) return { ok: true, name: known.name, can_charge: false };
+    if (known && known.h === srPinKey(a.p_emp, a.p_pin)) return { ok: true, name: known.name, can_charge: !!known.charge };
     return { ok: false, error: known ? "PIN incorrecto" : "Sin internet: en esta tablet solo entra quien ya entró antes con internet" };
   },
   pos_open: function (a) {
@@ -126,13 +184,54 @@ var SRH = {
                    opened_at: new Date().toISOString(), opened_by: U ? U.name : "" };
     srSaveOrders(); return id;
   },
+  // Una cuenta: lo que se guardó de ella con internet (o su total, si esta tablet no la abrió) más lo de sin internet
   pos_order: function (a) {
-    var info = srOrderInfo(a.p_order); if (!info) throw new Error("Pedido no encontrado");
-    var items = srSentItems(a.p_order).map(function (i, k) { return Object.assign({ id: -1 - k, status: "enviado" }, i); }).concat((SR.pend[a.p_order] || []).map(function (i, k) { return Object.assign({ id: -100 - k, status: "pendiente" }, i); }));
-    var sub = items.reduce(function (s, i) { return s + i.qty * i.unit_price; }, 0), pct = info.kind === "mesa" ? 10 : 0;
-    return { id: info.id, kind: info.kind, table_id: info.table_id, label: info.label + (info.existing ? " (lo pedido sin internet)" : ""), status: "abierta", items: items,
+    var id = a.p_order, info = srOrderInfo(id); if (!info) throw new Error("Pedido no encontrado");
+    var cached = id > 0 ? (srGet("ords") || {})[id] : null, so = id > 0 && ST ? ST.orders.find(function (x) { return x.id === id; }) : null;
+    var base = cached ? (cached.items || []).filter(function (i) { return i.status !== "pendiente"; }) : [];
+    var off = srSentItems(id).map(function (i, k) { return Object.assign({ id: -1 - k, status: "enviado", offline: true }, i); });
+    var pend = (SR.pend[id] || []).map(function (i, k) { return Object.assign({ id: -100 - k, status: "pendiente" }, i); });
+    var pct = cached ? num(cached.service_pct) : info.kind === "mesa" ? srSvcPct() : 0, ct = cached && cached.totals, prev = null, items, tt;
+    if (ct) {
+      var sub = num(ct.subtotal) + srSum(off) + srSum(pend), disc = Math.min(num(ct.discount), sub), svc = Math.round((sub - disc) * pct) / 100;
+      tt = { subtotal: sub, discount: disc, service: svc, delivery: num(ct.delivery), total: Math.round((sub - disc + svc + num(ct.delivery)) * 100) / 100, paid: num(ct.paid) };
+      items = base.concat(off, pend); prev = num(ct.paid) ? { total: 0, paid: num(ct.paid) } : null;
+    } else {
+      // Cuenta abierta con internet en otra tablet: se conoce su total, no sus platos
+      var pt = so ? num(so.total) - srSum(off) * (100 + (info.kind === "mesa" ? srSvcPct() : 0)) / 100 : 0, pp = so ? num(so.paid) : 0;
+      var s2 = srSum(off) + srSum(pend), v2 = Math.round(s2 * pct) / 100;
+      items = (pt > 0.009 ? [{ id: -999, name: "Consumo anterior (con internet)", qty: 1, unit_price: Math.round(pt * 100) / 100, status: "enviado", synthetic: true }] : []).concat(off, pend);
+      tt = { subtotal: Math.round((pt + s2) * 100) / 100, discount: 0, service: v2, delivery: 0, total: Math.round((pt + s2 + v2) * 100) / 100, paid: pp };
+      prev = pt > 0.009 || pp ? { total: Math.round(pt * 100) / 100, paid: pp } : null;
+    }
+    return { id: info.id, kind: info.kind, table_id: info.table_id, label: info.label + (info.existing ? " (sin internet)" : ""), status: "abierta", items: items,
              phone: info.phone || "", address: info.address || "", opened_by: info.opened_by || "", opened_at: info.opened_at, service_pct: pct, payments: [], split: null,
-             totals: { subtotal: sub, discount: 0, service: Math.round(sub * pct) / 100, delivery: 0, total: sub + Math.round(sub * pct) / 100, paid: 0 } };
+             totals: tt, prev: prev, offline: true };
+  },
+  // Cobrar sin internet: la cuenta completa; la laptop imprime el recibo y lo sube al volver la conexión
+  pos_pay: function (a) {
+    if (!U || !U.charge) throw new Error("Sin internet cobra solo quien tiene permiso de cobrar y ya entró antes con internet en esta tablet");
+    if (a.p_partial) throw new Error("Sin internet se cobra la cuenta completa (sin abonos ni partes)");
+    var id = a.p_order, d = SRH.pos_order({ p_order: id }), rate = num(ST && ST.rate);
+    var lines = (a.p_payments || []).filter(function (p) { return num(p.amount) > 0; });
+    if (lines.some(function (p) { return p.method === "cuenta"; })) throw new Error("Sin internet no se carga a cuenta de empleado");
+    if (d.items.some(function (i) { return i.status === "pendiente"; })) throw new Error("Hay platos sin enviar a cocina: envíalos o quítalos antes de cobrar");
+    var due = Math.round((num(d.totals.total) - num(d.totals.paid)) * 100) / 100, paid = 0;
+    lines.forEach(function (p) { if (!p.tip) paid += minfo(p.method)[2] === "REF" ? num(p.amount) : rate ? num(p.amount) / rate : 0; });
+    paid = Math.round(paid * 100) / 100;
+    if (paid < due - 0.02) throw new Error("Falta por cobrar " + ref(due - paid));
+    var over = Math.round((paid - due) * 100) / 100, cc = a.p_change_currency || "REF", ch = over > 0.02 ? srChange(over, cc, rate) : null;
+    var key = id > 0 ? { id: id } : { tmp: srTmpOf(id) };
+    var body = { uuid: "sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), device: devName(), emp: U.id, emp_name: U.name, pin: U.pin,
+                 order: Object.assign({ label: d.label.replace(/ \(sin internet\)$/, "") }, key),
+                 lines: lines.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference || "", tip: !!p.tip }; }),
+                 change_currency: ch ? cc : "", change: ch ? { text: chgTxt(ch) } : null, total: due, service: num(d.totals.service), rate: rate || null, prev: d.prev,
+                 items: d.items.filter(function (i) { return !i.synthetic && i.status !== "anulado"; }).map(function (i) { return { name: i.name, variant: i.variant || "", qty: num(i.qty), unit_price: num(i.unit_price) }; }) };
+    return srBridge("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(body) }).then(function (r) {
+      SR.paid[srKey(key)] = true; SR.mine.push({ type: "pago", uuid: body.uuid, order: key, lines: body.lines, total: due }); delete SR.pend[id]; if (id < 0) delete SR.tmp[id]; srSaveOrders();
+      if (r.impreso === false) toast("Cobrado y guardado en la laptop, pero el recibo no salió: " + (r.error || ""), true);
+      return { total: num(d.totals.total), paid: due, rest: 0, change: ch, closed: true, offline: true };
+    });
   },
   pos_add: function (a) {
     var list = SR.pend[a.p_order] = SR.pend[a.p_order] || [];
@@ -157,7 +256,7 @@ var SRH = {
                                       : { tmp: "sr-" + Math.abs(info.id), kind: info.kind, table_id: info.table_id, label: info.label, phone: info.phone, address: info.address },
                  items: list };
     return srBridge("/api/sinred/enviar", { method: "POST", body: JSON.stringify(body) }).then(function (r) {
-      SR.sent[a.p_order] = srSentItems(a.p_order).concat(list); delete SR.pend[a.p_order]; srSaveOrders();
+      SR.mine.push({ type: "comanda", uuid: body.uuid, at: new Date().toISOString(), emp_name: U.name, order: body.order, items: list }); delete SR.pend[a.p_order]; srSaveOrders();
       if (r.impreso === false) toast("Guardado en la laptop, pero la impresora falló: " + (r.error || ""), true);
       return list.length;
     });
@@ -174,6 +273,8 @@ function srAnswer(name, args) {
 }
 sb.rpc = function (name, args) {
   if (SR.on) return SRH[name] ? srAnswer(name, args) : Promise.resolve({ data: null, error: { message: "Sin internet: esto se hace cuando vuelva la conexión" } });
+  if (name === "pos_pay" && args && SR.syncing && srPaidOffline(args.p_order))
+    return Promise.resolve({ data: null, error: { message: "Esta cuenta ya se cobró sin internet: la laptop la está subiendo. Espera unos segundos." } });
   return Promise.resolve(srRealRpc(name, args)).then(function (r) {
     if (srNetErr(r)) {
       return srGoOffline().then(function (on) { return on && SRH[name] ? srAnswer(name, args) : r; });
@@ -182,7 +283,14 @@ sb.rpc = function (name, args) {
     if (!r.error) {
       if (name === "pos_state" && r.data) srSet("st", r.data);
       else if (name === "pos_staff" && r.data) srSet("staff", r.data);
-      else if (name === "pos_check_pin" && r.data && r.data.ok && args) { var p = srGet("pins") || {}; p[args.p_emp] = { h: srPinKey(args.p_emp, args.p_pin), name: r.data.name }; srSet("pins", p); srLanToken(); }
+      else if (name === "pos_check_pin" && r.data && r.data.ok && args) { var p = srGet("pins") || {}; p[args.p_emp] = { h: srPinKey(args.p_emp, args.p_pin), name: r.data.name, charge: !!r.data.can_charge }; srSet("pins", p); srLanToken(); }
+      else if (name === "pos_order" && r.data && args) {
+        // Copia de cada cuenta abierta (para cobrarla sin internet con sus platos); se quitan las que ya se cerraron
+        var m = srGet("ords") || {}, open = {}; (ST && ST.orders || []).forEach(function (o) { open[o.id] = true; });
+        Object.keys(m).forEach(function (k) { if (!open[k]) delete m[k]; });
+        if (r.data.status === "abierta") m[args.p_order] = r.data; else delete m[args.p_order];
+        srSet("ords", m);
+      }
     }
     return r;
   });

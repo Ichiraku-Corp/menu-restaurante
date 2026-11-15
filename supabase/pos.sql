@@ -822,12 +822,13 @@ begin
   return jsonb_build_object('currency', 'PROPINA', 'amount', p_over);
 end $$;
 
-create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
+-- El cobro en sí. Lo usan pos_pay (la caja, con PIN) y pos_offline_pay (lo cobrado sin internet, que ya se imprimió en la
+-- laptop: p_offline no vuelve a imprimir y deja la hora real del cobro).
+create or replace function public.pos_pay_core(p_emp bigint, p_order bigint, p_payments jsonb, p_change_currency text, p_partial boolean, p_at timestamptz, p_offline boolean)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint; tips numeric := 0;
   lm text; lc text;  -- método y moneda del último pago (para el vuelto que queda de propina)
 begin
-  perform public.pos_auth_charge(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
   if o.id is null or o.status <> 'abierta' then raise exception 'El pedido ya está cerrado'; end if;
   if exists (select 1 from public.pos_items where order_id = p_order and status = 'pendiente') then
@@ -894,6 +895,7 @@ begin
       else pover := 0;
       end if;
     end if;
+    if not p_offline then
     perform public.pos_print('caja', '^ABONO' || case when who is not null then E'\n^' || upper(public.pos_person_name(who)) else '' end || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
       public.pos_line('Abonado ahora', 'Ref ' || public.pos_money(paid)) || E'\n' ||
       case when pover > 0 then public.pos_line(case when chg ->> 'currency' = 'PROPINA' then 'Propina (vuelto)' else 'Vuelto' end, case chg ->> 'currency' when 'BS' then 'Bs ' || public.pos_money((chg ->> 'amount')::numeric)
@@ -902,7 +904,9 @@ begin
         else 'Ref ' || public.pos_money((chg ->> 'amount')::numeric) end) || E'\n' else '' end ||
       public.pos_line('Total de la cuenta', 'Ref ' || public.pos_money(t.total)) || E'\n^' ||
       public.pos_line('RESTA', 'Ref ' || public.pos_money(due - paid), 24) || E'\n\nNo es factura fiscal.');
-    insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'abono', p_order, jsonb_build_object('monto', paid));
+    end if;
+    insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'abono', p_order, jsonb_build_object('monto', paid, 'sin_internet', p_offline));
+    if p_offline then update public.pos_payments set created_at = p_at where order_id = p_order and created_at = now(); end if;
     return jsonb_build_object('total', t.total, 'paid', paid, 'rest', round(due - paid, 2), 'change', chg, 'closed', false);
   end if;
   over := round(paid - due, 2);
@@ -910,15 +914,26 @@ begin
     chg := case when p_change_currency = 'PROPINA' then public.pos_change_to_tip(p_order, over, lm, lc, rt, p_emp, sess, who)
                 else public.pos_give_change(p_order, over, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who) end;
   end if;
-  update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = now(), session_id = sess, rate = rt where id = p_order;
+  update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = p_at, session_id = sess, rate = rt where id = p_order;
+  if p_offline then update public.pos_payments set created_at = p_at where order_id = p_order and created_at = now();
+  else
   perform public.pos_print('caja', public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
     (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case when p2.is_tip then 'Propina ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
      from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina') || E'\n\n~Gracias por tu visita!');
-  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'cobrar', p_order, jsonb_build_object('total', t.total));
+  end if;
+  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, case when p_offline then 'cobrar_sin_internet' else 'cobrar' end, p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);
+end $$;
+revoke execute on function public.pos_pay_core(bigint, bigint, jsonb, text, boolean, timestamptz, boolean) from anon, public, authenticated;
+
+create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  return public.pos_pay_core(p_emp, p_order, p_payments, p_change_currency, p_partial, now(), false);
 end $$;
 
 create or replace function public.pos_cancel(p_emp bigint, p_pin text, p_order bigint, p_reason text default '')
@@ -1912,6 +1927,7 @@ begin
 end $$;
 -- Funciones internas: solo las llaman otras funciones.
 revoke execute on function public.pos_print(text, text) from authenticated;
+revoke execute on function public.pos_pay_core(bigint, bigint, jsonb, text, boolean, timestamptz, boolean) from anon, public, authenticated;
 revoke execute on function public.inv_consume_item(bigint, int) from anon, public, authenticated;
 revoke execute on function public.pos_match_incoming() from anon, public, authenticated;
 revoke execute on function public.pos_inv_close(jsonb, text, boolean) from anon, public, authenticated;

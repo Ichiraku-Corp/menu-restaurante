@@ -1,5 +1,7 @@
 -- ============================================================================
--- Modo sin internet, parte 1: pedidos y comandas por la laptop de caja (Ichiraku)
+-- Modo sin internet: pedidos, comandas y cobros por la laptop de caja (Ichiraku)
+--  · Parte 2: la cajera también cobra sin internet. La laptop imprime el recibo y guarda el cobro;
+--    al volver la conexión lo sube con pos_offline_pay (después de los platos de ese pedido).
 --  · Si se cae el internet, las tablets mandan los pedidos al puente de la laptop por el
 --    wifi del local; el puente imprime la comanda y los guarda.
 --  · Cuando vuelve el internet, el puente sube cada pedido con pos_offline_sync.
@@ -20,6 +22,7 @@ create table if not exists public.pos_offline_entries (
   synced_at  timestamptz not null default now()
 );
 create index if not exists pos_offline_entries_tmp on public.pos_offline_entries (tmp_ref) where tmp_ref <> '';
+alter table public.pos_offline_entries add column if not exists kind text not null default 'comanda' check (kind in ('comanda', 'pago'));
 alter table public.pos_offline_entries enable row level security;
 revoke all on public.pos_offline_entries from anon, authenticated;
 
@@ -105,8 +108,65 @@ begin
   return jsonb_build_object('order_id', oid, 'platos', n, 'nota', note);
 end $$;
 
+-- Sube un cobro hecho sin internet. Idempotente por uuid. Va después de los envíos de ese pedido (el puente sube en orden).
+-- p_entry: {uuid, at, device, emp, emp_name, pin, order: {id | tmp, label}, lines: [{method, amount, reference, tip}], change_currency}
+-- El dinero ya se recibió: si algo no cuadra (PIN, pedido ya cobrado, falta plata) igual queda anotado y se avisa al dueño.
+create or replace function public.pos_offline_pay(p_entry jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare e jsonb := p_entry; uid text := p_entry ->> 'uuid'; tmp text := coalesce(p_entry -> 'order' ->> 'tmp', '');
+  oid bigint; emp bigint; pin_ok boolean; at timestamptz; note text := ''; done record; st text; r jsonb := null; lines jsonb;
+begin
+  if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  if uid is null or uid !~ '^[A-Za-z0-9_-]{8,64}$' then raise exception 'Falta el identificador del cobro'; end if;
+  select * into done from public.pos_offline_entries where uuid = uid;
+  if done.uuid is not null then return jsonb_build_object('order_id', done.order_id, 'repetido', true); end if;
+  if not exists (select 1 from public.pos_sessions where status = 'abierta') then
+    raise exception 'La caja está cerrada: el cobro hecho sin internet se sube cuando la abran';
+  end if;
+  emp := nullif(e ->> 'emp', '')::bigint;
+  at := least(coalesce(nullif(e ->> 'at', '')::timestamptz, now()), now());
+  select exists (select 1 from public.employees x where x.id = emp and x.pos_pin_hash is not null
+                 and x.pos_pin_hash = extensions.crypt(coalesce(e ->> 'pin', ''), x.pos_pin_hash)) into pin_ok;
+  if not pin_ok then note := 'PIN no verificado'; end if;
+  if not exists (select 1 from public.employees where id = emp) then emp := null;
+  elsif not exists (select 1 from public.employees where id = emp and pos_can_charge) then note := note || ' · no tiene permiso para cobrar'; end if;
+  -- El pedido: uno que ya existía, o uno creado sin internet (sus platos ya se subieron con pos_offline_sync)
+  if nullif(e -> 'order' ->> 'id', '') is not null then oid := (e -> 'order' ->> 'id')::bigint; end if;
+  if oid is null and tmp <> '' then
+    select x.order_id into oid from public.pos_offline_entries x where x.tmp_ref = tmp and x.kind = 'comanda' and x.order_id is not null order by x.synced_at limit 1;
+  end if;
+  select status into st from public.pos_orders where id = oid;
+  if st is null then note := note || ' · no se encontró el pedido';
+  elsif st <> 'abierta' then note := note || ' · el pedido ya estaba ' || st || ' (no se anotó de nuevo)';
+  else
+    -- A cuenta de empleado necesita revisar su tope en línea: sin internet no se acepta
+    select coalesce(jsonb_agg(x || jsonb_build_object('device', left(coalesce(nullif(e ->> 'device', ''), 'Sin internet'), 30))), '[]'::jsonb) into lines
+    from jsonb_array_elements(coalesce(e -> 'lines', '[]'::jsonb)) x where coalesce(x ->> 'method', '') <> 'cuenta';
+    begin
+      r := public.pos_pay_core(emp, oid, lines, coalesce(nullif(e ->> 'change_currency', ''), 'REF'), true, at, true);
+      if not coalesce((r ->> 'closed')::boolean, false) then
+        note := note || ' · quedan Ref ' || (r ->> 'rest') || ' por cobrar (sin internet se cobró menos de lo que dice el sistema)';
+      end if;
+    exception when others then note := note || ' · no se pudo anotar el cobro: ' || sqlerrm;
+    end;
+  end if;
+  note := trim(both ' ·' from note);
+  insert into public.pos_offline_entries (uuid, tmp_ref, order_id, employee_id, device, sent_at, payload, note, kind)
+  values (uid, tmp, oid, emp, left(coalesce(e ->> 'device', ''), 30), at, e - 'pin', note, 'pago');
+  insert into public.pos_log (employee_id, action, order_id, detail)
+  values (emp, 'cobro_sin_internet', oid, jsonb_build_object('nota', note, 'equipo', e ->> 'device'));
+  if note <> '' and to_regprocedure('public.pos_alerta(text,text,text[])') is not null then
+    perform public.pos_alerta('sinred-pago-' || uid, 'Revisa un cobro hecho sin internet',
+      array[coalesce(public.pos_order_label(oid), nullif(e -> 'order' ->> 'label', ''), 'Pedido') || ' · ' || to_char(at at time zone 'America/Caracas', 'DD/MM HH12:MI am'),
+            'Qué pasó: ' || note, 'Cobró: ' || coalesce(public.pos_emp_name(emp), nullif(e ->> 'emp_name', ''), '—')]);
+  end if;
+  return jsonb_build_object('order_id', oid, 'nota', note, 'cobro', r);
+end $$;
+
 do $$
 begin
+  revoke execute on function public.pos_offline_pay(jsonb) from anon, public;
+  grant execute on function public.pos_offline_pay(jsonb) to authenticated;
   revoke execute on function public.pos_lan_token() from anon, public;
   grant execute on function public.pos_lan_token() to authenticated;
   revoke execute on function public.pos_offline_sync(jsonb) from anon, public;

@@ -9,7 +9,9 @@ $("pay").addEventListener("click", function () {
     var sn = splitN(cur.data), rows = sn ? (cur.data.split_totals || []) : [];
     payPerson = 0;
     if (sn) { var firstDue = rows.find(function (r) { return r.person > 0 && num(r.total) - num(r.paid) > 0.02; }); payPerson = firstDue ? firstDue.person : 0; }
-    show("payPersonsBox", !!sn); show("paySplit", !sn);
+    // Sin internet: la cuenta completa (sin partes, abonos ni cargos a cuenta de empleado)
+    var off = typeof SR !== "undefined" && SR.on;
+    show("payPersonsBox", !!sn && !off); show("paySplit", !sn && !off); show("payByPerson", !off);
     var t = cur.data.totals;
     $("payTitle").textContent = "Cobrar · " + cur.data.label;
     var dueNow = num(t.total) - num(t.paid); splitEq = 0;
@@ -17,9 +19,10 @@ $("pay").addEventListener("click", function () {
     $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
     $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
     $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
-      '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>" +
+      (off ? "" : '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>") +
       '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
-    TABS = []; q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
+    TABS = []; if (!off) q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
+    $("payErr").textContent = off ? "Sin internet: el recibo sale en la laptop y el cobro se sube cuando vuelva la conexión." : "";
     drawPayPersons(); drawPays(); $("payDlg").showModal();
   }).catch(fail);
 });
@@ -145,7 +148,7 @@ function updatePaySums() {
   var needChg = s.rest < -0.02 && !changeCur;
   $("changeAsk").classList.toggle("need", needChg);
   $("payOk").disabled = !pays.length || s.rest > 0.02 || needChg;
-  show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson);
+  show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson && !(typeof SR !== "undefined" && SR.on));
   $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
   var foot = $("payDlg").querySelector(".payfoot");
   if (foot && $("payDlg").open && foot.offsetHeight > payFootH + 4) {

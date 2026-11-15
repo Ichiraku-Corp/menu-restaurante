@@ -663,9 +663,11 @@ async function checkUpdate() {
   } finally { updating = false; }
 }
 
-// ---------------------------------------------------------------- Modo sin internet (parte 1: pedidos y comandas)
+// ---------------------------------------------------------------- Modo sin internet (pedidos, comandas y cobros)
 // Si se cae el internet, las tablets (abiertas desde http://LAPTOP:8080/pos.html) mandan aquí cada envío a cocina:
 // se guarda en sin-internet.jsonl, se imprime la comanda y, cuando vuelve el internet, se sube con pos_offline_sync.
+// Parte 2: la cajera también cobra aquí; se imprime el recibo y el cobro se sube con pos_offline_pay (en orden,
+// después de los platos de ese pedido).
 const SR_FILE = path.join(DIR, "sin-internet.jsonl"), SR_DONE = path.join(DIR, "sin-internet-subidos.txt"), SR_TOKEN = path.join(DIR, "llave-red-local.txt");
 let srToken = ""; try { srToken = fs.readFileSync(SR_TOKEN, "utf8").trim(); } catch (e) { /* aún no hay llave */ }
 async function srRefreshToken() {
@@ -697,6 +699,40 @@ function srValid(e) {
   return "";
 }
 function srHora(at) { return new Date(at).toLocaleString("es-VE", { timeZone: "America/Caracas", hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(",", ""); }
+const SR_METODOS = { efectivo_usd: ["Efectivo $", "REF"], efectivo_bs: ["Efectivo Bs", "BS"], pago_movil: ["Pago movil", "BS"], punto_debito: ["Punto debito", "BS"],
+  punto_credito: ["Punto credito", "BS"], zelle: ["Zelle", "REF"], binance: ["Binance", "REF"], paypal: ["PayPal", "REF"] };
+function srValidPago(e) {
+  if (!e || typeof e !== "object") return "Datos no válidos";
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(String(e.uuid || ""))) return "Falta el identificador del cobro";
+  if (!Number.isInteger(e.emp) || !/^\d{4,8}$/.test(String(e.pin || ""))) return "Falta quién cobra";
+  if (!e.order || typeof e.order !== "object" || !(Number.isInteger(e.order.id) || /^sr-[A-Za-z0-9]{4,40}$/.test(String(e.order.tmp || "")))) return "Falta el pedido";
+  if (!Array.isArray(e.lines) || !e.lines.length || e.lines.length > 12) return "No hay pagos";
+  for (const l of e.lines) if (!SR_METODOS[l.method] || !(Number(l.amount) > 0 && Number(l.amount) < 1e9)) return "Pago no válido";
+  if (e.change_currency && !["REF", "BS", "MOVIL", "MIX", "PROPINA"].includes(e.change_currency)) return "Vuelto no válido";
+  if (!(Number(e.total) >= 0)) return "Falta el total";
+  return "";
+}
+const srMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function srLine(l, r) { l = String(l); r = String(r); const room = WIDTH - r.length - 1; return (l.length > room ? l.slice(0, room) : l.padEnd(room)) + " " + r; }
+// Recibo del cobro hecho sin internet (como el del sistema, marcado «SIN INTERNET»)
+function srRecibo(e) {
+  const out = ["^RECIBO SIN INTERNET", "~No es factura fiscal", e.order.label + "   " + srHora(e.at), "="];
+  if (e.prev && Number(e.prev.total) > 0) out.push(srLine("Consumo anterior (con internet)", srMoney(e.prev.total)));
+  for (const i of e.items || []) out.push(srLine(i.qty + " " + i.name + (i.variant ? " " + i.variant : ""), srMoney(i.qty * i.unit_price)));
+  out.push("=");
+  if (Number(e.service) > 0) out.push(srLine("Servicio", "Ref " + srMoney(e.service)));
+  if (e.prev && Number(e.prev.paid) > 0) out.push(srLine("Abonado antes", "-Ref " + srMoney(e.prev.paid)));
+  out.push("^" + srLine("TOTAL", "Ref " + srMoney(e.total)).replace(/\s{2,}/, " "));
+  if (Number(e.rate) > 0) out.push(srLine("A la tasa " + srMoney(e.rate), "Bs " + srMoney(e.total * e.rate)));
+  out.push("=");
+  for (const l of e.lines) {
+    const m = SR_METODOS[l.method];
+    out.push(srLine((l.tip ? "Propina " : "") + m[0] + (l.reference ? " " + l.reference : ""), (m[1] === "BS" ? "Bs " : "Ref ") + srMoney(l.amount)));
+  }
+  if (e.change && e.change.text) out.push(srLine(e.change_currency === "PROPINA" ? "Propina (vuelto)" : "Vuelto", e.change.text));
+  out.push("", "Cobro: " + (e.emp_name || "") + "   (se sube al volver el internet)", "", "~Gracias por tu visita!");
+  return out.join("\n");
+}
 // Comandas con el mismo formato que las del sistema (pos_send), marcadas «SIN INTERNET»
 function srComandas(e) {
   const lines = e.items.map((i) => "^" + i.qty + " " + i.name + (i.variant ? " " + i.variant : "") + (i.option ? "\n  " + i.option : "") + (i.notes ? "\n  >> " + i.notes : "")).join("\n");
@@ -713,7 +749,8 @@ async function srApi(req, res, rel) {
     return srJson(res, 200, { ok: true, online: Date.now() - lastOnline < 20e3, pendientes: srPending().length });
   }
   if (rel === "/api/sinred/pedidos" && req.method === "GET") {
-    return srJson(res, 200, { ok: true, pedidos: srPending().map((e) => ({ uuid: e.uuid, at: e.at, device: e.device, emp_name: e.emp_name, order: e.order, items: e.items })) });
+    return srJson(res, 200, { ok: true, pedidos: srPending().map((e) => ({ type: e.type || "comanda", uuid: e.uuid, at: e.at, device: e.device, emp_name: e.emp_name, order: e.order,
+      items: e.items, total: e.total, lines: e.lines })) });
   }
   if (rel === "/api/sinred/enviar" && req.method === "POST") {
     const b = await srBody(req), bad = srValid(b);
@@ -735,6 +772,29 @@ async function srApi(req, res, rel) {
     }
     return srJson(res, 200, { ok: true, impreso: !errs.length, error: errs.join(" · ") });
   }
+  if (rel === "/api/sinred/cobrar" && req.method === "POST") {
+    const b = await srBody(req), bad = srValidPago(b);
+    if (bad) return srJson(res, 400, { ok: false, error: bad });
+    const all = srEntries();
+    if (all.some((x) => x.uuid === b.uuid)) return srJson(res, 200, { ok: true, repetido: true });
+    const key = (o) => (o.id ? "id:" + o.id : "tmp:" + o.tmp);
+    if (all.some((x) => x.type === "pago" && key(x.order) === key(b.order) && !srDoneSet().has(x.uuid))) return srJson(res, 409, { ok: false, error: "Esta cuenta ya se cobró sin internet" });
+    const e = {
+      type: "pago", uuid: b.uuid, at: new Date().toISOString(), device: srTxt(b.device, 30), emp: b.emp, emp_name: srTxt(b.emp_name, 40), pin: String(b.pin),
+      order: { id: Number.isInteger(b.order.id) ? b.order.id : null, tmp: b.order.tmp ? String(b.order.tmp) : "", label: srTxt(b.order.label, 40) || "Sin internet" },
+      lines: b.lines.map((l) => ({ method: l.method, amount: Math.round(Number(l.amount) * 100) / 100, reference: srTxt(l.reference, 40), tip: !!l.tip })),
+      change_currency: b.change_currency || "REF", change: b.change && typeof b.change === "object" ? { text: srTxt(b.change.text, 40) } : null,
+      total: Math.round(Number(b.total) * 100) / 100, service: Math.round(Number(b.service || 0) * 100) / 100, rate: Number(b.rate) > 0 ? Number(b.rate) : null,
+      prev: b.prev && typeof b.prev === "object" ? { total: Number(b.prev.total) || 0, paid: Number(b.prev.paid) || 0 } : null,
+      items: (Array.isArray(b.items) ? b.items : []).slice(0, 80).map((i) => ({ name: srTxt(i.name, 60), variant: srTxt(i.variant, 30), qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0 })),
+    };
+    fs.appendFileSync(SR_FILE, JSON.stringify(e) + "\n"); // primero se guarda: el dinero ya se recibió
+    log(`Sin internet: cobro de ${e.order.label} por Ref ${srMoney(e.total)} (${e.emp_name || "?"})`);
+    let err = "";
+    const p = (cfg.printers || {}).caja;
+    if (p) { try { await queuePrint(p, srRecibo(e)); } catch (x) { err = x.message; log("ERROR imprimiendo el recibo sin internet: " + x.message); } }
+    return srJson(res, 200, { ok: true, impreso: !err, error: err });
+  }
   return srJson(res, 404, { ok: false, error: "No encontrado" });
 }
 // Cuando vuelve el internet: se sube cada envío, en orden; lo subido se anota para no repetirlo
@@ -745,9 +805,9 @@ async function srSync() {
   srSyncing = true;
   try {
     for (const e of list) {
-      const r = await rpc("pos_offline_sync", { p_entry: e });
+      const r = await rpc(e.type === "pago" ? "pos_offline_pay" : "pos_offline_sync", { p_entry: e });
       fs.appendFileSync(SR_DONE, e.uuid + "\n");
-      log(`Subido el pedido sin internet de ${e.order.label}` + (r && r.nota ? ` (${r.nota})` : ""));
+      log(`Subido ${e.type === "pago" ? "el cobro" : "el pedido"} sin internet de ${e.order.label}` + (r && r.nota ? ` (${r.nota})` : ""));
     }
   } catch (err) { log("No se pudo subir lo hecho sin internet (se reintenta): " + err.message); }
   finally { srSyncing = false; }
@@ -774,4 +834,4 @@ function startBridge() {
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { srApi, srComandas, srValid, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { srApi, srComandas, srValid, srValidPago, srRecibo, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };

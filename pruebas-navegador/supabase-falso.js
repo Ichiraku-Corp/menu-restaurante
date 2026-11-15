@@ -3,7 +3,7 @@
 (function(){
   var menu=window.__MENU, id=100, tables=[];
   [['Feria',20],['Tokio',8],['Edo',5]].forEach(function(a){ for(var n=1;n<=a[1];n++) tables.push({id:++id,area:a[0],number:n}); });
-  var S={rate:52.5, session:null, orders:[], items:[], payments:[], jobs:[], staff:[{id:1,name:'Mesera',pin:'1111',cc:false},{id:2,name:'Cajera',pin:'2222',cc:true}], alerts:[]};
+  var S={rate:52.5, session:null, orders:[], items:[], payments:[], jobs:[], staff:[{id:1,name:'Mesera',pin:'1111',cc:false},{id:2,name:'Cajera',pin:'2222',cc:true},{id:3,name:'Ayudante',pin:'3333',cc:false}], alerts:[]};
   window.__S=S;
   function lbl(o){ if(o.kind==='delivery') return 'Delivery: '+o.label; if(o.kind==='mesa'){ var t=tables.find(function(x){return x.id===o.table_id}); return t.area+' '+t.number;} return 'Para llevar'+(o.label?': '+o.label:''); }
   function tot(o){ var sub=S.items.filter(function(i){return i.order_id===o.id&&i.status!=='anulado'}).reduce(function(s,i){return s+i.qty*i.unit_price},0), d=Math.min(o.discount||0,sub), svc=Math.round((sub-d)*o.service_pct)/100, dl=o.delivery_fee||0; return {subtotal:sub,discount:d,service:svc,delivery:dl,total:sub-d+svc+dl,paid:o.paid||0}; }
