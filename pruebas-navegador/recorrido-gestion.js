@@ -38,6 +38,10 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     // Entra por «Inicio» y navega por secciones
     ok(await page.isVisible('#secs [data-sec="inicio"].on') && await page.isVisible("#iniKpis") && !(await page.isVisible("#tabs")), "Gestión abre en «Inicio», sin la fila de pestañas");
     ok(/Ventas de hoy/.test(await page.textContent("#iniKpis")) && /Laptop de caja/.test(await page.textContent("#iniEstado")), "Inicio muestra ventas de hoy y el estado de la laptop");
+    await page.waitForSelector("#iniMeta:not([hidden])", { timeout: 3000 }).catch(() => {});
+    const ini = await page.textContent("#iniMeta");
+    ok(/Meta de hoy/.test(ini) && /Ref 320,45 de Ref 620,00 · 52 %/.test(ini) && /Faltan Ref 299,55/.test(ini) && /promedio de los últimos 8 (lunes|martes|miércoles|jueves|viernes|sábados|domingos) \(Ref 617,94\)/.test(ini),
+      "Inicio muestra la meta del día: lo cobrado, la meta, cuánto falta y de dónde sale");
     // Ventas por hora y día (Dinero › Histórico)
     await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="historico"]');
     await page.waitForSelector("#vhMap .vh-grid", { timeout: 5000 });
@@ -67,9 +71,10 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     // Alertas al correo (Dinero › Ventas › Ajustes)
     await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(200);
     ok(await page.isVisible("#sAlerts") && (await page.inputValue("#sAlertDiff")) === "5", "Ajustes tiene los correos de alertas y desde cuánto avisa un cierre (Ref 5)");
-    await page.fill("#sAlerts", "dueno@ejemplo.test"); await page.fill("#sAlertDiff", "15"); await page.click("#saveSettings"); await page.waitForTimeout(300);
+    await page.fill("#sAlerts", "dueno@ejemplo.test"); await page.fill("#sAlertDiff", "15"); await page.fill("#sMetaPct", "10"); await page.click("#saveSettings"); await page.waitForTimeout(300);
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.alert_emails === "dueno@ejemplo.test" && c.value.alert_cash_diff === 15)),
       "guarda a quién le llegan las alertas y el límite del cierre");
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.meta_pct === 10)), "guarda la meta del día como «promedio + 10 %»");
     // Facturas de la caja (Dinero › Gastos)
     await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
     ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidades/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");

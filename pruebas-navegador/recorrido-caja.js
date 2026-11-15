@@ -46,6 +46,9 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.waitForSelector("#annDlg[open]", { timeout: 3000 });
     ok(/Delantal obligatorio/.test(await page.textContent("#annBody")), "al entrar le sale el aviso pendiente");
     await page.click('#annBody [data-annok="900"]'); await page.waitForTimeout(300);
+    const meta = await page.textContent("#summary .s.meta").catch(() => "");
+    ok(/Meta de hoy · 71 %/.test(meta) && /Ref 320/.test(meta) && /de Ref 450/.test(meta) && await page.isVisible("#summary .s.meta .bar i"),
+      "quien cobra ve la meta del día con su barra (Ref 320 de Ref 450, 71 %)");
     ok(!(await page.isVisible("#annDlg")) && await S(() => window.__S.anns[0].read.includes(2)), "«Entendido» confirma la lectura y cierra");
     ok(true, "la cajera entra con su PIN");
     ok(await page.isVisible("#health") && await page.locator('#health [data-h="lap"].ok').count() === 1, "arriba se ve Internet · Laptop · Impresora en verde");

@@ -44,6 +44,8 @@
     pos_open:function(a){ auth(a); if(a.p_table){ var ex=S.orders.find(function(o){return o.table_id===a.p_table&&o.status==='abierta'}); if(ex) return ex.id; }
       var o={id:++id,kind:a.p_table?'mesa':'llevar',table_id:a.p_table||null,label:a.p_label||'',status:'abierta',service_pct:a.p_table?10:0,opened_at:new Date().toISOString(),opened_by_id:a.p_emp||null}; S.orders.push(o); return o.id; },
     menu_promos:function(){ return window.__PROMOS||[]; },
+    pos_meta:function(a){ var e=auth(a); if(!e.cc) throw {message:'No tienes permiso para cobrar. Pídele a una cajera autorizada.'}; window.__metaCalls=(window.__metaCalls||0)+1;
+      return window.__META||{dia:new Date().toISOString().slice(0,10),meta:450,vendido:320,pedidos:18,promedio:448.5,dias:8,pct:0}; },
     pos_add:function(a){ auth(a); a.p_items.forEach(function(it){ var d=menu.dishes.find(function(x){return x.id===it.dish_id}); var p=d.price; if(d.variants&&d.variants.length){ var v=d.variants.find(function(x){return x.label===it.variant}); if(!v) throw {message:'Elige el tamaño de '+d.name}; p=v.price; }
       var pr=(window.__PROMOS||[]).find(function(x){return (x.dish_ids||[]).indexOf(d.id)>=0||(x.category_ids||[]).indexOf(d.category_id)>=0;}), lp=p; if(pr) p=Math.round(p*(1-pr.percent/100)*100)/100;
       S.items.push({id:++id,order_id:a.p_order,dish_id:d.id,name:d.name,variant:it.variant||'',option:it.option||'',notes:it.notes||'',qty:it.qty,unit_price:p,list_price:lp,promo:pr?pr.name+' -'+pr.percent+' %':'',status:'pendiente'}); }); return a.p_items.length; },

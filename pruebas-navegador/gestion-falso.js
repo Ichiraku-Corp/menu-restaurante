@@ -9,7 +9,7 @@
       employees: [{ id: 11, name: "Ana Pérez", job_title: "Mesonera", area_id: null, pay_quincena: 150, monthly_extra: 40, active: true },
                   { id: 12, name: "Luis Gómez", job_title: "Cocinero", area_id: null, pay_quincena: 180, monthly_extra: 40, active: true },
                   { id: 13, name: "Rosa Díaz", job_title: "Cajera", area_id: null, pay_quincena: 160, monthly_extra: 0, active: false }],
-      payroll_adjustments: [], payroll_payments: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5 }],
+      payroll_adjustments: [], payroll_payments: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0 }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
@@ -64,6 +64,7 @@
         pagos: G.tables.payroll_payments.filter(function (x) { return x.period === d; }).map(function (x) {
           return { employee_id: x.employee_id, amount: x.amount_ref, rate: x.rate, bs: x.amount_bs, por: "dueno@ejemplo.test", at: x.created_at }; }) };
     },
+    gestion_meta: function () { return { dia: new Date().toISOString().slice(0, 10), meta: 620, vendido: 320.45, pedidos: 21, promedio: 617.94, dias: 8, pct: 0 }; },
     gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
       caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },
       laptop: new Date().toISOString(), impresion_atrasada: 0, poco_afuera: ["Agua (botella)"], precios_por_aprobar: 2, pagos_por_comprobar: 0,

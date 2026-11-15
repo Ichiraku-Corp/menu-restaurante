@@ -42,7 +42,7 @@ function startDevice() {
   loadMenu();
 }
 function lock() {
-  U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
+  U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
   ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
   if (typeof waStop === "function") waStop();
   if ($("health")) $("health").classList.add("hidden");
@@ -103,7 +103,7 @@ function tryPin() {
     U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
     document.body.classList.toggle("nocharge", !U.charge);
     show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-    touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); waStart();
+    touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); loadMeta(); waStart();
   }).catch(fail);
 }
 $("btnUser").addEventListener("click", lock);

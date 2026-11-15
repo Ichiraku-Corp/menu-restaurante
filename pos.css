@@ -63,6 +63,12 @@
   .summary .s { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px 14px; display:flex; flex-direction:column; min-width:120px; box-shadow:var(--shadow); }
   .summary .s b { font-size:20px; font-variant-numeric:tabular-nums; }
   .summary .s span { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-weight:700; }
+  .summary .s.meta { flex:1 1 220px; }
+  .summary .s.meta small { font-size:13px; color:var(--muted); font-weight:600; }
+  .summary .s.meta .bar { display:block; height:8px; border-radius:999px; background:var(--chip); overflow:hidden; margin-top:6px; }
+  .summary .s.meta .bar i { display:block; height:100%; border-radius:999px; background:var(--accent); }
+  .summary .s.meta.done .bar i { background:var(--ok); }
+  .summary .s.meta.done span { color:var(--ok); }
   /* Pestañas de áreas */
   .tabs { display:flex; gap:8px; overflow-x:auto; padding:2px 2px 6px; scrollbar-width:none; }
   .tabs::-webkit-scrollbar { display:none; }
@@ -285,6 +291,7 @@
     #btnCaja, #btnUser { padding:6px; min-width:46px; }
     main { padding:10px; }
     .summary { display:grid; grid-template-columns:1fr 1fr; }
+    .summary .s.meta { grid-column:1 / -1; }
     .summary .s { min-width:0; padding:6px 10px; }
     .summary .s b { font-size:17px; }
     .legend { font-size:12px; gap:8px; }

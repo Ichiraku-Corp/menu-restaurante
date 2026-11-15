@@ -51,6 +51,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.goto("http://localhost:8797/pos.html");
     await page.fill("#devEmail", "tablet@ejemplo.test"); await page.fill("#devPass", "x"); await page.click("#device button");
     await pin(1, "1111"); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });
+    ok(!(await page.isVisible("#summary .s.meta")) && !(await page.evaluate(() => window.__metaCalls || 0)), "la mesera no ve la meta del día (ni la pide)");
     await page.waitForTimeout(500);
     ok(await S(() => localStorage.getItem("sr-token") === '"llave-de-prueba"'), "con internet, la tablet guarda la llave de la caja");
     await page.click("#btnUser");

@@ -123,6 +123,20 @@ function drawBanners() {
   }; });
 }
 
+// Meta del día (solo quien cobra): promedio de ese día de la semana en las últimas 8 semanas contra lo cobrado hoy
+var META = null;
+function loadMeta() {
+  if (!U || !U.charge) { META = null; return; }
+  rpc("pos_meta").then(function (m) { META = m; if (ST && !$("tablesView").classList.contains("hidden")) drawTables(); }).catch(function () { /* sin la meta, la caja sigue igual */ });
+}
+setInterval(function () { if (U && U.charge && !document.hidden) loadMeta(); }, 60000);
+function metaTile() {
+  if (!U || !U.charge || !META || !num(META.meta)) return "";
+  var meta = num(META.meta), v = num(META.vendido), p = Math.round(v / meta * 100), r0 = function (n) { return "Ref " + Math.round(n).toLocaleString("es-VE"); };
+  return '<div class="s meta' + (v >= meta ? " done" : "") + '"><span>Meta de hoy · ' + p + " %" + (v >= meta ? " ✓" : "") + "</span><b>" + r0(v) + ' <small>de ' + r0(meta) + "</small></b>" +
+    '<i class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(p, 100) + '"><i style="width:' + Math.min(p, 100) + '%"></i></i></div>';
+}
+
 // ---------------------------------------------------------------- Mesas
 function goTables() {
   cur.order = null; cur.data = null; cur.cart = [];
@@ -144,7 +158,7 @@ function drawTables() {
   var due = ST.orders.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = ST.orders.filter(function (o) { return o.precuenta_at; }).length,
     busyT = ST.orders.filter(function (o) { return o.kind === "mesa"; }).length;
   $("summary").innerHTML = '<div class="s"><span>Mesas ocupadas</span><b>' + busyT + " / " + ST.tables.length + '</b></div><div class="s"><span>Por cobrar</span><b>' + ref(due) + "</b></div>" +
-    '<div class="s"><span>Pidieron la cuenta</span><b>' + asked + "</b></div>" + '<div class="s"><span>Caja</span><b style="color:' + (ST.session ? "var(--ok)" : "var(--warn)") + '">' + (ST.session ? "Abierta" : "Cerrada") + "</b></div>";
+    '<div class="s"><span>Pidieron la cuenta</span><b>' + asked + "</b></div>" + '<div class="s"><span>Caja</span><b style="color:' + (ST.session ? "var(--ok)" : "var(--warn)") + '">' + (ST.session ? "Abierta" : "Cerrada") + "</b></div>" + metaTile();
   if (cur.area === "Para llevar" || cur.area === "Delivery") {
     var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; });
     $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="new"><span class="num">+</span><small>Nuevo ' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +

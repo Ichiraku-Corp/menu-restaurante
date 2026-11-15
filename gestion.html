@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-VhYcFFgwnAoaZSXAphJsKhxpCeDOsZ/uJ972viOxPJA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-GN9phattQpbwpG+ybRfQUUAsBTo1Y8LPmJVct5In8EU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -149,6 +149,10 @@
   @media (max-width:560px) { .secs { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
   /* Inicio */
   .grid2.ini { gap:0 12px; }
+  .metacard .row b { font-size:20px; font-variant-numeric:tabular-nums; }
+  .metabar { height:12px; border-radius:999px; background:var(--chip); overflow:hidden; margin:10px 0 6px; }
+  .metabar i { display:block; height:100%; border-radius:999px; background:var(--accent); }
+  .metacard.done .metabar i { background:var(--ok); }
   .estado { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line); }
   .estado:last-child { border-bottom:0; }
   .estado i { width:12px; height:12px; border-radius:50%; background:var(--muted); margin-top:5px; flex:none; }
@@ -239,6 +243,7 @@
     <section data-panel="inicio">
       <div class="row between"><p class="muted" style="margin:0" id="iniFecha">Lo de hoy, en vivo.</p><button type="button" id="iniRefresh">Actualizar</button></div>
       <div class="kpis" style="margin-top:12px" id="iniKpis"><div class="kpi"><span>Cargando…</span></div></div>
+      <div class="card metacard" id="iniMeta" hidden></div>
       <div class="grid2 ini">
         <div class="card"><h2>Estado</h2><div id="iniEstado"></div></div>
         <div class="card"><h2>Alertas</h2><div id="iniAlertas"></div></div>
@@ -312,6 +317,8 @@
           <div class="alertset" style="grid-column:1 / -1"><label for="sAlerts">Correos que reciben las alertas</label><input id="sAlerts" type="text" placeholder="Vacío: van a los mismos del cierre" autocomplete="off">
             <div class="muted">Avisa al momento: cierre que no cuadra, platos anulados después de ir a cocina, descuentos grandes y laptop de caja sin conexión con la caja abierta.</div></div>
           <div class="alertset"><label for="sAlertDiff">Avisar si el cierre no cuadra por más de (Ref)</label><input id="sAlertDiff" type="number" step="1" min="0" inputmode="decimal"></div>
+          <div class="metaset"><label for="sMetaPct">Meta del día: promedio + (%)</label><input id="sMetaPct" type="number" step="1" min="-50" max="200" inputmode="decimal">
+            <div class="muted">La meta es lo que se vende en promedio ese mismo día de la semana (últimas 8 semanas). Súbela un % para crecer.</div></div>
         </div>
         <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
       </div>
@@ -683,6 +690,20 @@
   function loadInicio() {
     if (!mfaOk || $("tabs").querySelector('[data-tab="inicio"]').classList.contains("on") === false) return;
     q(sb.rpc("gestion_inicio")).then(drawInicio).catch(function (e) { $("iniKpis").innerHTML = '<div class="kpi"><span>No se pudo cargar</span><b>—</b><span>' + esc(e.message || "") + "</span></div>"; });
+    opt(sb.rpc("gestion_meta")).then(drawMeta);
+  }
+  // Meta del día: promedio de ese día de la semana en las últimas 8 semanas (sin servicio) contra lo cobrado hoy
+  var DIAS_PL = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
+  function drawMeta(m) {
+    var el = $("iniMeta");
+    if (!m) { el.hidden = true; return; }
+    var dpl = DIAS_PL[new Date(String(m.dia) + "T12:00:00").getDay()], meta = num(m.meta), v = num(m.vendido), p = meta ? Math.round(v / meta * 100) : 0;
+    el.hidden = false; el.classList.toggle("done", !!meta && v >= meta);
+    el.innerHTML = !meta ? '<h2 style="margin:0">Meta de hoy</h2><p class="muted" style="margin:6px 0 0">Sin meta: no hubo ventas los ' + dpl + " en las últimas 8 semanas.</p>"
+      : '<div class="row between"><h2 style="margin:0">Meta de hoy ' + (v >= meta ? '<span class="pill ok">¡cumplida!</span>' : "") + "</h2><b>" + money(v) + ' <span class="muted">de ' + money(meta) + " · " + p + " %</span></b></div>" +
+        '<div class="metabar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(p, 100) + '"><i style="width:' + Math.min(p, 100) + '%"></i></div>' +
+        '<p class="muted" style="margin:0">' + (v >= meta ? "Van " + money(v - meta) + " por encima." : "Faltan " + money(meta - v) + ".") + " Meta = promedio de los últimos " + num(m.dias) + " " + dpl + " (" + money(m.promedio) + ")" +
+        (num(m.pct) ? (num(m.pct) > 0 ? " + " : " − ") + nf2.format(Math.abs(num(m.pct))).replace(/,00$/, "") + " %" : "") + ". Cuenta lo cobrado sin el servicio.</p>";
   }
   function drawInicio(d) {
     var v = num(d.ventas), vp = num(d.ventas_semana_pasada), dif = vp ? (v - vp) / vp * 100 : null, n = num(d.pedidos);
@@ -1641,6 +1662,8 @@
     $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5); $("sMails").value = st.report_emails || "";
     document.querySelectorAll(".alertset").forEach(function (x) { x.hidden = st.alert_emails === undefined; });
     $("sAlerts").value = st.alert_emails || ""; $("sAlertDiff").value = st.alert_cash_diff != null ? num(st.alert_cash_diff) : 5;
+    document.querySelectorAll(".metaset").forEach(function (x) { x.hidden = st.meta_pct === undefined; });
+    $("sMetaPct").value = num(st.meta_pct);
   }
   function saleForm(d) {
     var ym = $("salesMonth").value || ymNow(), items = d ? (S.itemsByMonth[ym] || []).filter(function (i) { return i.sale_date === d.sale_date; }) : [];
@@ -1677,6 +1700,10 @@
       var am = $("sAlerts").value.split(/[,;\s]+/).filter(Boolean), abad = am.filter(function (m) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
       if (abad.length) return toast("Correo no válido: " + abad[0]);
       patch.alert_emails = am.join(", "); patch.alert_cash_diff = Math.max(0, num($("sAlertDiff").value));
+    }
+    if (S.settings.meta_pct !== undefined) {
+      patch.meta_pct = num($("sMetaPct").value);
+      if (patch.meta_pct < -50 || patch.meta_pct > 200) return toast("La meta va de −50 % a +200 % sobre el promedio");
     }
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
