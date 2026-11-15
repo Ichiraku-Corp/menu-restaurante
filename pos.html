@@ -13,25 +13,27 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=a52ed4c321">
+<link rel="stylesheet" href="pos.css?v=e5cd38b9b5">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos-base.js?v=eeae34b7d0" defer></script>
-<script src="pos-acceso.js?v=1ce374b8b1" defer></script>
-<script src="pos-mesas.js?v=740f531206" defer></script>
-<script src="pos-pedido.js?v=0f1db81025" defer></script>
-<script src="pos-cobro.js?v=abf08548b9" defer></script>
+<script src="pos-base.js?v=74a9f7a21e" defer></script>
+<script src="pos-acceso.js?v=90d6ad500c" defer></script>
+<script src="pos-mesas.js?v=5d646e4b5c" defer></script>
+<script src="pos-pedido.js?v=324c98805f" defer></script>
+<script src="pos-cobro.js?v=7fd009d0e2" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=2d61ba0b3f" defer></script>
-<script src="pos-caja.js?v=df93c34cea" defer></script>
+<script src="pos-caja.js?v=5d8fc3f323" defer></script>
 </head>
 <body>
 <header>
   <div class="brand"><img src="assets/icon.svg" alt=""><h1>Ichiraku<small>Sala y caja</small></h1></div>
   <span class="rate" id="rate"></span>
+  <button type="button" class="health hidden" id="health" title="Estado: internet, laptop de caja e impresora" aria-label="Estado de la conexión">
+    <span data-h="net"><i></i><b>Internet</b></span><span data-h="lap"><i></i><b>Laptop</b></span><span data-h="prn"><i></i><b>Impresora</b></span></button>
   <span class="grow"></span>
   <button id="btnFull" class="hidden" aria-label="Pantalla completa" title="Pantalla completa"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   <button id="btnWa" class="hidden" title="Pedidos, reservas y chats de WhatsApp">WhatsApp <span id="waBadge" class="wabadge hidden"></span></button>
@@ -95,10 +97,14 @@
           <button class="primary big full" id="send">Enviar a cocina</button>
           <button id="precuenta">Precuenta</button>
           <button class="ok" id="pay">Cobrar</button>
-          <button class="full" id="splitBtn">Dividir por persona</button>
-          <button id="discount">Descuento</button>
-          <button id="move">Mover mesa</button>
-          <button class="danger full" id="cancel">Anular pedido</button>
+          <!-- Lo que se usa poco va en «Más»: menos botones a la vista y «Anular» lejos de los dedos -->
+          <button type="button" class="full morebtn" id="moreBtn" aria-expanded="false" aria-controls="moreBox">Más opciones</button>
+          <div class="morebox full hidden" id="moreBox">
+            <button id="splitBtn">Dividir por persona</button>
+            <button id="discount">Descuento</button>
+            <button id="move">Mover mesa</button>
+            <button class="danger" id="cancel">Anular pedido</button>
+          </div>
         </div>
       </div>
     </div>
@@ -212,17 +218,20 @@
   <p class="muted" style="margin:12px 0 6px">Toca un método para añadir lo que falta:</p>
   <div class="methods" id="payMethods"></div>
   <div id="payLines"></div>
-  <div class="card" style="margin:12px 0 0;padding:12px">
-    <div class="tot"><span>Pagado</span><b class="n" id="payPaid"></b></div>
-    <div class="tot big"><span id="payRestLbl">Falta</span><span class="n" id="payRest"></span></div>
-    <div id="changeBox" class="hidden" style="margin-top:6px">
-      <div class="row"><span class="muted">Vuelto en:</span>
-        <div class="chips" id="changeCur" style="margin:0"><button type="button" data-cur="REF" class="on">Dólares</button><button type="button" data-cur="BS">Bolívares</button><button type="button" data-cur="MIX" title="Los dólares enteros en efectivo y el resto en bolívares">Mixto $ + Bs</button></div></div>
+  <!-- Pie fijo: el resumen, el vuelto y «Confirmar» siempre a la vista, aunque haya muchos pagos -->
+  <div class="payfoot">
+    <div class="paysum">
+      <div class="tot"><span>Pagado</span><b class="n" id="payPaid"></b></div>
+      <div class="tot big"><span id="payRestLbl">Falta</span><span class="n" id="payRest"></span></div>
+      <div id="changeBox" class="hidden">
+        <div class="chask" id="changeAsk">¿Cómo le das el vuelto?</div>
+        <div class="chips" id="changeCur" style="margin:4px 0 0"><button type="button" data-cur="REF">$ efectivo</button><button type="button" data-cur="BS">Bs efectivo</button><button type="button" data-cur="MOVIL">Pago móvil</button><button type="button" data-cur="MIX" title="Los dólares enteros en efectivo y el resto en bolívares">Mixto $ + Bs</button><button type="button" data-cur="PROPINA" title="No se da vuelto: queda como propina">Lo deja de propina</button></div>
+      </div>
     </div>
+    <p id="payErr" class="muted" style="color:var(--danger);margin:6px 0 0"></p>
+    <div class="row between dfoot"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
+      <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
   </div>
-  <p id="payErr" class="muted" style="color:var(--danger)"></p>
-  <div class="row between dfoot"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
-    <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
 </dialog>
 
 <!-- Pagos recibidos en Binance / PayPal (verificados por la laptop de caja) -->

@@ -48,6 +48,16 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#annBody [data-annok="900"]'); await page.waitForTimeout(300);
     ok(!(await page.isVisible("#annDlg")) && await S(() => window.__S.anns[0].read.includes(2)), "«Entendido» confirma la lectura y cierra");
     ok(true, "la cajera entra con su PIN");
+    ok(await page.isVisible("#health") && await page.locator('#health [data-h="lap"].ok').count() === 1, "arriba se ve Internet · Laptop · Impresora en verde");
+    await S(() => { window.__BRIDGE = new Date(Date.now() - 10 * 60000).toISOString(); }); await S(() => refreshState()); await page.waitForTimeout(200);
+    ok(await page.locator('#health [data-h="lap"].bad').count() === 1, "si la laptop no se conecta hace rato, «Laptop» se pone en rojo");
+    await page.click("#health"); await page.waitForTimeout(250);
+    ok(/laptop de caja no se conecta/.test(await page.textContent("#notice")), "al tocar el indicador explica qué pasa y qué revisar");
+    await page.waitForTimeout(4500);
+    ok(await page.isVisible("#notice"), "el aviso queda fijo arriba (no se va solo)");
+    await page.click("#notice [data-nok]"); await page.waitForTimeout(300);
+    ok(!(await page.evaluate(() => document.getElementById("notice").classList.contains("show"))), "«Entendido» lo cierra");
+    await S(() => { window.__BRIDGE = undefined; }); await S(() => refreshState());
     // La pantalla se apaga y se vuelve a encender (Supabase avisa SIGNED_IN) o se renueva la conexión: la sesión sigue
     await S(() => { window.__authEmit("SIGNED_IN"); window.__authEmit("TOKEN_REFRESHED"); }); await page.waitForTimeout(400);
     ok(await page.isVisible("#tablesView") && !(await page.isVisible("#pin")), "al volver a encender la pantalla no se cierra la sesión");
@@ -59,6 +69,11 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
 
     // Mesa: plato con nota, enviar, cobrar en efectivo
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("3")'); await page.waitForSelector("#orderView:not(.hidden)");
+    ok(await page.locator('#cats [data-cat="top"].on').count() === 1 && /Gyozas/.test(await page.textContent("#dishes")), "la carta abre en «Lo más pedido»");
+    ok(!(await page.isVisible("#cancel")) && !(await page.isVisible("#discount")), "anular y descuento quedan plegados en «Más opciones»");
+    await page.click("#moreBtn");
+    ok(await page.isVisible("#cancel") && await page.isVisible("#move"), "«Más opciones» muestra dividir, descuento, mover y anular");
+    await page.click("#moreBtn");
     await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")');
     ok(await page.isVisible("#dishDlg"), "el plato abre su ventana (cantidad, opción y nota)");
     await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
@@ -67,6 +82,15 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]');
     await page.click('#payLines [data-bill="20"]'); await page.click('#payLines [data-bill="5"]');
     ok((await page.locator("#payLines .amt").first().inputValue()) === "25.00", "billetes $20 + $5 ponen 25 en el monto");
+    ok(await page.isDisabled("#payOk") && await page.locator("#changeAsk.need").count() === 1, "con vuelto, no deja confirmar hasta elegir cómo se entrega");
+    await page.setViewportSize({ width: 1280, height: 700 }); // tablet Fire HD 8 con la barra del navegador
+    const pie = await page.evaluate(() => { const r = document.getElementById("payOk").getBoundingClientRect(); return r.bottom <= window.innerHeight && r.top >= 0; });
+    ok(pie, "«Confirmar cobro» queda a la vista en la tablet sin tener que bajar");
+    await page.click('#payMethods [data-m="zelle"]'); await page.waitForTimeout(250);
+    const visto = await page.evaluate(() => { const l = [...document.querySelectorAll("#payLines .pay")].pop().getBoundingClientRect(), f = document.querySelector("#payDlg .payfoot").getBoundingClientRect(); return l.bottom <= f.top + 1 && l.top >= 0; });
+    ok(visto, "el pago recién añadido queda a la vista, sin quedar tapado por el pie fijo");
+    await page.locator("#payLines .pay").last().locator(".del").click();
+    await page.setViewportSize({ width: 1180, height: 900 });
     await page.click('#changeCur [data-cur="MIX"]');
     // Dos pases de punto: el primero por la mitad, «+ Otro pase» pone lo que falta
     const pagos0 = await page.locator("#payLines .pay").count();
@@ -99,17 +123,36 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
 
     // Cierre: arqueo con diferencia pide nota
     await page.click("#btnCaja"); await page.waitForTimeout(300);
+    ok(await page.isVisible('#cashBody [data-ctab="res"].on') && await page.isVisible("#cashBody [data-ctab=cierre]"), "la caja se abre en «Resumen», con pestañas para cerrar y herramientas");
+    await S(() => notice("Prueba de aviso con la caja abierta", "err")); await page.waitForTimeout(300);
+    ok(await S(() => { const r = document.getElementById("notice").getBoundingClientRect(), el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); return !!(el && el.closest("#notice")); }),
+      "un aviso se ve por encima de la ventana de caja abierta (no queda detrás)");
+    await page.click("#notice [data-nok]"); await page.waitForTimeout(300);
+    ok(await page.isVisible("#cashDlg") && !(await page.isVisible("#notice")), "«Entendido» cierra el aviso y la caja sigue abierta");
+    await S(() => notice("Aviso que debe quedar al cerrar la ventana", "err")); await page.waitForTimeout(250);
+    await page.click("#cashClose"); await page.waitForTimeout(350);
+    ok(await page.isVisible("#notice") && /quedar al cerrar/.test(await page.textContent("#notice")), "si se cierra la ventana sin tocar «Entendido», el aviso sigue a la vista");
+    await page.click("#notice [data-nok]"); await page.waitForTimeout(300);
+    await page.click("#btnCaja"); await page.waitForTimeout(300);
+    await page.click('#cashBody [data-ctab="tools"]');
     await page.click("#uniBtn"); await page.waitForSelector("#uniDlg[open]");
     await page.click('#uniBody [data-uni="1"] [data-ok="1"]'); await page.waitForTimeout(200);
     ok(await S(() => window.__S.uni && window.__S.uni[1] === true), "la cajera anota el uniforme de quien llegó");
     await page.click("#uniClose");
     ok(await page.locator("#cashBody .banner", { hasText: "Bolívares de hoy" }).count() > 0, "recuerda los bolívares del día en la caja");
+    await page.click('#cashBody [data-ctab="cierre"]');
+    ok(await page.isVisible('#cashBody .cnt[data-m="efectivo_usd"]') && !(await page.isVisible('#cashBody .cnt[data-m="pago_movil"]')), "el cierre empieza por el efectivo, un paso a la vez");
+    ok(await page.isVisible("#cashTotalDiff") && await page.isVisible("#cstepNext"), "la diferencia y «Siguiente» quedan fijos abajo");
     await page.click('#cashBody [data-bills="1"]');
     await page.locator('#cashBody .bcnt[data-den="10"]').fill("1"); await page.locator('#cashBody .bcnt[data-den="5"]').fill("1");
     ok((await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').inputValue()) === "15.00", "contar billetes: 1 de $10 + 1 de $5 = 15");
+    await page.click("#cstepNext");
+    ok(await page.isVisible('#cashBody .cnt[data-m="pago_movil"]') && /cierre de lote/.test(await page.textContent("#cstepHelp")), "paso 2: bolívares en banco, con la explicación del lote");
     await page.locator('#cashBody .cnt[data-m="pago_movil"]').fill("247.98");
     await page.locator('#cashBody .cnt[data-m="pago_movil"]').dispatchEvent("input");
     ok(await page.locator("#cashBody .cwarn").count() > 0, "avisa si el pago móvil parece escrito en dólares");
+    await page.click('#cashBody [data-cstep="5"]');
+    ok(await page.isVisible("#doClose") && await page.isVisible("#cashNotes") && await page.isVisible('#cashBody .cnt[data-m="efectivo_usd"]'), "el último paso muestra todo para revisar, la nota y el botón de enviar");
     await page.click("#doClose"); await page.waitForTimeout(300);
     ok(!(await S(() => !!window.__closed)), "no deja cerrar con diferencia grande sin nota");
     ok(await page.isVisible("#closeErr") && /Falta la nota para cerrar/.test(await page.textContent("#closeErr")), "explica junto al botón que falta la nota (no solo un aviso que se va)");

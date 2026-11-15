@@ -17,35 +17,55 @@ function openCash() {
     } else {
       CASH = sm; EXPECTED = {};
       var rows = METHODS.map(function (m) {
+        var st = ' data-s="' + CSTEP_OF[m[0]] + '"';
         var v = sm.methods[m[0]] ? num(sm.methods[m[0]].amount) : 0, exp = v + (m[0] === "efectivo_usd" ? num(sm.opening_usd) : m[0] === "efectivo_bs" ? num(sm.opening_bs) : 0);
         EXPECTED[m[0]] = Math.round(exp * 100) / 100;
         var list = (sm.payments || []).filter(function (p) { return p.method === m[0]; });
-        return '<tr data-row="' + m[0] + '"><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
+        return '<tr data-row="' + m[0] + '"' + st + '><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
           '</td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px">' +
           (m[0] === "efectivo_usd" ? '<button type="button" class="seepay" data-bills="1">contar billetes</button>' : "") + '<div class="cdiff" data-diff="' + m[0] + '"></div></td></tr>' +
-          (m[0] === "efectivo_usd" ? '<tr class="paylist hidden" data-billrow><td colspan="3"><div class="billgrid">' + BILLS.map(function (d) {
+          (m[0] === "efectivo_usd" ? '<tr class="paylist hidden" data-billrow' + st + '><td colspan="3"><div class="billgrid">' + BILLS.map(function (d) {
             return '<label>' + (d ? "$" + d : "Monedas y otros $") + '<input class="bcnt n" data-den="' + d + '" inputmode="' + (d ? "numeric" : "decimal") + '" placeholder="' + (d ? "cuántos" : "$") + '"></label>'; }).join("") +
             '</div><p class="muted" style="margin:4px 0 0">Escribe cuántos billetes hay de cada uno; el total se pone solo.</p></td></tr>' : "") +
-          '<tr class="paylist hidden" data-list="' + m[0] + '"><td colspan="3">' + list.map(function (p) {
+          '<tr class="paylist hidden" data-list="' + m[0] + '"' + st + '><td colspan="3">' + list.map(function (p) {
             return '<div class="pl"><span>' + new Date(p.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · " + esc(p.label || "") + (p.ref ? " · ref. " + esc(p.ref) : "") + " · " + esc(p.by || "") + '</span><b class="n">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(num(p.amount)) + "</b></div>";
           }).join("") + "</td></tr>";
       }).join("");
-      h += '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
+      var outs = (sm.outs || []).length ? '<p class="muted" style="margin:6px 0">Salidas: ' + sm.outs.map(function (o) { return esc(o.reason) + " " + (o.method === "efectivo_usd" ? "$ " : "Bs ") + nf2.format(num(o.amount)) + " (" + esc(o.by || "") + ")"; }).join(" · ") + " — ya restadas del esperado.</p>" : "";
+      // Pestaña 1: Resumen del turno
+      var res = '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
         '<div class="tot"><span>Pedidos cobrados</span><b>' + sm.orders + '</b></div><div class="tot"><span>Ventas (con IVA)</span><b>' + ref(num(sm.sales)) + '</b></div><div class="tot"><span>Servicio</span><b>' + ref(num(sm.service)) + "</b></div>" +
-        (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") +
-        bsReminder() +
-        '<div class="row between" style="margin-top:12px"><h3 style="margin:0">Cierre: escribe lo que hay en cada método</h3><button type="button" id="cashOutBtn">Salida de caja</button></div>' +
-        ((sm.outs || []).length ? '<p class="muted" style="margin:6px 0">Salidas: ' + sm.outs.map(function (o) { return esc(o.reason) + " " + (o.method === "efectivo_usd" ? "$ " : "Bs ") + nf2.format(num(o.amount)) + " (" + esc(o.by || "") + ")"; }).join(" · ") + " — ya restadas del esperado.</p>" : "") +
-        '<p class="muted" style="margin:6px 0">Bs: pago móvil, punto y efectivo Bs se cuentan en <b>bolívares</b>. El punto: escribe el total del <b>cierre de lote</b>.</p>' +
-        '<table class="tbl arqueo"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + '</tbody></table><div id="cashTotalDiff" class="tot big"></div>' +
+        (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") + bsReminder() + outs +
         "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
         "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
-        (OUTS.length ? "<h3>Conteo de afuera (lo que queda ahora)</h3>" + '<table class="tbl"><thead><tr><th>Producto</th><th class="r">Según sistema</th><th>Contado</th></tr></thead><tbody>' +
+        "</div>";
+      // Pestaña 2: Cerrar caja, por pasos (efectivo → bolívares en banco → divisas digitales → afuera → revisar)
+      var steps = CSTEPS.filter(function (x) { return x.k !== 4 || OUTS.length; });
+      var cie = '<div class="card cierre">' +
+        (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") +
+        '<div class="csteps" role="tablist">' + steps.map(function (x, i) { return '<button type="button" data-cstep="' + x.k + '"><b>' + (i + 1) + "</b><span>" + x.t + "</span></button>"; }).join("") + "</div>" +
+        '<p class="muted cstephelp" id="cstepHelp"></p>' +
+        '<table class="tbl arqueo"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + "</tbody></table>" +
+        (OUTS.length ? '<div data-s="4"><table class="tbl"><thead><tr><th>Producto</th><th class="r">Según sistema</th><th>Contado</th></tr></thead><tbody>' +
           OUTS.map(function (r) { return "<tr><td>" + esc(r.name) + '</td><td class="r">' + (r.active ? fmtQ(r.stock) + " " + esc(r.unit) : '<span class="muted">primer conteo</span>') +
-            '</td><td><input class="icnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px"></td></tr>'; }).join("") + "</tbody></table>" : "") +
-        '<textarea id="cashNotes" placeholder="Notas del cierre (obligatorias si la diferencia pasa de Ref 5)" style="margin-top:10px"></textarea>' +
-        '<div id="closeErr" class="banner warn hidden" role="alert"></div>' +
-        '<p><button type="button" class="primary big" id="doClose" style="width:100%"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></p></div>";
+            '</td><td><input class="icnt n" data-ing="' + r.id + '" inputmode="decimal" placeholder="' + esc(r.unit) + '" style="padding:6px 8px"></td></tr>'; }).join("") + "</tbody></table></div>" : "") +
+        '<div data-s="5"><textarea id="cashNotes" placeholder="Notas del cierre (obligatorias si la diferencia pasa de Ref 5)" style="margin-top:10px"></textarea>' +
+        '<div id="closeErr" class="banner warn hidden" role="alert"></div></div>' +
+        // Pie fijo: la diferencia siempre a la vista y los botones para avanzar
+        '<div class="cashfoot"><div id="cashTotalDiff" class="tot big"></div><div class="row between">' +
+        '<button type="button" id="cstepBack">Atrás</button><button type="button" class="primary" id="cstepNext">Siguiente</button>' +
+        '<button type="button" class="primary big hidden" id="doClose"' + (sm.open_orders ? " disabled" : "") + ">Revisar el cierre y enviarlo</button></div></div></div>";
+      // Pestaña 3: Herramientas del turno
+      var tools = '<div class="card"><div class="toolgrid">' +
+        '<button type="button" id="cashOutBtn">Salida de caja</button>' +
+        (U.charge ? '<button type="button" id="buyBtn">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut">Platos agotados</button><button type="button" id="invCount">Conteo de inventario</button>' +
+        (U.charge ? '<button type="button" id="tabsBtn">Cuentas del personal</button><button type="button" id="uniBtn">Uniformes de hoy</button><button type="button" id="annBtn">Publicar aviso</button>' : "") + "</div></div>";
+      h = '<div class="ctabs" role="tablist"><button type="button" data-ctab="res">Resumen</button><button type="button" data-ctab="cierre">Cerrar caja</button><button type="button" data-ctab="tools">Herramientas</button></div>' +
+        '<div data-cpanel="res">' + h + res + '</div><div data-cpanel="cierre">' + cie + '</div><div data-cpanel="tools">' + tools + "</div>";
+      $("cashBody").innerHTML = h;
+      cashTab(CASHTAB || "res"); cashStep(CSTEP || 1); cashDiff();
+      if (!$("cashDlg").open) $("cashDlg").showModal();
+      return;
     }
     h += '<div class="card"><div class="row">' + (U.charge ? '<button type="button" id="buyBtn" class="grow">Llegó mercancía</button>' : "") + '<button type="button" id="soldOut" class="grow">Platos agotados</button><button type="button" id="invCount" class="grow">Conteo de inventario</button>' +
       (U.charge ? '<button type="button" id="tabsBtn" class="grow">Cuentas del personal</button><button type="button" id="uniBtn" class="grow">Uniformes de hoy</button><button type="button" id="annBtn" class="grow">Publicar aviso</button>' : "") + "</div></div>";
@@ -53,7 +73,47 @@ function openCash() {
     if (!$("cashDlg").open) $("cashDlg").showModal();
   }).catch(fail);
 }
+// ---- Pestañas de la caja y pasos del cierre
+var CASHTAB = "res", CSTEP = 1;
+var CSTEP_OF = { efectivo_usd: 1, efectivo_bs: 1, pago_movil: 2, punto_debito: 2, punto_credito: 2, zelle: 3, binance: 3, paypal: 3 };
+var CSTEPS = [
+  { k: 1, t: "Efectivo", help: "Cuenta la gaveta. En dólares toca «contar billetes» y escribe cuántos hay de cada uno." },
+  { k: 2, t: "Bolívares en banco", help: "Pago móvil: lo que llegó hoy a la cuenta. Punto: el total del <b>cierre de lote</b>. Todo en <b>bolívares</b>." },
+  { k: 3, t: "Divisas digitales", help: "Zelle, Binance y PayPal: lo que llegó hoy." },
+  { k: 4, t: "Afuera", help: "Cuenta lo que queda de los productos de afuera." },
+  { k: 5, t: "Revisar y enviar", help: "Revisa la diferencia total. Si pasa de Ref 5, explica en la nota qué pasó." }];
+function cashTab(t) {
+  CASHTAB = t;
+  document.querySelectorAll("#cashBody [data-ctab]").forEach(function (b) { b.classList.toggle("on", b.dataset.ctab === t); b.setAttribute("aria-selected", b.dataset.ctab === t ? "true" : "false"); });
+  document.querySelectorAll("#cashBody [data-cpanel]").forEach(function (p) { p.classList.toggle("hidden", p.dataset.cpanel !== t); });
+}
+function cashSteps() { return Array.prototype.map.call(document.querySelectorAll("#cashBody [data-cstep]"), function (b) { return Number(b.dataset.cstep); }); }
+function cashStep(n) {
+  var list = cashSteps(); if (!list.length) return;
+  if (list.indexOf(n) < 0) n = list[0];
+  CSTEP = n;
+  document.querySelectorAll("#cashBody [data-s]").forEach(function (el) { el.classList.toggle("offstep", n !== 5 ? Number(el.dataset.s) !== n : el.dataset.s === "4"); });
+  document.querySelectorAll("#cashBody [data-cstep]").forEach(function (b) { b.classList.toggle("on", Number(b.dataset.cstep) === n); });
+  var st = CSTEPS.find(function (x) { return x.k === n; }); $("cstepHelp").innerHTML = st ? st.help : "";
+  var last = n === list[list.length - 1];
+  $("cstepBack").classList.toggle("invisible", n === list[0]); $("cstepNext").classList.toggle("hidden", last); $("doClose").classList.toggle("hidden", !last);
+  cashDoneMarks();
+}
+// Un paso queda con ✓ cuando todo lo que tenía dinero esperado ya está contado
+function cashDoneMarks() {
+  document.querySelectorAll("#cashBody [data-cstep]").forEach(function (b) {
+    var k = Number(b.dataset.cstep), ok;
+    if (k <= 3) ok = METHODS.filter(function (m) { return CSTEP_OF[m[0]] === k; }).every(function (m) { var i = document.querySelector('#cashBody .cnt[data-m="' + m[0] + '"]'); return !i || i.value.trim() !== "" || Math.abs(EXPECTED[m[0]] || 0) < 0.01; });
+    else if (k === 4) ok = Array.prototype.every.call(document.querySelectorAll("#cashBody .icnt"), function (i) { return i.value.trim() !== ""; });
+    else ok = false;
+    b.classList.toggle("done", !!ok);
+  });
+}
 $("cashBody").addEventListener("click", function (e) {
+  var tb = e.target.closest("[data-ctab]"); if (tb) { cashTab(tb.dataset.ctab); return; }
+  var sb2 = e.target.closest("[data-cstep]"); if (sb2) { cashStep(Number(sb2.dataset.cstep)); return; }
+  if (e.target.closest("#cstepNext")) { var l = cashSteps(); cashStep(l[Math.min(l.length - 1, l.indexOf(CSTEP) + 1)]); $("cashDlg").scrollTop = 0; return; }
+  if (e.target.closest("#cstepBack")) { var l2 = cashSteps(); cashStep(l2[Math.max(0, l2.indexOf(CSTEP) - 1)]); $("cashDlg").scrollTop = 0; return; }
   var id = e.target.id;
   if (id === "setRate") {
     ask({ title: "Tasa del euro BCV (Bs por 1 €)", help: "Escribe la tasa oficial de hoy.", value: ST.rate || "", type: "number" }).then(function (v) {
@@ -154,8 +214,8 @@ $("uniClose").addEventListener("click", function () { $("uniDlg").close(); });
 function bsReminder() {
   var bsTot = ["efectivo_bs", "pago_movil", "punto_debito", "punto_credito"].reduce(function (a, k) { return a + (EXPECTED[k] || 0); }, 0);
   if (bsTot < 1 || !ST.rate) return "";
-  return '<div class="banner" style="margin-top:10px"><b>Bolívares de hoy: ' + bs(Math.round(bsTot * 100) / 100) + "</b> (≈ " + ref(bsTot / ST.rate) + " a la tasa de hoy). " +
-    "Conviene cambiarlos a divisas o usarlos en compras hoy mismo para que no pierdan valor.</div>";
+  return '<div class="banner warn" style="margin-top:10px"><span><b>Bolívares de hoy: ' + bs(Math.round(bsTot * 100) / 100) + "</b> (≈ " + ref(bsTot / ST.rate) + " a la tasa de hoy). " +
+    "Conviene cambiarlos a divisas o usarlos en compras hoy mismo para que no pierdan valor.</span></div>";
 }
 // ---- Arqueo inteligente: diferencia en vivo, moneda equivocada y total en Ref
 var CASH = null, EXPECTED = {};
@@ -188,6 +248,7 @@ $("cashBody").addEventListener("input", function (e) {
   if (e.target.id === "cashNotes" && e.target.value.trim().length >= 5) { e.target.classList.remove("need"); var ce = $("closeErr"); if (ce) ce.classList.add("hidden"); }
   if (e.target.classList.contains("bcnt")) { var b = billBreakdown(), c = document.querySelector('#cashBody .cnt[data-m="efectivo_usd"]'); if (c) c.value = b ? b.total.toFixed(2) : ""; cashDiff(); return; }
   if (e.target.classList.contains("cnt")) cashDiff();
+  if (e.target.classList.contains("cnt") || e.target.classList.contains("icnt") || e.target.classList.contains("bcnt")) cashDoneMarks();
 });
 function cashOut() {
   ask({ title: "Salida de caja: monto", help: "Dinero que sale del cajón (pago delivery semanal, compra, adelanto). Escribe el monto; después eliges si es en $ o Bs.", value: "", type: "number" }).then(function (a) {

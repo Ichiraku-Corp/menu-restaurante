@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-WJ9vdv+1riHy439IfEBLYGdCSzcw+DWMDOfQsTpT1o0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-iwhXOAl9wczXbUl0IP38GD0imDE8gqbxHk0c/O411iI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -35,6 +35,14 @@
   header { background: var(--pink); color: #fff; text-align: center;
     padding: 26px 16px 22px; border-bottom: 6px solid var(--sky); }
   header h1 { margin: 0; font-size: 30px; font-weight: 900; letter-spacing: -0.01em; }
+  header .brandlogo { display: block; width: 84px; height: 84px; margin: -6px auto 8px; border-radius: 50%; box-shadow: 0 4px 14px rgba(120,10,50,.28); }
+  header .tasa { display: inline-block; margin-top: 10px; padding: 3px 12px; border-radius: 999px; background: rgba(255,255,255,.18); font-size: 13px; font-weight: 700; }
+  .buy { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .buy .pcol { flex: 1; min-width: 0; }
+  .buy .prices { margin-top: 0; }
+  .dish .prices.bs { flex-direction: column; align-items: flex-start; }
+  .prow { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pbs { font-size: 13px; font-weight: 700; color: var(--muted); white-space: nowrap; }
   header p { margin: 4px 0 0; opacity: .92; font-size: 15px; }
   nav { position: sticky; top: 0; z-index: 5; background: #fff;
     box-shadow: 0 2px 10px rgba(229,32,107,.12); }
@@ -176,8 +184,10 @@
 </head>
 <body>
 <header>
+  <img class="brandlogo" src="assets/logo-gato.png" alt="" width="84" height="84">
   <h1 id="name">Menú</h1>
   <p id="tagline"></p>
+  <p class="tasa" id="tasa" hidden></p>
 </header>
 <nav aria-label="Categorías"><ul id="nav"></ul>
   <div class="search"><input id="q" type="search" placeholder="Buscar plato, sabor…" aria-label="Buscar en el menú" autocomplete="off" enterkeyhint="search"></div>
@@ -272,12 +282,19 @@
   }
 
   function variants(d) { return Array.isArray(d.variants) ? d.variants : []; }
+  // Tasa del día (euro BCV): los precios también se ven en bolívares
+  var RATE = null;
+  // En bolívares enteros (con la tasa sobre Bs 1.000 los céntimos no dicen nada y así cabe al lado del precio)
+  function bsFmt(ref) { return "Bs " + Math.round(ref * RATE).toLocaleString("es-VE", { maximumFractionDigits: 0 }); }
+  // Cada precio en Ref y, con la tasa del día, su equivalente en Bs al lado
   function priceHtml(d) {
-    var v = variants(d);
-    if (!v.length) return '<span class="price">' + esc(fmt(Number(d.price) || 0)) + "</span>";
-    return v.map(function (x) {
-      return '<span class="price"><b>' + esc(x.label) + "</b>" + esc(fmt(Number(x.price) || 0)) + "</span>";
-    }).join("");
+    var v = variants(d), bsRow = !!RATE && d.available;
+    var one = function (label, price) {
+      var chip = '<span class="price">' + (label ? "<b>" + esc(label) + "</b>" : "") + esc(fmt(price)) + "</span>";
+      return bsRow ? '<span class="prow">' + chip + '<span class="pbs">' + esc(bsFmt(price)) + "</span></span>" : chip;
+    };
+    if (!v.length) return one("", Number(d.price) || 0);
+    return v.map(function (x) { return one(x.label, Number(x.price) || 0); }).join("");
   }
   function unitPrice(d, label) {
     var v = variants(d);
@@ -288,7 +305,18 @@
 
   // ---------------------------------------------------------------- Carta
   var DISHES = {};
+  function showTasa(t) {
+    RATE = t && Number(t.rate) > 0 ? Number(t.rate) : null;
+    $("tasa").hidden = !RATE;
+    if (!RATE) return;
+    // Hoy: «de hoy». Fin de semana o feriado (la del viernes sigue valiendo): «vigente». Más vieja: dice de qué día es.
+    var fd = String(t.date || ""), hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas" });
+    var dias = fd ? Math.round((Date.parse(hoy) - Date.parse(fd)) / 864e5) : 0;
+    $("tasa").textContent = "Tasa euro BCV" + (dias <= 0 ? " de hoy" : dias <= 3 ? " vigente" : " del " + fd.slice(8, 10) + "/" + fd.slice(5, 7)) + ": Bs " +
+      RATE.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " por 1 €";
+  }
   function render(data) {
+    showTasa(data.tasa);
     DISHES = {};
     var cats = (data.categories || []).slice().sort(function (a, b) { return a.position - b.position; });
     var byCat = {};
@@ -319,7 +347,9 @@
           ((opts.length || tags.length) ? '<div class="chips">' +
             tags.map(tagHtml).join("") +
             opts.map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
-          '<div class="prices">' + priceHtml(d) + (d.available ? "" : '<span class="soldout">Agotado</span>') +
+          // Precios (en Ref y su equivalente en Bs) y el «+» a la derecha
+          '<div class="buy"><div class="pcol"><div class="prices' + (RATE && d.available ? " bs" : "") + '">' + priceHtml(d) + (d.available ? "" : '<span class="soldout">Agotado</span>') +
+          "</div></div>" +
           (d.available ? '<button class="add" type="button" data-add aria-label="Añadir ' + esc(d.name) + ' al pedido">+</button>' : "") +
           "</div></div></article>";
       });
@@ -432,7 +462,7 @@
     $("osSub").textContent = fmt(orderSubtotal());
     $("osSvcLabel").textContent = svcLabel;
     $("osSvc").textContent = fmt(orderService());
-    $("osTotal").textContent = fmt(orderTotal());
+    $("osTotal").textContent = fmt(orderTotal()) + (RATE ? " · " + bsFmt(orderTotal()) : "");
   }
   $("osLines").addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
@@ -605,14 +635,19 @@
     if (!C.SUPABASE_URL) return fetchJson("data/menu.json");
     var base = C.SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/";
     var h = { apikey: C.SUPABASE_ANON_KEY, Authorization: "Bearer " + C.SUPABASE_ANON_KEY };
+    // La tasa del día para mostrar también los precios en bolívares (si no llega, la carta sale igual en Ref)
+    var tasa = fetch(base + "rpc/menu_tasa", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, h), body: "{}" })
+      .then(function (x) { return x.ok ? x.json() : null; }).catch(function () { return null; });
     return Promise.all([
       fetchJson(base + "categories?select=id,name,subtitle,position&order=position", h),
-      fetchJson(base + "dishes?select=id,category_id,name,subtitle,description,price,variants,options,photo_url,tags,available,position&order=position", h)
+      fetchJson(base + "dishes?select=id,category_id,name,subtitle,description,price,variants,options,photo_url,tags,available,position&order=position", h),
+      tasa
     ]).then(function (r) {
       // Los productos «solo-caja» (envases y bolsa para llevar) no salen en la carta pública
       var dishes = r[1].filter(function (d) { return (d.tags || []).indexOf("solo-caja") < 0; });
       var cats = r[0].filter(function (c) { return dishes.some(function (d) { return d.category_id === c.id; }); });
-      return { categories: cats, dishes: dishes };
+      var t = r[2] && Number(r[2].rate) > 0 ? { rate: Number(r[2].rate), date: r[2].date || "" } : null;
+      return { categories: cats, dishes: dishes, tasa: t };
     });
   }
 

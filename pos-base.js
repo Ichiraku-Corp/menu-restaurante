@@ -11,7 +11,38 @@ function num(v) { var n = parseFloat(String(v == null ? "" : v).replace(/\s/g, "
 var nf2 = new Intl.NumberFormat("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function ref(n) { return "Ref " + nf2.format(n || 0); }
 function bs(n) { return "Bs " + nf2.format(n || 0); }
-function toast(msg, err) { var t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, err ? 4000 : 2200); }
+// Ventanas abiertas, en el orden en que se abrieron (la última es la que está al frente)
+var MODALS = [];
+(function () {
+  var P = window.HTMLDialogElement && HTMLDialogElement.prototype, sm = P && P.showModal;
+  if (!sm) return;
+  P.showModal = function () { sm.apply(this, arguments); var d = this; MODALS = MODALS.filter(function (x) { return x !== d && x.open; }); MODALS.push(d); };
+})();
+function topModal() { for (var i = MODALS.length - 1; i >= 0; i--) if (MODALS[i].open) return MODALS[i]; return null; }
+// Avisos importantes: quedan fijos arriba hasta tocar «Entendido» (los errores ya no desaparecen solos).
+// Con una ventana abierta (cobro, caja…) el aviso sale arriba dentro de ella: por fuera quedaría detrás
+// y no se podría tocar. Si esa ventana se cierra sin tocar «Entendido», el aviso sigue a la vista.
+function notice(msg, kind) {
+  var n = $("notice");
+  if (!n) {
+    n = document.createElement("div"); n.id = "notice"; n.setAttribute("role", "alert");
+    n.addEventListener("click", function (e) { if (e.target.closest("[data-nok]")) n.classList.remove("show"); });
+  }
+  n._msg = msg; n._kind = kind;
+  var dlg = topModal();
+  if (n.parentNode !== (dlg || document.body)) {
+    if (dlg) {
+      dlg.insertBefore(n, dlg.firstChild);
+      dlg.addEventListener("close", function () { if (n.parentNode === dlg && n.classList.contains("show")) notice(n._msg, n._kind); }, { once: true });
+    } else document.body.appendChild(n);
+  }
+  // Fuera de una ventana: debajo de la barra de arriba, para que el indicador y «Caja» sigan a la vista
+  var h = document.querySelector("header"), hb = h ? h.getBoundingClientRect().bottom : 0;
+  n.style.top = dlg ? "" : (hb > 0 ? Math.round(hb) + 8 : 10) + "px";
+  n.className = "notice show " + (kind || "err") + (dlg ? " inmodal" : "");
+  n.innerHTML = '<span class="nmsg">' + esc(msg) + '</span><button type="button" data-nok>Entendido</button>';
+}
+function toast(msg, err) { if (err) { notice(msg, "err"); return; } var t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, err ? 4000 : 2200); }
 function errMsg(e) { return (e && (e.message || e.error_description)) || String(e); }
 function fail(e) { console.error(e); toast(errMsg(e), true); if (/PIN incorrecto/.test(errMsg(e))) lock(); }
 
@@ -42,6 +73,8 @@ var IC = {
   back: '<path d="M15 5l-7 7 7 7"/>',
   box: '<path d="M4 7h16v13H4zM2 4h20v3H2zM10 11h4"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  dots: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.6-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.6c2.4.2 4.2 2 5 4.9"/>'
 };
 function icon(n) { return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[n] + "</svg>"; }

@@ -378,3 +378,82 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 .pay .after.done .again { visibility:hidden; }
 /* Cierre: la nota es obligatoria cuando la caja no cuadra */
 #cashNotes.need { border-color:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }
+/* Cobro: pie fijo con el resumen, el vuelto y «Confirmar» siempre a la vista */
+#payDlg .payfoot { position:sticky; bottom:-20px; z-index:4; background:var(--surface); margin:12px -20px -20px; padding:10px 20px 16px; border-top:1px solid var(--line); box-shadow:0 -10px 18px -14px rgba(0,0,0,.35); }
+#payDlg .paysum .tot { margin:2px 0; }
+#payDlg .payfoot .dfoot { margin-top:8px; }
+#payDlg .chask { margin-top:6px; font-size:14px; color:var(--muted); font-weight:700; }
+#payDlg .chask.need { color:var(--danger); }
+#payDlg .chask.need::after { content:" · elige una para poder confirmar"; font-weight:600; }
+@media (max-width: 640px) {
+  #payDlg .payfoot { bottom:calc(-14px - env(safe-area-inset-bottom, 0px)); margin:10px -14px calc(-14px - env(safe-area-inset-bottom, 0px)); padding:8px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #payDlg .payfoot .dfoot { position:static; margin:8px 0 0; padding:0; border-top:0; }
+  #payDlg #changeCur button { min-height:40px; padding:6px 10px; font-size:14px; }
+}
+/* Pedido: fotos más grandes para reconocer el plato de un vistazo */
+.dishes { grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); }
+.dishes button { min-height:96px; }
+.dishes button img, .dishes button .ph { width:80px; height:80px; border-radius:14px; }
+.dishes button .tx b { font-size:16px; }
+.dishes button .tx span { font-size:14px; }
+@media (max-width: 640px) {
+  .dishes { grid-template-columns:minmax(0, 1fr); }
+  .dishes button { min-height:84px; }
+  .dishes button img, .dishes button .ph { width:68px; height:68px; }
+}
+/* «Lo más pedido» como primera categoría */
+.cats button.topcat { display:inline-flex; align-items:center; gap:6px; }
+.cats button.topcat .ic { width:16px; height:16px; color:var(--warn, #b45309); }
+.cats button.topcat.on .ic { color:#f6c343; }
+/* «Más opciones»: lo que se usa poco, plegado */
+.actions .morebtn { background:transparent; border-style:dashed; color:var(--muted); font-weight:700; }
+.actions .morebtn.on { border-style:solid; color:var(--text); background:var(--raised); }
+.actions .morebox { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:8px; border-radius:16px; background:var(--raised); border:1.5px solid var(--line); }
+.actions .morebox.hidden { display:none; }
+.actions .morebox #cancel { grid-column:1 / -1; }
+/* Caja: pestañas (Resumen · Cerrar caja · Herramientas) */
+.ctabs { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:4px; margin:6px 0 10px; border-radius:16px; background:var(--chip); }
+.ctabs button { border:0; background:transparent; min-height:44px; font-weight:800; border-radius:12px; }
+.ctabs button.on { background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.12); }
+/* Cierre por pasos */
+/* Pasos del cierre: columnas iguales, número arriba y nombre debajo (caben los cinco en la tablet y en el teléfono) */
+.csteps { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); gap:6px; margin:0 0 8px; }
+.csteps button { display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:4px; min-height:64px; padding:8px 4px; border-radius:14px; font-weight:700; font-size:13px; line-height:1.15; text-align:center; white-space:normal; }
+.csteps button b { display:inline-flex; align-items:center; justify-content:center; flex:none; width:24px; height:24px; border-radius:50%; background:var(--chip); font-size:13px; }
+.csteps button.on { border-color:var(--accent); color:var(--accent); }
+.csteps button.on b { background:var(--accent); color:#fff; }
+.csteps button.done b { background:var(--ok); color:#fff; }
+.csteps button.done b::after { content:""; }
+.cstephelp { margin:0 0 8px; font-size:14px; }
+.offstep { display:none !important; }
+.invisible { visibility:hidden; }
+#cashDlg .cashfoot { position:sticky; bottom:-20px; z-index:4; background:var(--surface); margin:12px -16px -16px; padding:10px 16px 14px; border-top:1px solid var(--line); box-shadow:0 -10px 18px -14px rgba(0,0,0,.35); }
+#cashDlg .cashfoot .tot.big { margin:0 0 8px; }
+#cashDlg .cashfoot #doClose { flex:1 1 auto; margin-left:8px; }
+.toolgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:8px; }
+.toolgrid button { min-height:64px; font-weight:700; }
+@media (max-width: 640px) {
+  #cashDlg .cashfoot { bottom:calc(-14px - env(safe-area-inset-bottom, 0px)); margin:10px -14px calc(-14px - env(safe-area-inset-bottom, 0px)); padding:8px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
+/* Indicador Internet · Laptop · Impresora (verde = funciona, rojo = revisar; al tocar explica) */
+.health { display:inline-flex; align-items:center; gap:10px; min-height:36px; padding:4px 12px; border-radius:999px; background:var(--chip); border:1.5px solid var(--line); font-size:13px; font-weight:700; color:var(--muted); }
+.health > span { display:inline-flex; align-items:center; gap:5px; }
+.health i { width:10px; height:10px; border-radius:50%; background:var(--muted); display:inline-block; }
+.health .ok i { background:var(--ok); }
+.health .bad i { background:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }
+.health .bad b { color:var(--danger); }
+.health .unk i { background:#c9c1bb; }
+.health.alarm { border-color:var(--danger); background:var(--danger-soft); }
+@media (max-width: 640px) { .health { gap:6px; padding:4px 8px; } .health b { display:none; } }
+/* Avisos importantes fijos arriba */
+#notice { position:fixed; left:50%; top:10px; transform:translate(-50%, -12px); z-index:200; width:min(680px, calc(100vw - 20px)); display:flex; gap:12px; align-items:center;
+  padding:12px 14px; border-radius:16px; background:var(--surface); color:var(--text); border:2px solid var(--line); box-shadow:0 14px 40px rgba(0,0,0,.25); font-weight:600;
+  opacity:0; visibility:hidden; pointer-events:none; transition:transform .2s, opacity .2s, visibility .2s; }
+#notice.show { transform:translate(-50%, 0); opacity:1; visibility:visible; pointer-events:auto; }
+/* Dentro de una ventana abierta: arriba de ella, sin tapar nada (empuja el contenido) */
+#notice.inmodal { position:sticky; top:-12px; left:auto; transform:none; width:auto; margin:0 0 12px; z-index:6; box-shadow:0 6px 16px -8px rgba(0,0,0,.35); transition:none; }
+#notice.inmodal:not(.show) { display:none; }
+#notice.err { border-color:var(--danger); background:var(--danger-soft); color:var(--text); }
+#notice.ok { border-color:var(--ok); background:var(--ok-soft); }
+#notice .nmsg { flex:1; line-height:1.35; }
+#notice button { flex:none; min-height:42px; font-weight:800; }

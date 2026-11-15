@@ -1,11 +1,11 @@
 // Cobro y verificación de pagos
 "use strict";
 // ---------------------------------------------------------------- Cobro
-var pays = [], changeCur = "REF", payPerson = 0;
+var pays = [], changeCur = null, payPerson = 0;  // changeCur: cómo se da el vuelto (se elige cada vez, no hay uno por defecto)
 $("pay").addEventListener("click", function () {
   refreshState().then(function () {
     if (!ST.session) { toast("La caja está cerrada: ábrela en «Caja»", true); return; }
-    pays = []; changeCur = "REF"; $("payErr").textContent = "";
+    pays = []; changeCur = null; $("payErr").textContent = "";
     var sn = splitN(cur.data), rows = sn ? (cur.data.split_totals || []) : [];
     payPerson = 0;
     if (sn) { var firstDue = rows.find(function (r) { return r.person > 0 && num(r.total) - num(r.paid) > 0.02; }); payPerson = firstDue ? firstDue.person : 0; }
@@ -49,14 +49,26 @@ function tipSum() { return pays.reduce(function (s, p) { return s + (p.tip ? pay
 function paySums() { if (!cur.data) return { total: 0, paid: 0, rest: 0 }; var total = payPerson ? personDue(payPerson) : num(cur.data.totals.total) - num(cur.data.totals.paid), paid = pays.reduce(function (s, p) { return s + (p.tip ? 0 : payRef(p)); }, 0); return { total: total, paid: paid, rest: Math.round((total - paid) * 100) / 100 }; }
 $("payMethods").addEventListener("click", function (e) {
   var t = e.target.closest("[data-tip]");
-  if (t) { pays.push({ method: "efectivo_usd", amount: "", reference: "", tip: true }); drawPays(); var ins = document.querySelectorAll("#payLines .amt"); if (ins.length) ins[ins.length - 1].focus(); return; }
+  if (t) { pays.push({ method: "efectivo_usd", amount: "", reference: "", tip: true }); drawPays(); var ins = document.querySelectorAll("#payLines .amt"); if (ins.length) ins[ins.length - 1].focus(); payReveal(); return; }
   var b = e.target.closest("[data-m]"); if (!b || b.disabled) return;
   var m = minfo(b.dataset.m), s = paySums(), rest = Math.max(0, s.rest);
   if (splitEq > 1) rest = Math.min(rest, Math.ceil(s.total / splitEq * 100) / 100);
   pays.push({ method: m[0], amount: splitEq > 1 ? (m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2)) : suggest(m[0]), reference: "" });
   drawPays();
   var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); }
+  payReveal();
 });
+// El pie fijo (pagado, vuelto y «Confirmar») no debe tapar el pago que se acaba de añadir ni el que se está
+// escribiendo, aunque el pie crezca (al aparecer «¿Cómo le das el vuelto?»)
+var payFootH = 0;
+function payReveal(row) {
+  var dlg = $("payDlg"), foot = dlg.querySelector(".payfoot"), rows = document.querySelectorAll("#payLines .pay");
+  if (!foot) return;
+  payFootH = foot.offsetHeight;
+  if (!rows.length) return;
+  dlg.style.scrollPaddingBottom = (payFootH + 8) + "px";
+  (row || rows[rows.length - 1]).scrollIntoView({ block: "nearest" });
+}
 function drawPays() {
   $("payLines").innerHTML = pays.map(function (p, i) {
     var m = minfo(p.method), needRef = ["pago_movil", "zelle", "binance", "paypal", "punto_debito", "punto_credito"].indexOf(p.method) >= 0;
@@ -87,11 +99,17 @@ function isRefMethod(k) { var m = minfo(k); return m && m[2] === "REF"; }
 function eqOf(p) { if (!ST || !ST.rate || String(p.amount).trim() === "") return ""; return (isRefMethod(p.method) ? num(p.amount) * ST.rate : num(p.amount) / ST.rate).toFixed(2); }
 // Vuelto en $, en Bs o mixto (dólares enteros + el resto en bolívares), igual que lo registra el servidor
 function changeText(ch) {
+  var both = "$ " + nf2.format(ch) + (ST.rate ? " · " + bs(Math.round(ch * ST.rate * 100) / 100) : "");
+  if (!changeCur) return both;
+  if (changeCur === "PROPINA") return "$ " + nf2.format(ch) + " de propina";
+  if (changeCur === "MOVIL") return ST.rate ? bs(Math.round(ch * ST.rate * 100) / 100) + " por pago móvil" : both;
   if (changeCur === "MIX" && ST.rate && Math.floor(ch) >= 1 && ch - Math.floor(ch) > 0.009) return "$ " + Math.floor(ch) + " + " + bs(Math.round((ch - Math.floor(ch)) * ST.rate * 100) / 100);
   if (changeCur === "MIX" && ST.rate && Math.floor(ch) >= 1) return "$ " + nf2.format(ch);
   return (changeCur === "BS" || changeCur === "MIX") && ST.rate ? bs(Math.round(ch * ST.rate * 100) / 100) : "$ " + nf2.format(ch);
 }
-function chgTxt(c) { return c.currency === "MIX" ? "$ " + nf2.format(c.usd) + " + " + bs(c.bs) : c.currency === "BS" ? bs(c.amount) : "$ " + nf2.format(c.amount); }
+function chgTxt(c) { return c.currency === "MIX" ? "$ " + nf2.format(c.usd) + " + " + bs(c.bs) : c.currency === "BS" ? bs(c.amount) : c.currency === "MOVIL" ? bs(c.amount) + " por pago móvil" : c.currency === "PROPINA" ? "Ref " + nf2.format(c.amount) + " quedan de propina" : "$ " + nf2.format(c.amount); }
+// ¿Hay que entregar algo? (si quedó de propina, no se entrega nada)
+function chgAlert(c) { if (!c || c.currency === "PROPINA") return; alert("Entrega de vuelto: " + chgTxt(c)); }
 function bsOf(r) { return ST && ST.rate ? bs(Math.round(r * ST.rate * 100) / 100) : ""; }
 // Bolívares que faltan, contados en bolívares: total en Bs menos lo escrito (así dos pases de punto cuadran al céntimo)
 function paidBsOf(list) { return list.reduce(function (t, p) { return t + (p.tip ? 0 : isRefMethod(p.method) ? num(p.amount) * (ST.rate || 0) : num(p.amount)); }, 0); }
@@ -122,10 +140,17 @@ function updatePaySums() {
     $("payRest").textContent = changeText(ch);
     show("changeBox", true);
   } else { $("payRestLbl").textContent = "Completo"; $("payRest").textContent = "✓"; show("changeBox", false); }
-  document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = b.dataset.cur !== "REF" && !ST.rate; });
-  $("payOk").disabled = !pays.length || s.rest > 0.02;
+  document.querySelectorAll("#changeCur button").forEach(function (b) { b.classList.toggle("on", b.dataset.cur === changeCur); b.disabled = ["REF", "PROPINA"].indexOf(b.dataset.cur) < 0 && !ST.rate; });
+  // Con vuelto hay que decir cómo se entrega: así el cierre de caja cuadra con lo que de verdad salió
+  var needChg = s.rest < -0.02 && !changeCur;
+  $("changeAsk").classList.toggle("need", needChg);
+  $("payOk").disabled = !pays.length || s.rest > 0.02 || needChg;
   show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson);
   $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
+  var foot = $("payDlg").querySelector(".payfoot");
+  if (foot && $("payDlg").open && foot.offsetHeight > payFootH + 4) {
+    var a = document.activeElement; payReveal(a && a.closest ? a.closest("#payLines .pay") : null);
+  } else if (foot) payFootH = foot.offsetHeight;
 }
 $("paySplit").addEventListener("click", function () {
   ask({ title: "Dividir la cuenta", help: "¿Entre cuántas personas? Cada método que toques pondrá la parte de una persona.", value: "2", type: "number" }).then(function (v) {
@@ -197,6 +222,7 @@ $("payLines").addEventListener("click", function (e) {
   pays.push({ method: p.method, amount: suggest(p.method), reference: "" });
   drawPays();
   var ins = document.querySelectorAll("#payLines .amt"); if (ins.length) { ins[ins.length - 1].focus(); ins[ins.length - 1].select(); }
+  payReveal();
 });
 $("changeCur").addEventListener("click", function (e) { var b = e.target.closest("[data-cur]"); if (!b || b.disabled) return; changeCur = b.dataset.cur; updatePaySums(); });
 $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
@@ -211,12 +237,12 @@ function doPay(partial) {
   rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
     $("payDlg").close();
     if (r && r.closed === false) {
-      var chp = r.change; if (chp) alert("Entrega de vuelto: " + chgTxt(chp));
+      chgAlert(r.change);
       toast((payPerson ? pname(payPerson) + " pagó " : "Abono de ") + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder();
     }
     var ch = r && r.change;
-    toast("Cobrado " + ref(r.total) + (ch ? " · Vuelto " + chgTxt(ch) : ""));
-    if (ch) alert("Entrega de vuelto: " + chgTxt(ch));
+    toast("Cobrado " + ref(r.total) + (ch ? (ch.currency === "PROPINA" ? " · " : " · Vuelto ") + chgTxt(ch) : ""));
+    chgAlert(ch);
     goTables();
   }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
     .then(function () { paying = false; if (cur.data) updatePaySums(); });

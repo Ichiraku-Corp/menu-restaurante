@@ -2,11 +2,12 @@
 "use strict";
 // ---------------------------------------------------------------- Pedido
 function openOrder(id) {
-  cur.order = id; cur.cart = []; $("search").value = "";
+  cur.order = id; cur.cart = []; $("search").value = ""; moreOpen(false);
+  if (MENU.top && MENU.top.length) cur.cat = "top";
   show("tablesView", false); show("orderView", true); syncBars(); $("orderGrid").classList.remove("show-menu");
   if (window.innerWidth <= 820) $("orderGrid").classList.add("show-menu");
   $("toggleMenu").textContent = $("orderGrid").classList.contains("show-menu") ? "Ver cuenta" : "Carta";
-  drawMenu(); return loadOrder();
+  drawMenu(); $("cats").scrollLeft = 0; return loadOrder(); // cada mesa empieza con las categorías al inicio («Lo más pedido»)
 }
 function loadOrder() {
   if (!cur.order) return Promise.resolve();
@@ -28,9 +29,12 @@ $("toggleMenu").addEventListener("click", function () {
 });
 
 function drawMenu() {
-  var term = $("search").value.trim().toLowerCase();
-  $("cats").innerHTML = MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
-  var list = MENU.dishes.filter(function (d) { return term ? d.name.toLowerCase().indexOf(term) >= 0 : d.category_id === cur.cat; });
+  var term = $("search").value.trim().toLowerCase(), tops = (MENU.top || []).map(function (id) { return MENU.dishes.find(function (d) { return d.id === id; }); }).filter(Boolean);
+  if (cur.cat === "top" && !tops.length) cur.cat = MENU.cats[0] && MENU.cats[0].id;
+  $("cats").innerHTML = (tops.length ? '<button type="button" data-cat="top" class="topcat' + (!term && cur.cat === "top" ? " on" : "") + '">' + icon("star") + "<span>Lo más pedido</span></button>" : "") +
+    MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
+  var list = term ? MENU.dishes.filter(function (d) { return d.name.toLowerCase().indexOf(term) >= 0; })
+    : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
     var img = d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>";
     return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
@@ -38,7 +42,17 @@ function drawMenu() {
   }).join("") || '<p class="muted">Sin resultados.</p>';
 }
 $("search").addEventListener("input", drawMenu);
-$("cats").addEventListener("click", function (e) { var b = e.target.closest("[data-cat]"); if (!b) return; cur.cat = Number(b.dataset.cat); $("search").value = ""; drawMenu(); });
+$("cats").addEventListener("click", function (e) { var b = e.target.closest("[data-cat]"); if (!b) return; cur.cat = b.dataset.cat === "top" ? "top" : Number(b.dataset.cat); $("search").value = ""; drawMenu(); });
+// Los platos más pedidos (últimos 30 días): se piden al entrar y cada 10 minutos
+function loadTopDishes() { q(sb.rpc("pos_top_dishes", { p_days: 30 })).then(function (ids) { MENU.top = ids || []; if (cur.order) drawMenu(); }).catch(function () { /* sin la lista: la carta funciona igual */ }); }
+setInterval(function () { if (U) loadTopDishes(); }, 600000);
+// «Más opciones»: dividir, descuento, mover y anular, plegados para que no estorben ni se toquen sin querer
+function moreOpen(on) { $("moreBox").classList.toggle("hidden", !on); $("moreBtn").setAttribute("aria-expanded", on ? "true" : "false"); $("moreBtn").classList.toggle("on", !!on); }
+$("moreBtn").addEventListener("click", function () {
+  var on = $("moreBox").classList.contains("hidden"); moreOpen(on);
+  if (on) $("moreBox").scrollIntoView({ block: "nearest" }); // en la tablet, «Anular» quedaba por debajo de la pantalla
+});
+$("moreBox").addEventListener("click", function (e) { if (e.target.closest("button")) setTimeout(function () { moreOpen(false); }, 0); });
 $("dishes").addEventListener("click", function (e) {
   var b = e.target.closest("[data-dish]"); if (!b) return;
   var d = MENU.dishes.find(function (x) { return x.id === Number(b.dataset.dish); });
@@ -130,6 +144,7 @@ function drawTicket() {
   $("move").classList.toggle("hidden", d.kind !== "mesa");
   $("splitBtn").disabled = !hasItems || pending > 0;
   label("splitBtn", "users", splitN(d) ? "Dividida entre " + splitN(d) + " · cambiar" : "Dividir por persona");
+  label("moreBtn", "dots", "Más opciones" + (splitN(d) ? " · dividida entre " + splitN(d) : "") + (num(d.totals.discount) ? " · con descuento" : ""));
   $("cancel").disabled = paid > 0;
   var ed = $("editDeliv"); if (ed) ed.onclick = function () { delivForm(d); };
   syncOrderBar();

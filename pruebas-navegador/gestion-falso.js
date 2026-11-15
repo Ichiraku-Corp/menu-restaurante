@@ -28,6 +28,10 @@
     svc_month: function (a) { return { month: a.p_month, info: { status: "borrador", rate: 100, max_from_bonus: 40 }, service_pos: 0, tips_pos: 0, service_hist: 0, lines: [], employees: [] }; },
     perf_month: function () { return { no_data: true, people: [], rules: {} }; },
     announcements_admin: function () { return []; },
+    gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
+      caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },
+      laptop: new Date().toISOString(), impresion_atrasada: 0, poco_afuera: ["Agua (botella)"], precios_por_aprobar: 2, pagos_por_comprobar: 0,
+      top_hoy: [{ name: "Gyozas", qty: 9 }, { name: "Ramen Naruto", qty: 7 }, { name: "Limonada rosa", qty: 5 }] }; },
     menu_sales: function () { return gy ? [{ dish_id: gy.id, variant: "", units: 40, revenue: 40 * gy.price }] : []; },
     import_data: function (a) {
       var rows = a.p_rows.map(function (r, i) {

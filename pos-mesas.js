@@ -13,14 +13,36 @@ function priceOf(d, v) { var vs = variantsOf(d); if (!vs) return num(d.price); v
 function minPrice(d) { var vs = variantsOf(d); return vs ? Math.min.apply(null, vs.map(function (v) { return num(v.price); })) : num(d.price); }
 
 // ---------------------------------------------------------------- Estado de sala
+// Indicador Internet · Laptop · Impresora: verde si funciona, rojo si no (al tocarlo explica qué pasa)
+var HEALTH = {};
+function healthDraw(okNet) {
+  var off = typeof SR !== "undefined" && SR.on, now = Date.now(), h = {};
+  h.net = okNet && !off ? ["ok", "Internet: conectado."] : ["bad", off ? "Sin internet: los pedidos siguen por la laptop y salen en cocina. Cobrar espera a que vuelva." : "Sin conexión con el sistema. Revisa el wifi de la tablet."];
+  var seen = ST && ST.bridge_seen ? now - new Date(ST.bridge_seen).getTime() : null;
+  h.lap = off ? ["unk", "Laptop: sin internet no se puede comprobar desde aquí."] : seen === null ? ["unk", "Laptop: todavía sin datos."]
+    : seen < 90000 ? ["ok", "Laptop de caja: encendida y conectada."] : ["bad", "La laptop de caja no se conecta desde hace " + Math.round(seen / 60000) + " min: no salen comandas ni tickets. Revisa que esté encendida, con internet y con el puente abierto."];
+  var late = ST && ST.printer_oldest && now - new Date(ST.printer_oldest).getTime() > 60000;
+  h.prn = off ? ["unk", "Impresora: sin internet no se puede comprobar desde aquí."] : ST && num(ST.printer_error) ? ["bad", "La impresora dio error: " + (ST.printer_error_msg || "revisa que esté encendida y con papel") + "."]
+    : late ? ["bad", "Hay " + (ST.printer_backlog || "") + " tickets esperando más de un minuto: revisa la laptop y la impresora."] : ["ok", "Impresora: imprimiendo al día."];
+  HEALTH = h;
+  var el = $("health"); if (!el) return;
+  el.classList.toggle("hidden", !U);
+  Object.keys(h).forEach(function (k) { var s = el.querySelector('[data-h="' + k + '"]'); if (s) s.className = h[k][0]; });
+  el.classList.toggle("alarm", Object.keys(h).some(function (k) { return h[k][0] === "bad"; }));
+}
+$("health").addEventListener("click", function () {
+  var bad = Object.keys(HEALTH).filter(function (k) { return HEALTH[k][0] === "bad"; });
+  if (bad.length) notice(bad.map(function (k) { return HEALTH[k][1]; }).join(" "), "err");
+  else notice(Object.keys(HEALTH).map(function (k) { return HEALTH[k][1]; }).join(" "), "ok");
+});
 function refreshState() {
   return q(sb.rpc("pos_state")).then(function (s) {
-    ST = s;
+    ST = s; healthDraw(true);
     $("rate").classList.toggle("bad", !s.rate);
     $("rate").textContent = s.rate ? "€ BCV " + nf2.format(s.rate) + (s.rate_date && s.rate_date !== today() ? " (de " + s.rate_date.slice(8, 10) + "/" + s.rate_date.slice(5, 7) + ")" : "") : "Sin tasa del día";
     if (!$("tablesView").classList.contains("hidden")) drawTables();
     drawBanners();
-  });
+  }, function (e) { healthDraw(false); throw e; });
 }
 function today() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10); }
 setInterval(function () { if (U && !document.hidden) refreshState().catch(function () {}); }, 5000);

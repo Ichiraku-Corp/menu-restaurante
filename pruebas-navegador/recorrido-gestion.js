@@ -35,6 +35,11 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(true, "entra a Gestión (sesión verificada)");
 
     // Cargar datos: plantilla, pegar desde Excel, revisar y cargar
+    // Entra por «Inicio» y navega por secciones
+    ok(await page.isVisible('#secs [data-sec="inicio"].on') && await page.isVisible("#iniKpis") && !(await page.isVisible("#tabs")), "Gestión abre en «Inicio», sin la fila de pestañas");
+    ok(/Ventas de hoy/.test(await page.textContent("#iniKpis")) && /Laptop de caja/.test(await page.textContent("#iniEstado")), "Inicio muestra ventas de hoy y el estado de la laptop");
+    await page.click('#secs [data-sec="ajustes"]');
+    ok(await page.isVisible('#tabs [data-tab="importar"]') && !(await page.isVisible('#tabs [data-tab="recetas"]')), "cada sección muestra solo sus pestañas");
     await page.click('#tabs [data-tab="importar"]');
     ok(/stock_minimo/.test(await page.textContent("#impCols")), "muestra los títulos de la plantilla de insumos");
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#impTpl")]);
@@ -58,7 +63,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(cli.nombre === "Pérez, Ana" && cli.telefono === "0414-1234567", "lee CSV con comas y comillas");
 
     // Recetas: rentabilidad del menú
-    await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
+    await page.click('#secs [data-sec="cocina"]'); await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
     ok(/Gyozas/.test(await page.textContent("#meList")) && /Ganancia de los platos/.test(await page.textContent("#meKpis")), "muestra la rentabilidad del menú con lo vendido");
     ok(/Estrella|Popular|Deja bien|Vende poco/.test(await page.textContent("#meList")), "clasifica el plato y dice qué hacer");
   } catch (e) {

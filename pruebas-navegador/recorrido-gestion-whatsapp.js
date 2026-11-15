@@ -72,6 +72,7 @@ const FAKE_WA = `
   try {
     await page.goto("http://localhost:8795/gestion.html");
     await page.waitForSelector("#app:not(.hidden)", { timeout: 8000 });
+    if (await page.locator('#secs [data-sec="clientes"]').count()) await page.click('#secs [data-sec="clientes"]'); // Gestión por secciones
     await page.click('#tabs [data-tab="whatsapp"]');
     await page.waitForSelector("#waApp:not([hidden])", { timeout: 5000 });
     ok(true, "la pestaña WhatsApp abre en Gestión");

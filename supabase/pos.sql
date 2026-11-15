@@ -274,6 +274,15 @@ language sql stable security definer set search_path = public as $$
   order by rate_date desc limit 1
 $$;
 
+-- La carta pública muestra el precio en bolívares: solo la tasa del día, nada más (también para el público)
+create or replace function public.menu_tasa() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('rate', r.eur, 'date', r.rate_date) from public.pos_rates r
+  where r.rate_date <= (now() at time zone 'America/Caracas')::date order by r.rate_date desc limit 1
+$$;
+revoke execute on function public.menu_tasa() from public;
+grant execute on function public.menu_tasa() to anon, authenticated;
+
 create or replace function public.pos_money(x numeric) returns text
 language sql immutable as $$ select to_char(coalesce(x, 0), 'FM999G999G990D00') $$;
 
@@ -397,6 +406,15 @@ begin
     'month', jsonb_build_object('from', date_trunc('month', d)::date, 'to', d, 'rows', public.pos_ranking(date_trunc('month', d)::date, d)));
 end $$;
 
+-- Los platos más pedidos de los últimos días (para la fila «Lo más pedido» al tomar el pedido)
+create or replace function public.pos_top_dishes(p_days int default 30) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when public.pos_is_device() then coalesce((select jsonb_agg(x.dish_id order by x.q desc) from (
+    select i.dish_id, sum(i.qty) q from public.pos_items i
+    where i.status <> 'anulado' and i.dish_id is not null and i.created_at > now() - make_interval(days => greatest(coalesce(p_days, 30), 1))
+    group by 1 order by 2 desc limit 12) x), '[]'::jsonb) end
+$$;
+
 -- ---------------------------------------------------------------- Lectura
 drop function if exists public.pos_staff();
 create or replace function public.pos_staff() returns table (id bigint, name text, can_charge boolean)
@@ -455,7 +473,11 @@ begin
                  'device', x.device, 'amount_ref', x.ref, 'at', x.at) order by x.at), '[]'::jsonb)
                from (select order_id, created_by, device, sum(amount_ref) ref, max(created_at) at from public.pos_payments
                      where not alert_seen and amount > 0 and created_at > now() - interval '18 hours' group by order_id, created_by, device) x),
-    'printer_oldest', (select min(created_at) from public.pos_print_jobs where status = 'pendiente' and created_at > now() - interval '1 day')
+    'printer_oldest', (select min(created_at) from public.pos_print_jobs where status = 'pendiente' and created_at > now() - interval '1 day'),
+    -- Para el indicador «Laptop · Impresora» de la tablet
+    'bridge_seen', (select updated_at from public.pos_kv where key = 'bridge_seen'),
+    'printer_error', (select count(*) from public.pos_print_jobs where status = 'error' and created_at > now() - interval '1 hour'),
+    'printer_error_msg', (select error from public.pos_print_jobs where status = 'error' and created_at > now() - interval '1 hour' order by id desc limit 1)
   ) into r;
   return r;
 end $$;
@@ -719,6 +741,11 @@ begin
     insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
     values (p_order, 'efectivo_bs', 'BS', -round(rest * p_rate, 2), -rest, p_rate, 'vuelto', p_emp, p_sess, p_person);
     return jsonb_build_object('currency', 'MIX', 'amount', p_over, 'usd', usd, 'bs', round(rest * p_rate, 2));
+  elsif p_cur = 'MOVIL' and p_rate is not null then
+    -- El vuelto se le manda por pago móvil: sale de la cuenta del negocio, así el cierre del pago móvil cuadra
+    insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+    values (p_order, 'pago_movil', 'BS', -round(p_over * p_rate, 2), -p_over, p_rate, 'vuelto', p_emp, p_sess, p_person);
+    return jsonb_build_object('currency', 'MOVIL', 'amount', round(p_over * p_rate, 2));
   elsif p_cur in ('BS', 'MIX') and p_rate is not null and not (p_cur = 'MIX' and p_over - floor(p_over) <= 0.009) then
     insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
     values (p_order, 'efectivo_bs', 'BS', -round(p_over * p_rate, 2), -p_over, p_rate, 'vuelto', p_emp, p_sess, p_person);
@@ -729,9 +756,25 @@ begin
   return jsonb_build_object('currency', 'REF', 'amount', p_over);
 end $$;
 
+-- El cliente deja el vuelto de propina: el dinero queda en la gaveta (mismo método con que pagó) y cuenta como propina
+create or replace function public.pos_change_to_tip(p_order bigint, p_over numeric, p_method text, p_cur text, p_rate numeric, p_emp bigint, p_sess bigint, p_person int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare amt numeric;
+begin
+  if coalesce(p_over, 0) <= 0.02 then return null; end if;
+  if p_method is null then raise exception 'No se sabe con qué pagó: elige otra forma de vuelto'; end if;
+  amt := case when p_cur = 'BS' then round(p_over * p_rate, 2) else p_over end;
+  insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person)
+  values (p_order, p_method, p_cur, -amt, -p_over, case when p_cur = 'BS' then p_rate end, 'vuelto>propina', p_emp, p_sess, p_person);
+  insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, person, is_tip)
+  values (p_order, p_method, p_cur, amt, p_over, case when p_cur = 'BS' then p_rate end, 'propina (vuelto)', p_emp, p_sess, p_person, true);
+  return jsonb_build_object('currency', 'PROPINA', 'amount', p_over);
+end $$;
+
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare o record; t record; sess bigint; rt numeric; p record; cur text; ref numeric; paid numeric := 0; over numeric; chg jsonb := null; due numeric; who int; pover numeric := 0; inc record; pid bigint; tips numeric := 0;
+  lm text; lc text;  -- método y moneda del último pago (para el vuelto que queda de propina)
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into o from public.pos_orders where id = p_order for update;
@@ -783,6 +826,7 @@ begin
       values (p.tab_employee_id, 'consumo', ref, p_order, pid, public.pos_order_label(p_order), coalesce(public.pos_emp_name(p_emp), ''));
     end if;
     if coalesce(p.tip, false) then tips := tips + ref; continue; end if;  -- la propina no paga la cuenta
+    if p.method <> 'cuenta' then lm := p.method; lc := cur; end if;
     paid := paid + ref;
   end loop;
   if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
@@ -793,14 +837,16 @@ begin
     if who is not null then
       select round(x.paid - x.total, 2) into pover from public.pos_split(p_order) x where x.person = who;
       if coalesce(pover, 0) > 0.02 then
-        chg := public.pos_give_change(p_order, pover, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who);
+        chg := case when p_change_currency = 'PROPINA' then public.pos_change_to_tip(p_order, pover, lm, lc, rt, p_emp, sess, who)
+                    else public.pos_give_change(p_order, pover, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who) end;
         paid := paid - pover;
       else pover := 0;
       end if;
     end if;
     perform public.pos_print('caja', '^ABONO' || case when who is not null then E'\n^' || upper(public.pos_person_name(who)) else '' end || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
       public.pos_line('Abonado ahora', 'Ref ' || public.pos_money(paid)) || E'\n' ||
-      case when pover > 0 then public.pos_line('Vuelto', case chg ->> 'currency' when 'BS' then 'Bs ' || public.pos_money((chg ->> 'amount')::numeric)
+      case when pover > 0 then public.pos_line(case when chg ->> 'currency' = 'PROPINA' then 'Propina (vuelto)' else 'Vuelto' end, case chg ->> 'currency' when 'BS' then 'Bs ' || public.pos_money((chg ->> 'amount')::numeric)
+        when 'MOVIL' then 'Bs ' || public.pos_money((chg ->> 'amount')::numeric) || ' p. movil' 
         when 'MIX' then '$ ' || public.pos_money((chg ->> 'usd')::numeric) || ' + Bs ' || public.pos_money((chg ->> 'bs')::numeric)
         else 'Ref ' || public.pos_money((chg ->> 'amount')::numeric) end) || E'\n' else '' end ||
       public.pos_line('Total de la cuenta', 'Ref ' || public.pos_money(t.total)) || E'\n^' ||
@@ -810,15 +856,16 @@ begin
   end if;
   over := round(paid - due, 2);
   if over > 0.02 then
-    chg := public.pos_give_change(p_order, over, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who);
+    chg := case when p_change_currency = 'PROPINA' then public.pos_change_to_tip(p_order, over, lm, lc, rt, p_emp, sess, who)
+                else public.pos_give_change(p_order, over, coalesce(p_change_currency, 'REF'), rt, p_emp, sess, who) end;
   end if;
   update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = now(), session_id = sess, rate = rt where id = p_order;
   perform public.pos_print('caja', public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
-    (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
+    (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case when p2.is_tip then 'Propina ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
-     from public.pos_payments p2 where p2.order_id = p_order) || E'\n\n~Gracias por tu visita!');
+     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina') || E'\n\n~Gracias por tu visita!');
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'cobrar', p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);
 end $$;
@@ -1211,6 +1258,11 @@ create or replace function public.pos_print_next(p_limit int default 10)
 returns setof public.pos_print_jobs language plpgsql security definer set search_path = public as $$
 begin
   if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
+  -- Latido de la laptop (la tablet muestra «Laptop ●»): se anota cada 20 s como mucho, no en cada vuelta
+  if coalesce(public.staff_role(), '') = 'impresora' then
+    insert into public.pos_kv (key, value) values ('bridge_seen', jsonb_build_object('at', now()))
+    on conflict (key) do update set value = excluded.value, updated_at = now() where pos_kv.updated_at < now() - interval '20 seconds';
+  end if;
   return query select * from public.pos_print_jobs
     where (status = 'pendiente' or (status = 'error' and attempts < 20)) and created_at > now() - interval '1 day'
     order by id limit greatest(1, least(coalesce(p_limit, 10), 50));
@@ -1759,7 +1811,7 @@ begin
     'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
     'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
-    'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()',
+    'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()', 'pos_top_dishes(integer)',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
@@ -1786,6 +1838,7 @@ revoke execute on function public.pos_ranking(date, date) from authenticated;
 revoke execute on function public.pos_week_report(date) from authenticated;
 revoke execute on function public.pos_customer_id(text) from anon, public, authenticated;
 revoke execute on function public.pos_give_change(bigint, numeric, text, numeric, bigint, bigint, int) from anon, public, authenticated;
+revoke execute on function public.pos_change_to_tip(bigint, numeric, text, text, numeric, bigint, bigint, int) from anon, public, authenticated;
 -- Ayudantes internos: los usan otras funciones; ningún equipo los llama directo.
 revoke execute on function public.pos_tab_balance(bigint) from anon, public, authenticated;
 revoke execute on function public.pos_emp_name(bigint) from anon, public, authenticated;

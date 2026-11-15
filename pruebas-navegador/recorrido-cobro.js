@@ -27,5 +27,15 @@ ok(v2==="144.37"&&Number(half)+Number(v2)===Number(full),"«+ Otro pase» pone e
 ok(a2==="Cubre todo ✓"&&(await p.textContent("#payRest"))==="✓","con los dos pases la cuenta queda completa");
 await p.click("#payOk");await p.waitForTimeout(400);
 ok(await p.evaluate(()=>window.__S.payments.filter(x=>x.method==="punto_debito").length===2),"se registran los dos pases de punto");
+// En la tablet (1280×700): con un billete grande aparece «¿Cómo le das el vuelto?» (el pie crece) y el pago sigue a la vista
+await p.setViewportSize({width:1280,height:700});
+await p.click('#areas [data-area="Feria"]');await p.click('#areaBody [data-table] .num:text-is("4")');await p.waitForSelector("#orderView:not(.hidden)");
+await p.click('#cats button:has-text("Entradas")');await p.click('#dishes button:has-text("Gyozas")');await p.click("#dishAdd");await p.click("#send");await p.waitForTimeout(300);
+await p.click("#pay");await p.waitForTimeout(300);await p.click('#payMethods [data-m="efectivo_usd"]');await p.waitForTimeout(200);
+const sinVuelto=await p.isHidden("#changeBox");
+await p.$eval('#payLines [data-bill="20"]',x=>x.click());await p.waitForTimeout(250);
+const vis=await p.evaluate(()=>{const l=document.querySelector("#payLines .pay").getBoundingClientRect(),f=document.querySelector("#payDlg .payfoot").getBoundingClientRect();return l.bottom<=f.top+1;});
+ok(sinVuelto&&await p.isVisible("#changeBox")&&vis,"en la tablet, al aparecer «¿Cómo le das el vuelto?» el pago sigue a la vista (no lo tapa el pie)");
+await p.click("#payCancel");
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE COBRO EN VARIOS PASES PASARON");})();

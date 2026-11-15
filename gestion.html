@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-osXb+lmnoqTnp6d6WbfNeFV70IyKKJTK17EjrtGBTsk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-drtaqUoyawxjTdT+8VIZSUx4jvcKW2idw605lbW6Wb4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Gestión de costos</title>
+<title>Gestión · Ichiraku Ramen</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   :root { --bg:#f6f4f1; --surface:#fff; --text:#1f1a17; --muted:#6b625b; --line:#e5ded4;
@@ -105,6 +105,34 @@
   .perfrules { margin:6px 0 10px; padding:10px; border-radius:12px; background:var(--raised, rgba(127,127,127,.08)); }
   .perfrules label { font-size:13px; display:flex; flex-direction:column; gap:2px; }
   .perfrules input { width:110px; }
+  /* Secciones arriba (Inicio · Dinero · Personal · Cocina · Clientes · Ajustes) y sus pestañas abajo */
+  .secs { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:4px; padding:4px; border-radius:16px; background:var(--chip); margin:4px 0 8px; }
+  .secs button { border:0; background:transparent; font-weight:800; border-radius:12px; padding:9px 6px; min-height:42px; }
+  .secs button.on { background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.12); color:var(--accent); }
+  .tabs button.on { background:var(--text); border-color:var(--text); color:var(--bg); }
+  @media (max-width:560px) { .secs { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+  /* Inicio */
+  .grid2.ini { gap:0 12px; }
+  .estado { display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--line); }
+  .estado:last-child { border-bottom:0; }
+  .estado i { width:12px; height:12px; border-radius:50%; background:var(--muted); margin-top:5px; flex:none; }
+  .estado.ok i { background:var(--ok); } .estado.bad i { background:var(--danger); }
+  .estado b { display:block; } .estado span { color:var(--muted); font-size:14px; } .estado em { display:block; font-size:13px; color:var(--muted); }
+  .alerta { display:flex; width:100%; justify-content:space-between; gap:10px; text-align:left; margin:0 0 8px; background:color-mix(in srgb, var(--warn) 12%, var(--surface)); border-color:color-mix(in srgb, var(--warn) 45%, var(--line)); font-weight:600; }
+  .alerta span { color:var(--muted); font-weight:700; white-space:nowrap; }
+  .toprow { display:grid; grid-template-columns:24px minmax(0, 1.4fr) minmax(0, 2fr) 48px; gap:10px; align-items:center; padding:6px 0; }
+  .toprow b:first-child { color:var(--muted); }
+  /* Avisos importantes fijos arriba */
+  #notice { position:fixed; left:50%; top:10px; transform:translate(-50%, -12px); z-index:200; width:min(680px, calc(100vw - 20px)); display:flex; gap:12px; align-items:center;
+    padding:12px 14px; border-radius:14px; background:var(--surface); color:var(--text); border:2px solid var(--line); box-shadow:0 14px 40px rgba(0,0,0,.25); font-weight:600;
+    opacity:0; visibility:hidden; pointer-events:none; transition:transform .2s, opacity .2s, visibility .2s; }
+  #notice.show { transform:translate(-50%, 0); opacity:1; visibility:visible; pointer-events:auto; }
+  #notice.inmodal { position:sticky; top:-12px; left:auto; transform:none; width:auto; margin:0 0 12px; z-index:6; box-shadow:0 6px 16px -8px rgba(0,0,0,.35); transition:none; }
+  #notice.inmodal:not(.show) { display:none; }
+  #notice.err { border-color:var(--danger); background:color-mix(in srgb, var(--danger) 12%, var(--surface)); }
+  #notice.ok { border-color:var(--ok); }
+  #notice .nmsg { flex:1; line-height:1.35; }
+  #notice button { flex:none; font-weight:800; }
 </style>
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
@@ -115,7 +143,7 @@
 <body>
 <div class="wrap">
   <header class="top">
-    <h1>Gestión de costos</h1>
+    <h1>Gestión <small class="muted" style="font-weight:600;font-size:15px">Ichiraku Ramen</small></h1>
     <div class="row">
       <a class="btn" href="admin.html">Panel de la carta</a>
       <button id="logout" class="hidden">Salir</button>
@@ -142,8 +170,18 @@
   <div id="mfa" class="card hidden" style="max-width:420px"></div>
 
   <div id="app" class="hidden">
+    <!-- Secciones (arriba) y sus pestañas (abajo): de 16 pestañas en una fila a 6 secciones -->
+    <nav class="secs" id="secs" aria-label="Secciones">
+      <button type="button" data-sec="inicio" class="on">Inicio</button>
+      <button type="button" data-sec="dinero">Dinero</button>
+      <button type="button" data-sec="personal">Personal</button>
+      <button type="button" data-sec="cocina">Cocina</button>
+      <button type="button" data-sec="clientes">Clientes</button>
+      <button type="button" data-sec="ajustes">Ajustes</button>
+    </nav>
     <nav class="tabs" id="tabs">
-      <button data-tab="resumen" class="on">Resumen</button>
+      <button data-tab="inicio" class="on" hidden>Inicio</button>
+      <button data-tab="resumen">Costos del mes</button>
       <button data-tab="nomina">Nómina</button>
       <button data-tab="asistencia">Asistencia</button>
       <button data-tab="ventas">Ventas</button>
@@ -160,8 +198,19 @@
       <button data-tab="importar">Cargar datos</button>
     </nav>
 
+    <!-- Inicio: lo del día -->
+    <section data-panel="inicio">
+      <div class="row between"><p class="muted" style="margin:0" id="iniFecha">Lo de hoy, en vivo.</p><button type="button" id="iniRefresh">Actualizar</button></div>
+      <div class="kpis" style="margin-top:12px" id="iniKpis"><div class="kpi"><span>Cargando…</span></div></div>
+      <div class="grid2 ini">
+        <div class="card"><h2>Estado</h2><div id="iniEstado"></div></div>
+        <div class="card"><h2>Alertas</h2><div id="iniAlertas"></div></div>
+      </div>
+      <div class="card"><h2>Lo más pedido hoy</h2><div id="iniTop"></div></div>
+    </section>
+
     <!-- Resumen -->
-    <section data-panel="resumen">
+    <section data-panel="resumen" hidden>
       <div class="row between">
         <p class="muted" style="margin:0">Costo del mes por área: nómina + gastos fijos + gastos variables del mes elegido.</p>
         <input type="month" id="month" style="width:auto" aria-label="Mes">
@@ -436,10 +485,34 @@
   function show(id, on) { $(id).classList.toggle("hidden", !on); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2200); }
-  function fail(err) { console.error(err); toast("Error: " + (err && err.message || err)); }
+  // Avisos importantes: quedan fijos arriba hasta tocar «Entendido»
+  // Ventanas abiertas en el orden en que se abrieron: un aviso sale arriba dentro de la que está al frente
+  // (por fuera quedaría detrás y no se podría tocar). Si esa ventana se cierra, el aviso sigue a la vista.
+  var MODALS = [];
+  (function () {
+    var P = window.HTMLDialogElement && HTMLDialogElement.prototype, sm = P && P.showModal;
+    if (!sm) return;
+    P.showModal = function () { sm.apply(this, arguments); var d = this; MODALS = MODALS.filter(function (x) { return x !== d && x.open; }); MODALS.push(d); };
+  })();
+  function topModal() { for (var i = MODALS.length - 1; i >= 0; i--) if (MODALS[i].open) return MODALS[i]; return null; }
+  function notice(msg, kind) {
+    var n = $("notice");
+    if (!n) { n = document.createElement("div"); n.id = "notice"; n.setAttribute("role", "alert");
+      n.addEventListener("click", function (e) { if (e.target.closest("[data-nok]")) n.classList.remove("show"); }); }
+    n._msg = msg; n._kind = kind;
+    var dlg = topModal();
+    if (n.parentNode !== (dlg || document.body)) {
+      if (dlg) { dlg.insertBefore(n, dlg.firstChild);
+        dlg.addEventListener("close", function () { if (n.parentNode === dlg && n.classList.contains("show")) notice(n._msg, n._kind); }, { once: true });
+      } else document.body.appendChild(n);
+    }
+    n.className = "notice show " + (kind || "err") + (dlg ? " inmodal" : "");
+    n.innerHTML = '<span class="nmsg">' + esc(msg) + '</span><button type="button" data-nok>Entendido</button>';
+  }
+  function fail(err) { console.error(err); notice("No se pudo: " + (err && err.message || err)); }
   function num(v) { var n = parseFloat(String(v).replace(",", ".")); return isFinite(n) ? n : 0; }
-  var nf2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  var nf3 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
+  var nf2 = new Intl.NumberFormat("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nf3 = new Intl.NumberFormat("es-VE", { maximumFractionDigits: 3 });
   var PFX = C.PRICE_PREFIX || "Ref";
   function money(n) { return PFX + " " + nf2.format(n || 0); }
   function pct(n) { return isFinite(n) ? Math.round(n) + " %" : "—"; }
@@ -532,7 +605,41 @@
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
   function opt(p) { return p.then(function (r) { return r.error ? null : r.data; }, function () { return null; }); }
-  function renderAll() { renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); loadServicio(); }
+  // ---------------------------------------------------------------- Inicio: lo del día
+  function loadInicio() {
+    if (!mfaOk || $("tabs").querySelector('[data-tab="inicio"]').classList.contains("on") === false) return;
+    q(sb.rpc("gestion_inicio")).then(drawInicio).catch(function (e) { $("iniKpis").innerHTML = '<div class="kpi"><span>No se pudo cargar</span><b>—</b><span>' + esc(e.message || "") + "</span></div>"; });
+  }
+  function drawInicio(d) {
+    var v = num(d.ventas), vp = num(d.ventas_semana_pasada), dif = vp ? (v - vp) / vp * 100 : null, n = num(d.pedidos);
+    var dia = new Date(String(d.hoy) + "T12:00:00").toLocaleDateString("es-VE", { weekday: "long" });
+    $("iniFecha").textContent = "Hoy, " + new Date(String(d.hoy) + "T12:00:00").toLocaleDateString("es-VE", { weekday: "long", day: "numeric", month: "long" }) + " · se actualiza solo cada minuto.";
+    $("iniKpis").innerHTML =
+      '<div class="kpi main"><span>Ventas de hoy</span><b>' + money(v) + "</b><span>" + (dif === null ? "el " + dia + " pasado no hubo ventas" : (dif >= 0 ? "▲ " : "▼ ") + nf2.format(Math.abs(dif)) + " % vs. el " + dia + " pasado (" + money(vp) + ")") + "</span></div>" +
+      '<div class="kpi"><span>Pedidos cobrados</span><b>' + n + "</b><span>" + num(d.pedidos_semana_pasada) + " el " + dia + " pasado</span></div>" +
+      '<div class="kpi"><span>Ticket promedio</span><b>' + (n ? money(v / n) : "—") + "</b></div>" +
+      '<div class="kpi"><span>Abiertas ahora</span><b>' + num(d.abiertas) + "</b><span>" + money(num(d.abiertas_monto)) + " por cobrar</span></div>";
+    var lapAge = d.laptop ? (Date.now() - new Date(d.laptop).getTime()) / 60000 : null, uc = d.ultimo_cierre;
+    var row = function (ok, title, txt) { return '<div class="estado ' + (ok === true ? "ok" : ok === false ? "bad" : "") + '"><i></i><div><b>' + esc(title) + "</b><span>" + txt + "</span></div></div>"; };
+    $("iniEstado").innerHTML =
+      row(true, "Caja", d.caja ? "Abierta desde las " + new Date(d.caja.abierta_desde).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + (d.caja.por ? " por " + esc(d.caja.por) : "") : "Cerrada") +
+      row(lapAge !== null && lapAge < 2, "Laptop de caja", lapAge === null ? "Sin datos todavía" : lapAge < 2 ? "Conectada" : "Sin conexión hace " + (lapAge < 120 ? Math.round(lapAge) + " min" : Math.round(lapAge / 60) + " h") + ": no salen comandas ni correos") +
+      row(!num(d.impresion_atrasada), "Impresión", num(d.impresion_atrasada) ? num(d.impresion_atrasada) + " tickets esperando" : "Al día") +
+      (uc ? row(uc.correo === "enviado", "Último cierre", new Date(uc.at).toLocaleString("es-VE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) + (uc.por ? " · " + esc(uc.por) : "") +
+        " · correo " + (uc.correo === "enviado" ? "enviado ✓" : uc.correo ? "pendiente" : "—") + (uc.notas ? '<em>«' + esc(uc.notas) + "»</em>" : "")) : "");
+    var al = [];
+    if ((d.poco_afuera || []).length) al.push(["cocina", "inventario", "Queda poco afuera: " + d.poco_afuera.join(", ")]);
+    if (num(d.precios_por_aprobar)) al.push(["cocina", "insumos", num(d.precios_por_aprobar) + " precios de insumos por aprobar"]);
+    if (num(d.pagos_por_comprobar)) al.push(["dinero", "ventas", num(d.pagos_por_comprobar) + " pagos de Binance o PayPal sin comprobar"]);
+    $("iniAlertas").innerHTML = al.length ? al.map(function (a) { return '<button type="button" class="alerta" data-go="' + a[1] + '">' + esc(a[2]) + "<span>Ver →</span></button>"; }).join("") : '<p class="muted" style="margin:0">Todo en orden ✓</p>';
+    var top = d.top_hoy || [], mx = top.length ? num(top[0].qty) : 0;
+    $("iniTop").innerHTML = top.length ? top.map(function (t, i) { return '<div class="toprow"><b>' + (i + 1) + "</b><span>" + esc(t.name) + '</span><div class="bar"><i style="width:' + Math.round(num(t.qty) / mx * 100) + '%"></i></div><b class="n">' + nf3.format(num(t.qty)) + "</b></div>"; }).join("")
+      : '<p class="muted" style="margin:0">Todavía no hay pedidos hoy.</p>';
+  }
+  $("iniRefresh").addEventListener("click", loadInicio);
+  $("iniAlertas").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (!b) return; var t = document.querySelector('#tabs [data-tab="' + b.dataset.go + '"]'); if (t) t.click(); });
+  setInterval(function () { if (!document.hidden) loadInicio(); }, 60000);
+  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); loadServicio(); }
 
   // ---------------------------------------------------------------- Servicio y bonos
   var SV = { months: [], m: null, data: null, tabs: [] };
@@ -751,15 +858,33 @@
   });
 
   // ---------------------------------------------------------------- Pestañas
+  // Cada pestaña pertenece a una sección; la barra de abajo muestra solo las de la sección elegida
+  var TAB_SEC = { inicio: "inicio", resumen: "dinero", ventas: "dinero", historico: "dinero", gastos: "dinero", servicio: "dinero",
+    nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", insumos: "cocina", inventario: "cocina",
+    clientes: "clientes", whatsapp: "clientes", areas: "ajustes", importar: "ajustes" };
+  var SEC_LAST = {};
+  function syncSecs(tab) {
+    var sec = TAB_SEC[tab] || "dinero"; SEC_LAST[sec] = tab;
+    document.querySelectorAll("#secs [data-sec]").forEach(function (x) { x.classList.toggle("on", x.dataset.sec === sec); });
+    document.querySelectorAll("#tabs button[data-tab]").forEach(function (x) { x.hidden = (TAB_SEC[x.dataset.tab] || "dinero") !== sec || x.dataset.tab === "inicio"; });
+    $("tabs").classList.toggle("hidden", sec === "inicio");
+  }
+  $("secs").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-sec]"); if (!b) return;
+    var sec = b.dataset.sec, first = Object.keys(TAB_SEC).filter(function (k) { return TAB_SEC[k] === sec; })[0];
+    var t = document.querySelector('#tabs [data-tab="' + (SEC_LAST[sec] || first) + '"]'); if (t) t.click();
+  });
   $("tabs").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-tab]"); if (!b) return;
+    syncSecs(b.getAttribute("data-tab"));
+    if (b.getAttribute("data-tab") === "inicio") loadInicio();
     document.querySelectorAll("#tabs button").forEach(function (x) { x.classList.toggle("on", x === b); });
     document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
     try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
     if (b.getAttribute("data-tab") === "historico" && S.histDays !== undefined) renderHistorico(); // los gráficos necesitan el ancho visible
     if (b.getAttribute("data-tab") === "avisos") loadAvisos();
   });
-  try { var t0 = sessionStorage.getItem("gestion-tab"); if (t0) { var b0 = document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); } } catch (e) {}
+  try { var t0 = sessionStorage.getItem("gestion-tab"); var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio"); } catch (e) { syncSecs("inicio"); }
   $("month").value = $("expMonth").value = ymNow();
   $("month").addEventListener("change", renderResumen);
   $("expMonth").addEventListener("change", renderGastos);
@@ -1633,7 +1758,7 @@
   var MES_C = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
   var MES_L = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
   var DOW = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
-  var nfc = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+  var nfc = new Intl.NumberFormat("es-VE", { notation: "compact", maximumFractionDigits: 1 });
   function addMonth(ym, k) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + k; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + "-" + String(m + 1).padStart(2, "0"); }
   function mLabel(ym, long) { var m = +ym.slice(5, 7) - 1; return long ? MES_L[m] + " " + ym.slice(0, 4) : MES_C[m] + " " + ym.slice(2, 4); }
   function dmy(s) { return s ? s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4) : ""; }
@@ -1762,7 +1887,7 @@
       var net12 = t12 / ivaF(), food = net12 * fc / 100, fixed = (MC.nom + MC.fix) * n12, servL = s12 * (100 - staffPctV) / 100, gross = net12 - food, res = gross - fixed + servL;
       function two(label, v, cls, sub) { return "<tr" + (cls ? ' class="' + cls + '"' : "") + "><td>" + label + (sub ? '<div class="muted">' + sub + "</div>" : "") + '</td><td class="n">' + money(v) + '</td><td class="n hide-sm">' + money(n12 ? v / n12 : 0) + "</td></tr>"; }
       var col = function (v) { return '<b style="color:' + (v >= 0 ? "var(--ok)" : "var(--danger)") + '">'; };
-      $("histProfit").innerHTML = '<div class="row"><label for="histFc" style="margin:0">Costo de insumos (% de la venta neta)</label><input id="histFc" type="number" step="0.5" min="0" max="100" inputmode="decimal" style="width:90px" value="' + nf2.format(fc) + '"' + (F.auto ? " disabled" : "") + '></div>' +
+      $("histProfit").innerHTML = '<div class="row"><label for="histFc" style="margin:0">Costo de insumos (% de la venta neta)</label><input id="histFc" type="number" step="0.5" min="0" max="100" inputmode="decimal" style="width:90px" value="' + num(fc).toFixed(2) + '"' + (F.auto ? " disabled" : "") + '></div>' +
         '<p class="muted" style="margin:4px 0 8px">' + esc(F.note) + "</p>" +
         '<div class="scroll"><table class="tbl"><thead><tr><th>Últimos ' + n12 + ' meses</th><th class="n">Total</th><th class="n hide-sm">Por mes</th></tr></thead><tbody>' +
         two("Ventas (con IVA)", t12) + two("− IVA", t12 - net12) + two("<b>Ventas netas</b>", net12) +
