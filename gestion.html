@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aziY0Z0OxCULEOSuI45uB6uDz7kCsruyHJeylrM3ksE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-VhYcFFgwnAoaZSXAphJsKhxpCeDOsZ/uJ972viOxPJA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -52,6 +52,17 @@
   .tbl tr.click { cursor:pointer; }
   .tbl tr.click:hover td { background:var(--chip); }
   .tbl tr.off td { opacity:.5; }
+  .nomtasa { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; margin:12px 0 6px; padding:10px 14px; border-radius:12px; background:var(--chip); }
+  .nomtasa b { font-size:17px; }
+  .tbl th.paycol, .tbl td.paycol { width:52px; text-align:center; }
+  .paychk { width:24px; height:24px; accent-color:var(--ok); cursor:pointer; vertical-align:middle; }
+  .tbl tr.paid td { background:color-mix(in srgb, var(--ok) 9%, transparent); }
+  .adjbtn { padding:6px 10px; font-size:14px; text-align:right; line-height:1.25; background:transparent; border-style:dashed; }
+  .adjbtn small { display:block; color:var(--muted); font-size:12px; }
+  .adjsm { margin-top:6px; } .adjsm .adjbtn { text-align:left; }
+  #nomTbl td.n { white-space:normal; } #nomTbl td.n b, .adjbtn { white-space:nowrap; } .adjbtn small { white-space:normal; }
+  @media (max-width:560px) { #nomTbl th.paycol, #nomTbl td.paycol { width:38px; padding-left:2px; padding-right:2px; } }
+  .muted.okc { color:var(--ok); }
   .scroll { overflow-x:auto; }
   /* Servicio: la página se ensancha y en la tabla de bonos el nombre y el monto en Bs quedan siempre a la vista */
   .wrap:has(section[data-panel="servicio"]:not([hidden])) { max-width:1500px; }
@@ -250,9 +261,16 @@
     <!-- Nómina -->
     <section data-panel="nomina" hidden>
       <div class="card">
-        <div class="row between"><h2 style="margin:0">Nómina quincenal</h2><button class="primary" id="addEmp">+ Empleado</button></div>
-        <p class="muted">Costo mensual = 2 quincenas + bonos u otros pagos del mes. Los inactivos no cuentan.</p>
+        <div class="row between"><h2 style="margin:0">Nómina quincenal</h2>
+          <div class="row"><input type="month" id="nomMonth" style="width:auto" aria-label="Mes">
+            <select id="nomHalf" style="width:auto" aria-label="Quincena"><option value="1">1 – 15</option><option value="2">16 – fin de mes</option></select>
+            <button id="addAdj">+ Falta o descuento</button><button class="primary" id="addEmp">+ Empleado</button></div></div>
+        <div class="nomtasa" id="nomTasa" hidden></div>
+        <p class="muted hidden" id="nomSetup">Para anotar faltas, descuentos y pagos, ejecuta <code>supabase/nomina.sql</code> en Supabase → SQL Editor.</p>
+        <p class="muted">A pagar = quincena − faltas y descuentos (también lo que la cuenta del empleado pasa a la quincena), en bolívares a la tasa euro BCV de hoy.
+          Marca la casilla cuando le pagues a alguien: queda el monto, la tasa y la fecha. Toca el nombre para editar sus datos.</p>
         <div class="scroll" id="empList"></div>
+        <p class="muted" id="nomCosto"></p>
       </div>
     </section>
 
@@ -656,7 +674,7 @@
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
       S.attendance = r[11] !== null; S.inventory = r[12] !== null; S.promos = r[13];
-      return Promise.all([loadPeriods(), loadHist()]);
+      return Promise.all([loadPeriods(), loadHist(), loadNomina()]);
     }).then(renderAll).catch(fail);
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
@@ -1081,24 +1099,139 @@
   function deleter(table, id) { return function () { return q(sb.from(table).delete().eq("id", id)); }; }
 
   // ---------------------------------------------------------------- Nómina
+  // Quincena elegida, sus faltas y descuentos, lo que pasan las cuentas de empleados y lo ya pagado (gestion_nomina)
+  function nomPeriod() {
+    var ym = $("nomMonth").value || ymNow(), b = monthBounds(ym), half = $("nomHalf").value;
+    return half === "1" ? { from: ym + "-01", to: ym + "-15" } : { from: ym + "-16", to: b.to };
+  }
+  function loadNomina() { return opt(sb.rpc("gestion_nomina", { p_desde: nomPeriod().from })).then(function (d) { S.nom = d; }); }
+  function reloadNomina() { return loadNomina().then(renderNomina).catch(fail); }
+  var DOW3 = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  function diaCorto(d) { var x = new Date(String(d).slice(0, 10) + "T12:00:00"); return DOW3[x.getDay()] + " " + String(d).slice(8, 10) + "/" + String(d).slice(5, 7); }
+  function quincenaTxt(P) { return "del " + Number(P.from.slice(8)) + " al " + Number(P.to.slice(8)) + " de " + new Date(P.from + "T12:00:00").toLocaleDateString("es-VE", { month: "long" }); }
+  function tasaNom() { return S.nom && S.nom.tasa ? num(S.nom.tasa.eur) : 0; }
+  function bsNom(n) { var t = tasaNom(); return t ? "Bs " + nf2.format(Math.round(n * t * 100) / 100) : ""; }
+  function diasTxt(n) { n = num(n); return nf2.format(n).replace(/,00$/, "") + (n === 1 ? " día" : " días"); }
+  function nomOf(e) {
+    var N = S.nom || {}, adj = (N.ajustes || []).filter(function (a) { return a.employee_id === e.id; }), acc = (N.cuentas || []).filter(function (c) { return c.employee_id === e.id; });
+    var ded = adj.concat(acc).reduce(function (t, a) { return t + num(a.amount); }, 0);
+    var pay = (N.pagos || []).find(function (p) { return p.employee_id === e.id; }) || null;
+    return { adj: adj, acc: acc, pay: pay, ded: Math.round(ded * 100) / 100, net: Math.round((num(e.pay_quincena) - ded) * 100) / 100,
+             faltas: adj.filter(function (a) { return a.kind === "falta"; }).reduce(function (t, a) { return t + num(a.days); }, 0),
+             desc: adj.filter(function (a) { return a.kind === "descuento"; }).length, cuenta: e.active || adj.length || acc.length || !!pay };
+  }
   function renderNomina() {
-    if (!S.employees.length) { $("empList").innerHTML = '<div class="empty">Aún no hay empleados. Pulsa «+ Empleado».</div>'; return; }
-    var html = '<table class="tbl"><thead><tr><th>Empleado</th><th class="hide-sm">Área</th><th class="n">Quincena</th><th class="n hide-sm">Bonos/mes</th><th class="n">Costo/mes</th></tr></thead><tbody>';
-    var groups = S.areas.map(function (a) { return a.id; }).concat([null]);
-    var tq = 0, tm = 0;
+    var N = S.nom, t = N && N.tasa, nx = N && N.proxima;
+    show("nomSetup", N === null);
+    $("nomTasa").hidden = !t;
+    if (t) $("nomTasa").innerHTML = "<span>Tasa euro BCV de hoy <span class=\"muted\">(" + esc(diaCorto(t.fecha)) + ")</span></span><b>Bs " + nf2.format(num(t.eur)) + " por 1 €</b>" +
+      (nx ? '<span class="muted">Desde el ' + esc(diaCorto(nx.fecha)) + ": Bs " + nf2.format(num(nx.eur)) + "</span>" : "");
+    if (!S.employees.length) { $("empList").innerHTML = '<div class="empty">Aún no hay empleados. Pulsa «+ Empleado».</div>'; $("nomCosto").textContent = ""; return; }
+    var html = '<table class="tbl" id="nomTbl"><thead><tr><th class="paycol">Pagado</th><th>Empleado</th><th class="n hide-sm">Quincena</th><th class="n hide-sm">Faltas y descuentos</th><th class="n">A pagar</th><th class="n hide-sm">Costo/mes</th></tr></thead><tbody>';
+    var groups = S.areas.map(function (a) { return a.id; }).concat([null]), G = { q: 0, ded: 0, net: 0, m: 0, n: 0, paid: 0, rest: 0 };
     groups.forEach(function (gid) {
       var list = S.employees.filter(function (e) { return (e.area_id || null) === gid || (gid === null && !S.areas.some(function (a) { return a.id === e.area_id; })); });
       if (!list.length) return;
-      html += '<tr><td colspan="5" style="background:var(--chip);font-weight:800">' + esc(areaName(gid)) + "</td></tr>";
+      html += '<tr><td colspan="6" style="background:var(--chip);font-weight:800">' + esc(areaName(gid)) + "</td></tr>";
       list.forEach(function (e) {
-        if (e.active) tq += num(e.pay_quincena); tm += empMonthly(e);
-        html += '<tr class="click' + (e.active ? "" : " off") + '" data-emp="' + e.id + '"><td><b>' + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? "" : " · inactivo") +
-          '</div></td><td class="hide-sm">' + esc(areaName(e.area_id)) + '</td><td class="n">' + money(e.pay_quincena) + '</td><td class="n hide-sm">' + money(e.monthly_extra) + '</td><td class="n"><b>' + money(empMonthly(e)) + "</b></td></tr>";
+        var R = nomOf(e), net = Math.max(R.net, 0), parts = [];
+        G.m += empMonthly(e);
+        if (R.cuenta) { G.q += num(e.pay_quincena); G.ded += R.ded; G.net += net; G.n++; if (R.pay) G.paid++; else G.rest += net; }
+        if (R.faltas) parts.push(diasTxt(R.faltas) + " de falta");
+        if (R.desc) parts.push(R.desc + (R.desc === 1 ? " descuento" : " descuentos"));
+        if (R.acc.length) parts.push("cuenta");
+        var adjBtn = '<button type="button" class="adjbtn" data-adj="' + e.id + '">' + (R.ded ? "−" + money(R.ded) + "<small>" + esc(parts.join(" · ")) + "</small>" : '<span class="muted">+ Agregar</span>') + "</button>";
+        var payInfo = R.pay ? '<div class="muted okc">Pagado ' + esc(R.pay.at.slice(8, 10) + "/" + R.pay.at.slice(5, 7)) + "</div>" + (R.pay.bs != null ? '<div class="muted okc">Bs ' + nf2.format(num(R.pay.bs)) + "</div>" : "") +
+            (Math.abs(num(R.pay.amount) - net) > 0.009 ? '<span class="pill warn">cambió: ahora ' + money(net) + "</span>" : "")
+          : R.cuenta && t ? '<div class="muted">' + bsNom(net) + "</div>" : "";
+        html += '<tr class="click' + (e.active ? "" : " off") + (R.pay ? " paid" : "") + '" data-emp="' + e.id + '"><td class="paycol">' +
+          (R.cuenta && N ? '<input type="checkbox" class="paychk" data-pay="' + e.id + '"' + (R.pay ? " checked" : "") + ' aria-label="Pagado: ' + esc(e.name) + '">' : "") + "</td>" +
+          "<td><b>" + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? "" : " · inactivo") + "</div>" + (N && R.cuenta ? '<div class="show-sm adjsm">' + adjBtn + "</div>" : "") + "</td>" +
+          '<td class="n hide-sm">' + money(e.pay_quincena) + '</td><td class="n hide-sm adjcol">' + (N && R.cuenta ? adjBtn : "—") + '</td><td class="n"><b' + (R.net < 0 ? ' style="color:var(--danger)"' : "") + ">" + (R.cuenta ? money(net) : "—") + "</b>" +
+          (R.net < 0 ? '<div class="muted">descuentos de más: ' + money(-R.net) + "</div>" : "") + payInfo + '</td><td class="n hide-sm">' + money(empMonthly(e)) + "</td></tr>";
       });
     });
-    html += '<tr class="total"><td>Total activos</td><td class="hide-sm"></td><td class="n">' + money(tq) + '</td><td class="hide-sm"></td><td class="n">' + money(tm) + "</td></tr></tbody></table>";
+    html += '<tr class="total"><td></td><td>Total<div class="muted">' + G.paid + " de " + G.n + ' pagados</div></td><td class="n hide-sm">' + money(G.q) + '</td><td class="n hide-sm">' + (G.ded ? "−" + money(G.ded) : "—") +
+      '</td><td class="n">' + money(G.net) + (t ? '<div class="muted">' + bsNom(G.net) + "</div>" : "") + '</td><td class="n hide-sm">' + money(G.m) + "</td></tr></tbody></table>";
     $("empList").innerHTML = html;
+    $("nomCosto").innerHTML = (N ? (G.n && G.paid === G.n ? "<b>Quincena pagada completa.</b> " : "<b>Falta por pagar: " + money(G.rest) + (t ? " · " + bsNom(G.rest) : "") + "</b> · ") : "") +
+      "Costo mensual de la nómina (2 quincenas + bonos de los activos): " + money(G.m) + ".";
   }
+  // Pagado: guarda lo que se pagó, la tasa de hoy y los Bs; desmarcar lo borra
+  function markPaid(id, on, el) {
+    var e = S.employees.find(function (x) { return x.id === id; }), R = nomOf(e), P = nomPeriod(), net = Math.max(R.net, 0), rate = tasaNom();
+    if (!on) {
+      if (!confirm("¿Desmarcar el pago de " + e.name + "?")) { el.checked = true; return; }
+      q(sb.from("payroll_payments").delete().eq("employee_id", id).eq("period", P.from)).then(function () { toast("Pago desmarcado"); return reloadNomina(); })
+        .catch(function (er) { el.checked = true; fail(er); });
+      return;
+    }
+    q(sb.from("payroll_payments").insert({ employee_id: id, period: P.from, amount_ref: net, rate: rate || null, amount_bs: rate ? Math.round(net * rate * 100) / 100 : null }))
+      .then(function () { toast("Pagado: " + e.name + " · " + money(net) + (rate ? " · " + bsNom(net) : "")); return reloadNomina(); })
+      .catch(function (er) { el.checked = false; fail(er); });
+  }
+  // Faltas y descuentos de una persona en la quincena (se pueden borrar los mal anotados)
+  var ADJ_EMP = null;
+  function adjDialog(id) {
+    var e = S.employees.find(function (x) { return x.id === id; }), R = nomOf(e), P = nomPeriod(), dia = num(e.pay_quincena) / 15;
+    ADJ_EMP = id;
+    $("dlgTitle").textContent = e.name + " · faltas y descuentos";
+    var rows = R.adj.map(function (a) {
+      return "<tr><td>" + (a.kind === "falta" ? '<span class="pill bad">Falta</span>' : '<span class="pill warn">Descuento</span>') + (a.source === "nex" ? ' <span class="pill">Nex</span>' : "") + "</td><td>" +
+        esc((a.kind === "falta" ? diasTxt(a.days) + (a.reason ? " · " : "") : "") + (a.reason || "")) + '<div class="muted">' + esc((a.por || "") + " · " + new Date(a.at).toLocaleDateString("es-VE")) + "</div></td>" +
+        '<td class="n">−' + money(a.amount) + '</td><td class="n"><button type="button" class="small danger" data-deladj="' + a.id + '">Borrar</button></td></tr>';
+    }).concat(R.acc.map(function (c) {
+      return '<tr><td><span class="pill">Cuenta</span></td><td>' + esc(c.note || "Cuenta del empleado") + '<div class="muted">Se cambia en Dinero › Servicio</div></td><td class="n">−' + money(c.amount) + "</td><td></td></tr>";
+    }));
+    $("dlgFields").innerHTML = '<p class="muted">Quincena ' + esc(quincenaTxt(P)) + " · pago " + money(e.pay_quincena) + (dia ? " · 1 día = " + money(dia) : "") + "</p>" +
+      (rows.length ? '<div class="scroll"><table class="tbl"><tbody>' + rows.join("") + "</tbody></table></div>" : '<p class="muted">Sin faltas ni descuentos en esta quincena.</p>') +
+      '<p style="font-size:17px;margin:12px 0"><b>A pagar: ' + money(Math.max(R.net, 0)) + "</b>" + (tasaNom() ? ' <span class="muted">· ' + bsNom(Math.max(R.net, 0)) + "</span>" : "") +
+      (R.pay ? ' <span class="pill ok">pagado</span>' : "") + '</p><div class="row"><button type="button" data-addadj="falta">+ Falta</button><button type="button" data-addadj="descuento">+ Descuento</button></div>';
+    form = { fields: [], onSave: function () { return Promise.resolve(); } };
+    show("dlgDelete", false); $("dlgFields").oninput = null; $("dlgErr").textContent = "";
+    $("dlgForm").querySelector('button[type="submit"]').hidden = true; $("dlgCancel").textContent = "Cerrar";
+    if (!$("dlg").open) $("dlg").showModal();
+  }
+  $("dlgFields").addEventListener("click", function (ev) {
+    var del = ev.target.closest("[data-deladj]"), add = ev.target.closest("[data-addadj]");
+    if (del) {
+      if (!confirm("¿Borrar esta falta o descuento?")) return;
+      q(sb.from("payroll_adjustments").delete().eq("id", Number(del.dataset.deladj))).then(function () { toast("Borrado"); return loadNomina(); })
+        .then(function () { renderNomina(); adjDialog(ADJ_EMP); }).catch(fail);
+    } else if (add) adjForm(ADJ_EMP, add.dataset.addadj);
+  });
+  function adjForm(empId, kind) {
+    var P = nomPeriod(), list = S.employees.filter(function (e) { return e.active || e.id === empId; }), touched = false;
+    if (!list.length) { toast("Primero añade empleados"); return; }
+    openForm({ title: (kind === "falta" ? "Falta" : kind === "descuento" ? "Descuento" : "Falta o descuento") + " · quincena " + quincenaTxt(P),
+      values: { employee_id: empId || list[0].id, kind: kind || "falta", days: 1, amount: "", reason: "" },
+      fields: [
+        { k: "employee_id", label: "Empleado", type: "select", options: list.map(function (e) { return [e.id, e.name]; }) },
+        { k: "kind", label: "Tipo", type: "select", options: [["falta", "Falta"], ["descuento", "Descuento (adelanto, daño u otro)"]] },
+        { k: "days", label: "Días de falta", step: "0.5" },
+        { k: "amount", label: "Monto a descontar (" + PFX + ")", step: "0.01" },
+        { k: "reason", label: "Motivo", ph: "Ej.: no vino el sábado · adelanto del 10/11", full: true }
+      ],
+      extra: '<p class="muted" id="adjHint"></p>',
+      onInput: function (ev) {
+        if (ev && ev.target && ev.target.id === "f_amount") touched = true;
+        var e = S.employees.find(function (x) { return x.id === Number($("f_employee_id").value); }), falta = $("f_kind").value === "falta", dia = e ? num(e.pay_quincena) / 15 : 0;
+        $("f_days").parentNode.hidden = !falta;
+        if (falta && !touched) $("f_amount").value = (Math.round(num($("f_days").value) * dia * 100) / 100).toFixed(2);
+        $("adjHint").textContent = falta ? "Cada día de falta descuenta la quincena ÷ 15" + (e ? " (" + money(dia) + " para " + e.name + ")" : "") + ". Puedes cambiar el monto." : "Se resta de lo que cobra en esta quincena.";
+      },
+      validate: function (v) {
+        if (!v.employee_id) return "Elige el empleado.";
+        if (v.kind === "falta" && !(v.days > 0)) return "Indica cuántos días faltó.";
+        if (!(v.amount > 0)) return "El monto debe ser mayor que 0.";
+        if (v.reason.length > 120) return "El motivo es muy largo (máximo 120 letras).";
+      },
+      onSave: function (v) {
+        return q(sb.from("payroll_adjustments").insert({ employee_id: Number(v.employee_id), period: P.from, kind: v.kind, days: v.kind === "falta" ? v.days : 0,
+          amount_ref: Math.round(v.amount * 100) / 100, reason: v.reason }));
+      } });
+  }
+  $("addAdj").addEventListener("click", function () { adjForm(null, null); });
   function empForm(e) {
     var pin = "";
     openForm({ title: e ? "Editar empleado" : "Nuevo empleado", values: e || { active: true, area_id: S.areas[0] && S.areas[0].id },
@@ -1126,7 +1259,12 @@
       }, onDelete: e && deleter("employees", e.id) });
   }
   $("addEmp").addEventListener("click", function () { empForm(null); });
-  $("empList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-emp]"); if (tr) empForm(S.employees.find(function (x) { return x.id === Number(tr.dataset.emp); })); });
+  $("empList").addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-adj]"); if (b) { adjDialog(Number(b.dataset.adj)); return; }
+    if (ev.target.closest(".paycol")) return;
+    var tr = ev.target.closest("[data-emp]"); if (tr) empForm(S.employees.find(function (x) { return x.id === Number(tr.dataset.emp); }));
+  });
+  $("empList").addEventListener("change", function (ev) { var c = ev.target.closest(".paychk"); if (c) markPaid(Number(c.dataset.pay), c.checked, c); });
 
   // ---------------------------------------------------------------- Gastos
   function expTable(list, withDate) {
@@ -1407,7 +1545,9 @@
     $("dlg").showModal();
   });
   $("attMonth").value = $("salesMonth").value = ymNow();
-  $("attHalf").value = new Date().getDate() <= 15 ? "1" : "2";
+  $("attHalf").value = $("nomHalf").value = new Date().getDate() <= 15 ? "1" : "2";
+  $("nomMonth").value = ymNow();
+  ["nomMonth", "nomHalf"].forEach(function (id) { $(id).addEventListener("change", reloadNomina); });
   $("invMonth").value = ymNow();
   ["attMonth", "attHalf", "salesMonth", "invMonth"].forEach(function (id) { $(id).addEventListener("change", reloadPeriods); });
   $("month").removeEventListener("change", renderResumen); $("month").addEventListener("change", reloadPeriods);

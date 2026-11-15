@@ -77,6 +77,40 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.evaluate(() => { const c = window.__G.calls.filter((x) => x.storage).pop(); return c.storage === "facturas" && c.path === "2026-11/0123456789abcdef0123456789abcdef.jpg" && c.secs === 300; }) &&
        /^data:image/.test(await page.getAttribute("#facImg", "src")), "«Ver foto» abre la factura con un enlace privado que vence en 5 minutos");
     await page.click("#facClose");
+    // Nómina: tasa euro del día, faltas y descuentos de la quincena, a pagar en Bs y la casilla de pagado
+    await page.click('#secs [data-sec="personal"]'); await page.click('#tabs [data-tab="nomina"]'); await page.waitForTimeout(300);
+    const tasa = await page.textContent("#nomTasa");
+    ok(/Tasa euro BCV de hoy/.test(tasa) && /Bs 1\.009,34 por 1 €/.test(tasa) && /Desde el .*Bs 1\.010,56/.test(tasa), "Nómina muestra la tasa euro BCV de hoy (y la de mañana si ya salió): " + tasa.replace(/\s+/g, " "));
+    const fila = (n) => page.locator("#empList tr", { hasText: n }).first();
+    ok(/Ref 173,00/.test(await fila("Luis Gómez").textContent()) && /Bs 174\.616,04/.test(await fila("Luis Gómez").textContent()) && /cuenta/.test(await fila("Luis Gómez").textContent()),
+      "a pagar = quincena − lo que su cuenta pasa a la quincena, también en Bs a la tasa de hoy");
+    await page.click("#addAdj"); await page.waitForSelector("#dlg[open]");
+    await page.selectOption("#f_employee_id", "11"); await page.selectOption("#f_kind", "falta"); await page.fill("#f_days", "1"); await page.dispatchEvent("#f_days", "input");
+    ok((await page.inputValue("#f_amount")) === "10.00" && /quincena ÷ 15/.test(await page.textContent("#adjHint")), "una falta propone quincena ÷ 15 por día (Ref 10 de Ref 150)");
+    await page.fill("#f_days", "2"); await page.dispatchEvent("#f_days", "input"); await page.fill("#f_reason", "No vino viernes y sábado");
+    await page.click('#dlgForm button[type="submit"]'); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => { const a = window.__G.tables.payroll_adjustments[0]; return !!a && a.employee_id === 11 && a.kind === "falta" && a.days === 2 && a.amount_ref === 20 && /^\d{4}-\d{2}-(01|16)$/.test(a.period); }),
+      "anota la falta de 2 días (Ref 20) en la quincena");
+    ok(/−Ref 20,00/.test(await fila("Ana Pérez").textContent()) && /2 días de falta/.test(await fila("Ana Pérez").textContent()) && /Ref 130,00/.test(await fila("Ana Pérez").textContent()),
+      "la fila muestra la falta y lo que queda a pagar (Ref 130)");
+    await fila("Ana Pérez").locator(".adjcol [data-adj]").click(); await page.waitForSelector("#dlg[open]");
+    ok(/No vino viernes y sábado/.test(await page.textContent("#dlgFields")) && /1 día = Ref 10,00/.test(await page.textContent("#dlgFields")), "tocar los descuentos muestra el detalle de la quincena");
+    await page.click('#dlgFields [data-addadj="descuento"]'); await page.waitForTimeout(150);
+    ok((await page.inputValue("#f_employee_id")) === "11" && (await page.inputValue("#f_kind")) === "descuento" && !(await page.isVisible("#f_days")), "«+ Descuento» abre el formulario de esa persona, sin días");
+    await page.fill("#f_amount", "15.5"); await page.fill("#f_reason", "Adelanto"); await page.click('#dlgForm button[type="submit"]'); await page.waitForTimeout(400);
+    ok(/Ref 114,50/.test(await fila("Ana Pérez").textContent()) && /1 descuento/.test(await fila("Ana Pérez").textContent()), "con el adelanto queda Ref 114,50 a pagar");
+    await fila("Ana Pérez").locator(".paychk").check(); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => { const p = window.__G.tables.payroll_payments[0]; return !!p && p.employee_id === 11 && p.amount_ref === 114.5 && p.rate === 1009.3413 && p.amount_bs === 115569.58; }) &&
+       /Pagado \d\d\/\d\d/.test(await fila("Ana Pérez").textContent()) && /Bs 115\.569,58/.test(await fila("Ana Pérez").textContent()),
+      "la casilla marca el pago con el monto, la tasa del día y los Bs");
+    ok(/Falta por pagar: Ref 173,00/.test(await page.textContent("#nomCosto")) && /1 de 2 pagados/.test(await fila("Total").textContent()), "dice cuánto falta por pagar y cuántos van pagados (los inactivos no cuentan)");
+    await fila("Ana Pérez").locator(".paychk").uncheck(); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.tables.payroll_payments.length === 0) && !(await fila("Ana Pérez").locator(".paychk").isChecked()), "desmarcar la casilla (con confirmación) borra el pago");
+    await fila("Ana Pérez").locator(".adjcol [data-adj]").click(); await page.waitForSelector("#dlg[open]");
+    await page.locator("#dlgFields tr", { hasText: "Adelanto" }).locator("[data-deladj]").click(); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.tables.payroll_adjustments.length === 1) && !/Adelanto/.test(await page.textContent("#dlgFields")) && /Ref 130,00/.test(await fila("Ana Pérez").textContent()),
+      "se puede borrar un descuento mal anotado y la cuenta vuelve a Ref 130");
+    await page.click("#dlgCancel");
     await page.click('#secs [data-sec="ajustes"]');
     ok(await page.isVisible('#tabs [data-tab="importar"]') && !(await page.isVisible('#tabs [data-tab="recetas"]')), "cada sección muestra solo sus pestañas");
     await page.click('#tabs [data-tab="importar"]');
