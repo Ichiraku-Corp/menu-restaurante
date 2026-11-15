@@ -1,6 +1,12 @@
 // Corte de internet en la caja: los pedidos siguen por la laptop (puente simulado) y salen en cocina.
 // Uso: node pruebas-navegador/recorrido-sinred.js   (necesita Playwright y Chromium)
 "use strict";
+// Espera sondeando con page.evaluate: page.waitForFunction necesita 'unsafe-eval' para sondear y la política
+// de seguridad de la página no lo permite (en GitHub, con Playwright 1.47, fallaba).
+async function esperar(pg, fn, arg, ms) {
+  const fin = Date.now() + (ms || 5000);
+  while (!(await pg.evaluate(fn, arg))) { if (Date.now() > fin) throw new Error("tiempo agotado esperando: " + String(fn).slice(0, 90)); await pg.waitForTimeout(100); }
+}
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
@@ -73,7 +79,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
 
     // Vuelve el internet
     await S(() => { window.__OFFLINE = false; });
-    await page.waitForFunction(() => document.getElementById("srBar").classList.contains("hidden"), null, { timeout: 12000 });
+    await esperar(page, () => document.getElementById("srBar").classList.contains("hidden"), null, 12000);
     ok(true, "al volver el internet desaparece el aviso");
   } catch (err) {
     fallos++; console.log("FALLÓ: " + err.message.split("\n")[0]);

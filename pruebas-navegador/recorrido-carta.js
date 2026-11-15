@@ -1,6 +1,12 @@
 // Carta pública: logo, tasa del día y precios también en bolívares (y que sin tasa todo siga igual).
 // Uso: node pruebas-navegador/recorrido-carta.js
 "use strict";
+// Espera sondeando con page.evaluate: page.waitForFunction necesita 'unsafe-eval' para sondear y la política
+// de seguridad de la página no lo permite (en GitHub, con Playwright 1.47, fallaba).
+async function esperar(pg, fn, arg, ms) {
+  const fin = Date.now() + (ms || 5000);
+  while (!(await pg.evaluate(fn, arg))) { if (Date.now() > fin) throw new Error("tiempo agotado esperando: " + String(fn).slice(0, 90)); await pg.waitForTimeout(100); }
+}
 const fs = require("fs"), path = require("path"), http = require("http"), { chromium } = require("playwright");
 const ROOT = path.join(__dirname, ".."); let fallos = 0;
 function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log("FALLÓ: " + m); } }
@@ -47,22 +53,22 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
 
   // Al volver otro día con la misma carta, se actualiza la tasa (no se queda la guardada en el teléfono)
   tasa = { rate: 120, date: hoy };
-  await p.reload(); await p.waitForFunction(() => /120,00/.test(document.getElementById("tasa").textContent), null, { timeout: 5000 }).catch(() => {});
+  await p.reload(); await esperar(p, () => /120,00/.test(document.getElementById("tasa").textContent)).catch(() => {});
   ok((await p.textContent("#tasa")).includes("Bs 120,00") && /Bs 600/.test(await gyo.textContent()), "si cambia la tasa, la carta guardada en el teléfono se actualiza");
 
   // Fin de semana: la tasa del viernes sigue valiendo («vigente»). Si es más vieja, dice de qué día es.
   const antes = (n) => new Date(Date.parse(hoy) - n * 864e5).toISOString().slice(0, 10);
   tasa = { rate: 120, date: antes(2) };
-  await p.reload(); await p.waitForFunction(() => /vigente/.test(document.getElementById("tasa").textContent), null, { timeout: 5000 }).catch(() => {});
+  await p.reload(); await esperar(p, () => /vigente/.test(document.getElementById("tasa").textContent)).catch(() => {});
   ok((await p.textContent("#tasa")) === "Tasa euro BCV vigente: Bs 120,00 por 1 €", "en fin de semana dice «vigente» con la tasa del viernes");
   tasa = { rate: 120, date: antes(6) };
   const dm = antes(6).slice(8, 10) + "/" + antes(6).slice(5, 7);
-  await p.reload(); await p.waitForFunction((x) => document.getElementById("tasa").textContent.includes("del " + x), dm, { timeout: 5000 }).catch(() => {});
+  await p.reload(); await esperar(p, (x) => document.getElementById("tasa").textContent.includes("del " + x), dm).catch(() => {});
   ok((await p.textContent("#tasa")).startsWith("Tasa euro BCV del " + dm), "si la tasa es vieja, dice de qué día es (" + (await p.textContent("#tasa")) + ")");
 
   // Sin tasa (servidor sin la función o sin internet para eso): la carta sale igual, solo en Ref
   tasa = null;
-  await p.reload(); await p.waitForFunction(() => document.getElementById("tasa").hidden, null, { timeout: 5000 }).catch(() => {});
+  await p.reload(); await esperar(p, () => document.getElementById("tasa").hidden).catch(() => {});
   ok(await p.isHidden("#tasa") && !(await p.locator(".pbs").count()), "sin tasa no muestra bolívares");
   ok(/Ref/.test(await gyo.textContent()), "y la carta se ve igual en Ref");
   ok(err.length === 0, "sin errores de JavaScript" + (err.length ? ": " + err.join(" | ") : ""));
