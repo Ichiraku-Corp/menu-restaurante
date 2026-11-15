@@ -714,6 +714,21 @@ function srValidPago(e) {
 }
 const srMoney = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function srLine(l, r) { l = String(l); r = String(r); const room = WIDTH - r.length - 1; return (l.length > room ? l.slice(0, room) : l.padEnd(room)) + " " + r; }
+// Vuelto con el mismo formato que el ticket del sistema (Ref 9.00 · Bs 472.50 · Bs 472.50 p. movil · $ 9.00 + Bs 26.25)
+function srVuelto(c) {
+  const ok = (k) => Number(c[k]) >= 0 && Number(c[k]) < 1e9;
+  if (c.currency === "MIX" && ok("usd") && ok("bs")) return "$ " + srMoney(c.usd) + " + Bs " + srMoney(c.bs);
+  if ((c.currency === "BS" || c.currency === "MOVIL") && ok("amount")) return "Bs " + srMoney(c.amount) + (c.currency === "MOVIL" ? " p. movil" : "");
+  if ((c.currency === "REF" || c.currency === "PROPINA") && ok("amount")) return "Ref " + srMoney(c.amount);
+  return String(c.text || "").slice(0, 40);
+}
+// Lo que se guarda del vuelto: el texto de la tablet y los montos (para imprimirlo como el ticket del sistema)
+function srCambio(c) {
+  const out = { text: srTxt(c.text, 40) };
+  if (["REF", "BS", "MOVIL", "MIX", "PROPINA"].includes(c.currency)) out.currency = c.currency;
+  for (const k of ["amount", "usd", "bs"]) if (Number(c[k]) >= 0 && Number(c[k]) < 1e9) out[k] = Math.round(Number(c[k]) * 100) / 100;
+  return out;
+}
 // Recibo del cobro hecho sin internet (como el del sistema, marcado «SIN INTERNET»)
 function srRecibo(e) {
   const out = ["^RECIBO SIN INTERNET", "~No es factura fiscal", e.order.label + "   " + srHora(e.at), "="];
@@ -729,7 +744,8 @@ function srRecibo(e) {
     const m = SR_METODOS[l.method];
     out.push(srLine((l.tip ? "Propina " : "") + m[0] + (l.reference ? " " + l.reference : ""), (m[1] === "BS" ? "Bs " : "Ref ") + srMoney(l.amount)));
   }
-  if (e.change && e.change.text) out.push(srLine(e.change_currency === "PROPINA" ? "Propina (vuelto)" : "Vuelto", e.change.text));
+  const vuelto = e.change ? srVuelto(e.change) : "";
+  if (vuelto) out.push(srLine(e.change_currency === "PROPINA" ? "Propina (vuelto)" : "Vuelto", vuelto));
   out.push("", "Cobro: " + (e.emp_name || "") + "   (se sube al volver el internet)", "", "~Gracias por tu visita!");
   return out.join("\n");
 }
@@ -783,7 +799,7 @@ async function srApi(req, res, rel) {
       type: "pago", uuid: b.uuid, at: new Date().toISOString(), device: srTxt(b.device, 30), emp: b.emp, emp_name: srTxt(b.emp_name, 40), pin: String(b.pin),
       order: { id: Number.isInteger(b.order.id) ? b.order.id : null, tmp: b.order.tmp ? String(b.order.tmp) : "", label: srTxt(b.order.label, 40) || "Sin internet" },
       lines: b.lines.map((l) => ({ method: l.method, amount: Math.round(Number(l.amount) * 100) / 100, reference: srTxt(l.reference, 40), tip: !!l.tip })),
-      change_currency: b.change_currency || "REF", change: b.change && typeof b.change === "object" ? { text: srTxt(b.change.text, 40) } : null,
+      change_currency: b.change_currency || "REF", change: b.change && typeof b.change === "object" ? srCambio(b.change) : null,
       total: Math.round(Number(b.total) * 100) / 100, service: Math.round(Number(b.service || 0) * 100) / 100, rate: Number(b.rate) > 0 ? Number(b.rate) : null,
       prev: b.prev && typeof b.prev === "object" ? { total: Number(b.prev.total) || 0, paid: Number(b.prev.paid) || 0 } : null,
       items: (Array.isArray(b.items) ? b.items : []).slice(0, 80).map((i) => ({ name: srTxt(i.name, 60), variant: srTxt(i.variant, 30), qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0 })),

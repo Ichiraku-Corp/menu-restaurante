@@ -59,8 +59,8 @@ update public.pos_sessions set status = 'cerrada', closed_at = now() where statu
 insert into public.pos_sessions (opened_by, status) values (:caja, 'abierta') returning id as ses \gset
 update public.pos_sessions set status = 'cerrada', closed_at = now(), closed_by = :caja, notes = '',
        expected = '{"efectivo_usd": 100, "zelle": 20}'::jsonb, counted = '{"efectivo_usd": 75, "zelle": 20, "_inv": []}'::jsonb where id = :ses;
-select prueba.ok(exists (select 1 from public.pos_reports where data ->> 'clave' = 'cierre-' || :ses and data ->> 'titulo' = 'El cierre de caja no cuadra: faltan Ref 25.00'
-                         and data -> 'lineas' ->> 1 = 'Diferencia por método: Efectivo $: falta $ 25.00' and data -> 'lineas' ->> 2 = 'Nota del cierre: (sin nota)'),
+select prueba.ok(exists (select 1 from public.pos_reports where data ->> 'clave' = 'cierre-' || :ses and data ->> 'titulo' = 'El cierre de caja no cuadra: faltan Ref 25,00'
+                         and data -> 'lineas' ->> 1 = 'Diferencia por método: Efectivo $: falta $ 25,00' and data -> 'lineas' ->> 2 = 'Nota del cierre: (sin nota)'),
   'un cierre que no cuadra por más de Ref 10 avisa con la diferencia por método y la nota');
 insert into public.pos_sessions (opened_by, status) values (:caja, 'abierta') returning id as ses2 \gset
 update public.pos_sessions set status = 'cerrada', closed_at = now(), closed_by = :caja,

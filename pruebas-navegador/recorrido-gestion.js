@@ -72,7 +72,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
       "guarda a quién le llegan las alertas y el límite del cierre");
     // Facturas de la caja (Dinero › Gastos)
     await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
-    ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidad/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");
+    ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidades/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");
     await page.click('#facList [data-fac="1"]'); await page.waitForSelector("#facDlg[open]", { timeout: 3000 });
     ok(await page.evaluate(() => { const c = window.__G.calls.filter((x) => x.storage).pop(); return c.storage === "facturas" && c.path === "2026-11/0123456789abcdef0123456789abcdef.jpg" && c.secs === 300; }) &&
        /^data:image/.test(await page.getAttribute("#facImg", "src")), "«Ver foto» abre la factura con un enlace privado que vence en 5 minutos");

@@ -461,6 +461,7 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 #photoDlg .filebtn { position:relative; display:flex; align-items:center; justify-content:center; gap:8px; min-height:52px; border-radius:14px; border:2px dashed var(--line);
   font-weight:800; cursor:pointer; margin-top:6px; }
 #photoDlg .filebtn input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+#photoDlg .filebtn > span { display:inline-flex; align-items:center; gap:8px; }
 #photoPrev { display:block; max-width:100%; max-height:42vh; margin:8px auto; border-radius:12px; border:1px solid var(--line); }
 .photochip { display:inline-flex; align-items:center; gap:6px; }
 /* Cierre ciego: el efectivo se cuenta sin ver lo esperado ni la diferencia */

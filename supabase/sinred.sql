@@ -157,7 +157,7 @@ begin
   values (emp, 'cobro_sin_internet', oid, jsonb_build_object('nota', note, 'equipo', e ->> 'device'));
   if note <> '' and to_regprocedure('public.pos_alerta(text,text,text[])') is not null then
     perform public.pos_alerta('sinred-pago-' || uid, 'Revisa un cobro hecho sin internet',
-      array[coalesce(public.pos_order_label(oid), nullif(e -> 'order' ->> 'label', ''), 'Pedido') || ' · ' || to_char(at at time zone 'America/Caracas', 'DD/MM HH12:MI am'),
+      array[coalesce(public.pos_order_label(oid), nullif(e -> 'order' ->> 'label', ''), 'Pedido') || ' · ' || to_char(at at time zone 'America/Caracas', 'DD/MM HH24:MI'),
             'Qué pasó: ' || note, 'Cobró: ' || coalesce(public.pos_emp_name(emp), nullif(e ->> 'emp_name', ''), '—')]);
   end if;
   return jsonb_build_object('order_id', oid, 'nota', note, 'cobro', r);

@@ -62,9 +62,9 @@ Deno.test("aparta, envía y marca enviado; sin claves no aparta nada", async () 
 
 Deno.test("las alertas llegan con su asunto y sus líneas", async () => {
   const { reportHtml } = await import("../correo/reporte.js");
-  const d = { kind: "alerta", clave: "cierre-9", titulo: "El cierre de caja no cuadra: faltan Ref 25.00", at: "2026-11-15T23:00:00Z",
-              lineas: ["Cerró: Cajera · 15/11 07:00 pm", "Diferencia por método: Efectivo $: falta $ 25.00", "Nota del cierre: <sin nota>"] };
-  assertEquals(subjectOf(d), "⚠ El cierre de caja no cuadra: faltan Ref 25.00");
+  const d = { kind: "alerta", clave: "cierre-9", titulo: "El cierre de caja no cuadra: faltan Ref 25,00", at: "2026-11-15T23:00:00Z",
+              lineas: ["Cerró: Cajera · 15/11 19:00", "Diferencia por método: Efectivo $: falta $ 25,00", "Nota del cierre: <sin nota>"] };
+  assertEquals(subjectOf(d), "⚠ El cierre de caja no cuadra: faltan Ref 25,00");
   const html = reportHtml(d);
-  assert(html.includes("Diferencia por método: Efectivo $: falta $ 25.00") && html.includes("&lt;sin nota&gt;") && !html.includes("<sin nota>"), "líneas escapadas");
+  assert(html.includes("Diferencia por método: Efectivo $: falta $ 25,00") && html.includes("&lt;sin nota&gt;") && !html.includes("<sin nota>"), "líneas escapadas");
 });

@@ -225,7 +225,7 @@ var SRH = {
     var body = { uuid: "sp" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), device: devName(), emp: U.id, emp_name: U.name, pin: U.pin,
                  order: Object.assign({ label: d.label.replace(/ \(sin internet\)$/, "") }, key),
                  lines: lines.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference || "", tip: !!p.tip }; }),
-                 change_currency: ch ? cc : "", change: ch ? { text: chgTxt(ch) } : null, total: due, service: num(d.totals.service), rate: rate || null, prev: d.prev,
+                 change_currency: ch ? cc : "", change: ch ? Object.assign({ text: chgTxt(ch) }, ch) : null, total: due, service: num(d.totals.service), rate: rate || null, prev: d.prev,
                  items: d.items.filter(function (i) { return !i.synthetic && i.status !== "anulado"; }).map(function (i) { return { name: i.name, variant: i.variant || "", qty: num(i.qty), unit_price: num(i.unit_price) }; }) };
     return srBridge("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(body) }).then(function (r) {
       SR.paid[srKey(key)] = true; SR.mine.push({ type: "pago", uuid: body.uuid, order: key, lines: body.lines, total: due }); delete SR.pend[id]; if (id < 0) delete SR.tmp[id]; srSaveOrders();

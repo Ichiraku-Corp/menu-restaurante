@@ -43,7 +43,7 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok(P.srPending().length === 1, "queda pendiente hasta que vuelva el internet");
     // Parte 2: cobro sin internet
     const pago = { uuid: "srpago000001", device: "Caja", emp: 2, emp_name: "Cajera", pin: "2222", order: { tmp: "sr-123456", label: "Feria 4" },
-      lines: [{ method: "efectivo_usd", amount: 20 }], change_currency: "REF", change: { text: "$ 9.00" }, total: 11, service: 1, rate: 100,
+      lines: [{ method: "efectivo_usd", amount: 20 }], change_currency: "REF", change: { currency: "REF", amount: 9, text: "$ 9,00" }, total: 11, service: 1, rate: 100,
       items: [{ name: "Gyozas", qty: 2, unit_price: 5 }] };
     ok((await call("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(Object.assign({}, pago, { lines: [] })) })).status === 400, "rechaza un cobro sin pagos");
     ok((await call("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(Object.assign({}, pago, { lines: [{ method: "cuenta", amount: 5 }] })) })).status === 400, "sin internet no se carga a cuenta de empleado");
@@ -51,8 +51,11 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok(c1.status === 200 && c1.body.impreso, "recibe el cobro y lo imprime");
     await new Promise((r) => setTimeout(r, 300));
     const rec = impreso.find((x) => x.includes("RECIBO SIN INTERNET")) || "";
-    ok(/Feria 4/.test(rec) && /2 Gyozas\s+10\.00/.test(rec) && /TOTAL Ref 11\.00/.test(rec) && /Efectivo \$\s+Ref 20\.00/.test(rec) && /Vuelto\s+\$ 9\.00/.test(rec) && /Bs 1,100\.00/.test(rec),
+    ok(/Feria 4/.test(rec) && /2 Gyozas\s+10\.00/.test(rec) && /TOTAL Ref 11\.00/.test(rec) && /Efectivo \$\s+Ref 20\.00/.test(rec) && /Vuelto\s+Ref 9\.00/.test(rec) && /Bs 1,100\.00/.test(rec),
       "el recibo lleva mesa, platos, total (y en Bs), cómo pagó y el vuelto");
+    const rx = (c) => P.srRecibo(Object.assign({}, pago, { at: new Date().toISOString(), change_currency: c.currency, change: c }));
+    ok(/Vuelto\s+\$ 9\.00 \+ Bs 50\.00/.test(rx({ currency: "MIX", amount: 9.5, usd: 9, bs: 50 })) && /Vuelto\s+Bs 950\.00 p\. movil/.test(rx({ currency: "MOVIL", amount: 950 })) &&
+       /Propina \(vuelto\)\s+Ref 9\.00/.test(rx({ currency: "PROPINA", amount: 9 })), "el vuelto sale como en el ticket del sistema (mixto, pago móvil, propina)");
     const c2 = await call("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(Object.assign({}, pago, { uuid: "srpago000002" })) });
     ok(c2.status === 409, "la misma cuenta no se cobra dos veces sin internet");
     ok((await call("/api/sinred/cobrar", { method: "POST", body: JSON.stringify(pago) })).body.repetido, "si la caja reintenta el mismo cobro, no se repite");

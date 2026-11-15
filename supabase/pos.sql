@@ -602,7 +602,7 @@ begin
     insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, promo, list_price)
     values (p_order, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty,
             case when pid is null then price else round(price * (1 - ppct / 100), 2) end, p_emp,
-            case when pid is null then '' else pname || ' -' || trim(to_char(ppct, 'FM990.##')) || ' %' end, price);
+            case when pid is null then '' else pname || ' -' || replace(trim_scale(ppct)::text, '.', ',') || ' %' end, price);
     n := n + 1;
   end loop;
   return n;
@@ -618,7 +618,7 @@ begin
   if n = 0 then return 0; end if;
   select day_number into num from public.pos_orders where id = p_order;
   added := exists (select 1 from public.pos_items x where x.order_id = p_order and x.status in ('enviado', 'anulado'));
-  select string_agg('^' || trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name ||
+  select string_agg('^' || trim_scale(i.qty)::text || ' ' || i.name ||
                     case when i.variant <> '' then ' ' || i.variant else '' end ||
                     case when i.option <> '' then E'\n  ' || i.option else '' end ||
                     case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id)
@@ -654,7 +654,7 @@ begin
   update public.pos_items set status = 'anulado', void_reason = trim(p_reason), voided_by = p_emp, voided_at = now() where id = p_item;
   perform public.inv_consume_item(p_item, 1);  -- devuelve lo de afuera
   perform public.pos_print('cocina', '^ANULAR - ' || public.pos_order_label(it.order_id) || E'\n' || public.pos_now_txt() || E'\n=\n^' ||
-    trim(to_char(it.qty, 'FM990.##')) || ' ' || it.name || case when it.variant <> '' then ' ' || it.variant else '' end ||
+    trim_scale(it.qty)::text || ' ' || it.name || case when it.variant <> '' then ' ' || it.variant else '' end ||
     E'\nMotivo: ' || trim(p_reason) || E'\n=');
   insert into public.pos_log (employee_id, action, order_id, detail)
   values (p_emp, 'anular_plato', it.order_id, jsonb_build_object('plato', it.name, 'variante', it.variant, 'cantidad', it.qty,
@@ -722,7 +722,7 @@ language sql stable security definer set search_path = public as $$
        r as (select coalesce(o.rate, public.pos_rate()) as rate from o)
   select E'~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
     case when coalesce((o.split ->> 'n')::int, 0) < 2 then
-    coalesce((select string_agg(public.pos_line(trim(to_char(g.q, 'FM990.##')) || ' ' || g.name ||
+    coalesce((select string_agg(public.pos_line(trim_scale(g.q)::text || ' ' || g.name ||
                 case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)) ||
                 case when g.promo <> '' then E'\n  ' || g.promo else '' end, E'\n' order by g.first)
               from (select i.name, i.variant, i.promo, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
@@ -737,7 +737,7 @@ language sql stable security definer set search_path = public as $$
                  from (select u.name, u.variant, count(*) q, sum(u.price) amt, min(u.item_id) first
                        from public.pos_split_units(p_order) u where u.person = sp.person group by u.name, u.variant) g), '') || E'\n' ||
        case when sp.discount > 0 then public.pos_line('  Descuento', '-' || public.pos_money(sp.discount)) || E'\n' else '' end ||
-       case when sp.service > 0 then public.pos_line('  Servicio ' || trim(to_char(o.service_pct, 'FM990.##')) || '%', public.pos_money(sp.service)) || E'\n' else '' end ||
+       case when sp.service > 0 then public.pos_line('  Servicio ' || trim_scale(o.service_pct)::text || '%', public.pos_money(sp.service)) || E'\n' else '' end ||
        case when sp.delivery > 0 then public.pos_line('  Delivery', public.pos_money(sp.delivery)) || E'\n' else '' end ||
        '~^Ref ' || public.pos_money(sp.total) || E'\n' ||
        case when sp.paid >= sp.total - 0.02 and sp.total > 0 then E'~(PAGADO)\n'
@@ -747,7 +747,7 @@ language sql stable security definer set search_path = public as $$
     end ||
     public.pos_line('Subtotal', 'Ref ' || public.pos_money(t.subtotal)) || E'\n' ||
     case when t.discount > 0 then public.pos_line('Descuento', '-Ref ' || public.pos_money(t.discount)) || E'\n' else '' end ||
-    case when t.service > 0 then public.pos_line('Servicio ' || trim(to_char(o.service_pct, 'FM990.##')) || '%', 'Ref ' || public.pos_money(t.service)) || E'\n' else '' end ||
+    case when t.service > 0 then public.pos_line('Servicio ' || trim_scale(o.service_pct)::text || '%', 'Ref ' || public.pos_money(t.service)) || E'\n' else '' end ||
     case when t.delivery > 0 then public.pos_line('Delivery', 'Ref ' || public.pos_money(t.delivery)) || E'\n' else '' end ||
     E'=\n~^TOTAL  Ref ' || public.pos_money(t.total) || E'\n' ||
     case when r.rate is not null then E'~^Bs ' || public.pos_money(round(t.total * r.rate, 2)) || E'\n~(tasa ' || public.pos_money(r.rate) || E')\n=\n' else E'=\n' end ||
@@ -1104,7 +1104,7 @@ language sql stable security definer set search_path = public as $$
                  'waiter', public.pos_emp_name(o.opened_by), 'cashier', public.pos_emp_name(o.closed_by), 'total', o.total, 'service', o.service,
                  'client', (select c.name || coalesce(' (' || c.doc_id || ')', '') from public.customers c where c.id = o.customer_id),
                  'discount', o.discount, 'delivery', o.delivery, 'void_reason', o.void_reason,
-                 'items', (select string_agg(trim(to_char(i.qty, 'FM990.##')) || ' ' || i.name || case when i.variant <> '' then ' ' || i.variant else '' end ||
+                 'items', (select string_agg(trim_scale(i.qty)::text || ' ' || i.name || case when i.variant <> '' then ' ' || i.variant else '' end ||
                             case when i.status = 'anulado' then ' (anulado)' else '' end, ', ' order by i.id) from it i where i.order_id = o.id),
                  'payments', (select string_agg(p.method || ' ' || p.amount || case when p.is_tip then ' (propina)' else '' end ||
                                case when p.tab_employee_id is not null then ' (' || public.pos_emp_name(p.tab_employee_id) || ')' else '' end ||
@@ -1200,7 +1200,7 @@ begin
            then E'\n' || public.pos_line('  Diferencia', public.pos_money((p_counted ->> k)::numeric - (exp ->> k)::numeric)) else '' end || E'\n';
   end loop;
   body := body || '=' || E'\n^ANULACIONES' || E'\n' ||
-    coalesce((select string_agg(public.pos_line(trim(to_char((v ->> 'qty')::numeric, 'FM990.##')) || ' ' || (v ->> 'item'), 'Ref ' || public.pos_money((v ->> 'amount')::numeric)) ||
+    coalesce((select string_agg(public.pos_line(trim_scale((v ->> 'qty')::numeric)::text || ' ' || (v ->> 'item'), 'Ref ' || public.pos_money((v ->> 'amount')::numeric)) ||
               E'\n  ' || (v ->> 'order') || ' - ' || coalesce(v ->> 'by', '') || E'\n  Motivo: ' || (v ->> 'reason'), E'\n')
               from jsonb_array_elements(sm -> 'voids') v), 'Ninguna') ||
     E'\n=\n^DESCUENTOS\n' ||

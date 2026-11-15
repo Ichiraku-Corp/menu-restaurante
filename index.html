@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-KXR9J7zpo3wqmRWYiAvqZCcHr9LCmKfO4ym7ibhAmkQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NPj6j7b+vpOPp2DPBnIlAph14RLjR15KN8e/MzsY4Ug='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -318,7 +318,7 @@
     };
     $("promoBar").hidden = !list.length;
     $("promoBar").innerHTML = list.map(function (p) {
-      return "<div><b>" + esc(p.name) + "</b>: " + pct(p.percent) + " % menos en " + esc(names(p) || "platos seleccionados") + " · hoy de " + hora12(p.start) + " a " + hora12(p.end) +
+      return "<div><b>" + esc(p.name) + "</b>: " + pct(p.percent) + " % menos en " + esc(names(p) || "platos seleccionados") + " · " + (p.start === "00:00" && p.end >= "23:59" ? "todo el día" : "hoy de " + hora12(p.start) + " a " + hora12(p.end)) +
         (t >= p.start ? '<span class="now">¡Ahora!</span>' : "") + "</div>";
     }).join("");
   }

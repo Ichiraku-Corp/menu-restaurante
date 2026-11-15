@@ -35,14 +35,14 @@ function openCash() {
       // Pestaña 1: Resumen del turno
       var res = '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
         '<div class="tot"><span>Pedidos cobrados</span><b>' + sm.orders + '</b></div><div class="tot"><span>Ventas (con IVA)</span><b>' + ref(num(sm.sales)) + '</b></div><div class="tot"><span>Servicio</span><b>' + ref(num(sm.service)) + "</b></div>" +
-        (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") + bsReminder() + outs +
+        (sm.open_orders ? '<div class="banner warn">' + (sm.open_orders === 1 ? "Hay 1 pedido abierto: cóbralo o anúlalo" : "Hay " + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos") + " antes de cerrar.</div>" : "") + bsReminder() + outs +
         "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
         "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
         "</div>";
       // Pestaña 2: Cerrar caja, por pasos (efectivo → bolívares en banco → divisas digitales → afuera → revisar)
       var steps = CSTEPS.filter(function (x) { return x.k !== 4 || OUTS.length; });
       var cie = '<div class="card cierre">' +
-        (sm.open_orders ? '<div class="banner warn">Hay ' + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos antes de cerrar.</div>" : "") +
+        (sm.open_orders ? '<div class="banner warn">' + (sm.open_orders === 1 ? "Hay 1 pedido abierto: cóbralo o anúlalo" : "Hay " + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos") + " antes de cerrar.</div>" : "") +
         '<div class="csteps" role="tablist">' + steps.map(function (x, i) { return '<button type="button" data-cstep="' + x.k + '"><b>' + (i + 1) + "</b><span>" + x.t + "</span></button>"; }).join("") + "</div>" +
         '<p class="muted cstephelp" id="cstepHelp"></p>' +
         '<table class="tbl arqueo"><thead><tr><th>Método</th><th class="r">Esperado</th><th>Contado</th></tr></thead><tbody>' + rows + "</tbody></table>" +

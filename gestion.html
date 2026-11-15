@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-saz2A28RBPUj/nJobXifY0FQIyhAIy8H1RBlBG0gZ0Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-OTFoJ7dQOoWorFrXR0gD+XzSFoqs68+/IqPjmaiFmpE='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -575,6 +575,7 @@
   // Unidades: todo se lleva a gramos, mililitros o unidades.
   var U = { kg: [1000, "m"], g: [1, "m"], l: [1000, "v"], ml: [1, "v"], unidad: [1, "u"] };
   var UNIT_LABEL = { kg: "kg", g: "g", l: "L", ml: "ml", unidad: "unidad" };
+  function unitOf(n, u) { return u === "unidad" && Math.abs(num(n)) !== 1 ? "unidades" : UNIT_LABEL[u] || u || ""; }
   var BIG = { m: "kg", v: "L", u: "unidad" };
   function sameFamily(a, b) { return U[a] && U[b] && U[a][1] === U[b][1]; }
   function costPerBase(ing) {
@@ -1168,7 +1169,7 @@
       list.map(function (i) {
         var fam = U[i.buy_unit][1], uses = S.items.filter(function (l) { return l.ingredient_id === i.id; }).length;
         return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (supName(i) ? esc(supName(i)) + " · " : "") + uses + " receta" + (uses === 1 ? "" : "s") +
-          '</div></td><td class="n">' + money(i.buy_price) + '<div class="muted">por ' + nf3.format(i.buy_qty) + " " + UNIT_LABEL[i.buy_unit] + '</div></td><td class="n hide-sm">' + pct(num(i.waste_pct)) +
+          '</div></td><td class="n">' + money(i.buy_price) + '<div class="muted">por ' + nf3.format(i.buy_qty) + " " + unitOf(i.buy_qty, i.buy_unit) + '</div></td><td class="n hide-sm">' + pct(num(i.waste_pct)) +
           '</td><td class="n"><b>' + money(costPerBig(i)) + '</b><div class="muted">por ' + BIG[fam] + "</div></td></tr>";
       }).join("") + "</tbody></table>";
   }
@@ -1216,7 +1217,7 @@
           (u.change_pct == null ? '<span class="pill warn">revisar</span>' : '<span class="pill ' + (u.change_pct > 0 ? "bad" : "ok") + '">' + fmtPct(num(u.change_pct)) + "</span>") + "</div>" +
           '<div class="pend-prices"><span>Antes <b>' + (u.old_unit_cost == null ? "—" : money(bigCost(num(u.old_unit_cost), ing.buy_unit)) + " / " + BIG[U[ing.buy_unit][1]]) +
           "</b></span><span>→</span><span>Nuevo <b>" + money(bigCost(num(u.new_unit_cost), u.buy_unit)) + " / " + BIG[U[u.buy_unit][1]] + "</b></span></div>" +
-          '<div class="muted">' + esc(money(u.buy_price) + " por " + nf3.format(u.buy_qty) + " " + UNIT_LABEL[u.buy_unit]) + (sup ? " · " + esc(sup.name) : "") + " · " + esc(u.source) + " · " + esc(u.reason) + "</div>" +
+          '<div class="muted">' + esc(money(u.buy_price) + " por " + nf3.format(u.buy_qty) + " " + unitOf(u.buy_qty, u.buy_unit)) + (sup ? " · " + esc(sup.name) : "") + " · " + esc(u.source) + " · " + esc(u.reason) + "</div>" +
           (u.raw_message ? '<div class="muted" style="font-style:italic">«' + esc(u.raw_message) + "»</div>" : "") +
           '<div class="row" style="margin-top:8px"><button type="button" class="primary" data-ok="' + u.id + '">Aprobar</button>' +
           '<button type="button" class="danger" data-no="' + u.id + '">Rechazar</button></div></div>';
@@ -1233,8 +1234,8 @@
       S.history.map(function (h) {
         var ing = ingById(h.ingredient_id) || { name: "?" }, d = new Date(h.changed_at);
         return "<tr><td>" + esc(d.toLocaleDateString("es", { day: "2-digit", month: "2-digit" })) + "</td><td>" + esc(ing.name) +
-          '</td><td class="n">' + money(h.old_price) + '<div class="muted">' + esc(nf3.format(h.old_qty) + " " + UNIT_LABEL[h.old_unit]) + '</div></td><td class="n">' + money(h.new_price) +
-          '<div class="muted">' + esc(nf3.format(h.new_qty) + " " + UNIT_LABEL[h.new_unit]) + '</div></td><td class="hide-sm">' + esc(h.source) + "</td></tr>";
+          '</td><td class="n">' + money(h.old_price) + '<div class="muted">' + esc(nf3.format(h.old_qty) + " " + unitOf(h.old_qty, h.old_unit)) + '</div></td><td class="n">' + money(h.new_price) +
+          '<div class="muted">' + esc(nf3.format(h.new_qty) + " " + unitOf(h.new_qty, h.new_unit)) + '</div></td><td class="hide-sm">' + esc(h.source) + "</td></tr>";
       }).join("") + "</tbody></table>" : '<div class="empty">Todavía no hay cambios de precio.</div>';
   }
   $("pendList").addEventListener("click", function (e) {
@@ -1544,7 +1545,7 @@
   // ---------------------------------------------------------------- Inventario
   var KIND = { compra: ["Compra", "ok"], merma: ["Merma", "bad"], consumo: ["Consumo por ventas", ""], conteo: ["Conteo", "warn"], ajuste: ["Ajuste", ""] };
   function unitPrice1(i) { return num(i.buy_qty) > 0 ? num(i.buy_price) / num(i.buy_qty) : 0; } // Ref por unidad de compra
-  function qtyTxt(n, unit) { return nf3.format(Math.round(num(n) * 1000) / 1000) + " " + UNIT_LABEL[unit]; }
+  function qtyTxt(n, unit) { return nf3.format(Math.round(num(n) * 1000) / 1000) + " " + unitOf(n, unit); }
   function lossStats(ym) {
     var movs = S.movsByMonth[ym] || [], T = { merma: 0, faltante: 0, sobrante: 0, byIng: {}, byEmp: {} };
     movs.forEach(function (m) {
@@ -1998,7 +1999,7 @@
     $("promoList").innerHTML = '<table class="tbl"><thead><tr><th>Promoción</th><th class="n">Descuento</th><th>Días y horario</th><th class="hide-sm">Aplica a</th><th>Estado</th></tr></thead><tbody>' +
       S.promos.map(function (p) {
         return '<tr class="click" data-promo="' + p.id + '"><td><b>' + esc(p.name) + "</b>" + (p.date_from || p.date_to ? '<div class="muted">' + (p.date_from ? "del " + dmy(p.date_from) : "") + (p.date_to ? " al " + dmy(p.date_to) : "") + "</div>" : "") +
-          '</td><td class="n">' + nf2.format(num(p.percent)).replace(/,00$/, "") + ' %</td><td>' + promoDays(p.days) + "<br>" + promoHora(p.start_time) + " a " + promoHora(p.end_time) +
+          '</td><td class="n">' + nf2.format(num(p.percent)).replace(/,00$/, "") + ' %</td><td>' + promoDays(p.days) + "<br>" + (String(p.start_time).slice(0, 5) === "00:00" && String(p.end_time).slice(0, 5) >= "23:59" ? "Todo el día" : promoHora(p.start_time) + " a " + promoHora(p.end_time)) +
           '</td><td class="hide-sm">' + esc(promoTargets(p)) + "</td><td>" + promoState(p) + "</td></tr>";
       }).join("") + "</tbody></table>";
   }
@@ -2050,7 +2051,7 @@
   function facWhat(f) {
     var d = f.detalle || {};
     return f.kind === "salida" ? esc(d.motivo || "") + " · " + (d.metodo === "efectivo_bs" ? "Bs " : "$ ") + nf2.format(num(d.monto))
-      : (d.insumos || []).map(function (x) { return esc(x.nombre) + " " + nf3.format(num(x.cantidad)) + " " + esc(x.unidad || ""); }).join(" · ") || "Mercancía";
+      : (d.insumos || []).map(function (x) { return esc(x.nombre) + " " + nf3.format(num(x.cantidad)) + " " + esc(unitOf(x.cantidad, x.unidad)); }).join(" · ") || "Mercancía";
   }
   var FACS = [];
   function drawFacturas(list) {

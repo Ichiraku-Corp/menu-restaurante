@@ -155,7 +155,7 @@ function drawTables() {
   if (cur.area === "Por cobrar") {
     var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.opened_at) - new Date(b.opened_at); });
     var due = all.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = all.filter(function (o) { return o.precuenta_at; }).length;
-    $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + " pedidos abiertos · " + ref(due) + " por cobrar</b>" +
+    $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + (all.length === 1 ? " pedido abierto · " : " pedidos abiertos · ") + ref(due) + " por cobrar</b>" +
       '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length && window.innerWidth <= 560 ? '<div class="duecards">' + all.map(function (o) {
         return '<button type="button" data-order="' + o.id + '"><b>' + esc(o.label) + '</b><b class="n">' + ref(num(o.total) - num(o.paid)) + "</b><small>" + esc(o.opened_by || "") + " · " + mins(o.opened_at) + "</small><small style=\"text-align:right\">" +
           (o.precuenta_at ? '<span class="pill bill">pidió la cuenta</span>' : '<span class="pill eat">comiendo</span>') + (num(o.paid) > 0 ? ' <span class="pill paid">abonó</span>' : "") + "</small></button>";

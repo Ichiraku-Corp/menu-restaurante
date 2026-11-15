@@ -68,9 +68,12 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   ok((await p.textContent("#tasa")).startsWith("Tasa euro BCV del " + dm), "si la tasa es vieja, dice de qué día es (" + (await p.textContent("#tasa")) + ")");
 
   // Promoción de hoy: banner arriba, precio tachado con el nuevo (y su Bs) y el total del pedido con la promo
-  promos = [{ id: 1, name: "Happy hour", percent: 20, start: "00:00", end: "23:59", dish_ids: [], category_ids: [1], ahora: true }];
+  promos = [{ id: 1, name: "Happy hour", percent: 20, start: "00:00", end: "23:59", dish_ids: [], category_ids: [1], ahora: true },
+            { id: 2, name: "Noche", percent: 10, start: "00:00", end: "23:58", dish_ids: [], category_ids: [], ahora: true }];
   await p.reload(); await esperar(p, () => !document.getElementById("promoBar").hidden).catch(() => {});
-  ok(/Happy hour: 20 % menos en Entradas · hoy de 12:00 a\. m\. a 11:59 p\. m\.[\s\S]*¡Ahora!/.test(await p.textContent("#promoBar")), "arriba anuncia la promoción de hoy y que vale ahora");
+  const barra = await p.textContent("#promoBar");
+  ok(/Happy hour: 20 % menos en Entradas · todo el día[\s\S]*¡Ahora!/.test(barra), "arriba anuncia la promoción de hoy y que vale ahora (todo el día)");
+  if (new Date(Date.now() - 4 * 3600e3).toISOString().slice(11, 16) < "23:58") ok(/Noche: 10 % menos en platos seleccionados · hoy de 12:00 a\. m\. a 11:58 p\. m\./.test(barra), "con horario, dice de qué hora a qué hora");
   const gyoP = p.locator("article", { hasText: "Gyozas" }).first();
   ok(/Happy hour -20 %/.test(await gyoP.textContent()) && (await gyoP.locator(".price s").textContent()) === "Ref 5" && /Ref 4/.test(await gyoP.locator(".price").textContent()) &&
      (await gyoP.locator(".pbs").textContent()) === "Bs 480", "el plato muestra la promo, el precio normal tachado, el nuevo y su Bs");

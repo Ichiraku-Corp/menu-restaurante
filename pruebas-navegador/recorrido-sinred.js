@@ -99,7 +99,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#payMethods [data-m="efectivo_usd"]'); await page.click('#payLines [data-bill="20"]'); await page.click('#changeCur [data-cur="REF"]');
     await page.click("#payOk"); await page.waitForTimeout(600);
     const c1 = cobros[0] || {};
-    ok(cobros.length === 1 && c1.order.tmp === e.order.tmp && c1.lines[0].method === "efectivo_usd" && c1.lines[0].amount === 20 && c1.total === 11 && c1.emp === 2 && c1.change_currency === "REF" && /\$ 9,00/.test(c1.change.text),
+    ok(cobros.length === 1 && c1.order.tmp === e.order.tmp && c1.lines[0].method === "efectivo_usd" && c1.lines[0].amount === 20 && c1.total === 11 && c1.emp === 2 && c1.change_currency === "REF" && c1.change.currency === "REF" && c1.change.amount === 9 && /\$ 9,00/.test(c1.change.text),
       "el cobro llega a la laptop: cuenta, pago, total (Ref 11), vuelto y quién cobró");
     ok(c1.items.length === 2 && c1.items.every((i) => i.name === "Gyozas"), "con los platos para el recibo");
     await page.waitForTimeout(400);

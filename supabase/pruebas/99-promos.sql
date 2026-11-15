@@ -23,6 +23,18 @@ reset role;
 select unit_price, list_price, promo from public.pos_items where order_id = :o \gset
 select prueba.ok(:unit_price = round(:precio * 0.8, 2) and :list_price = :precio and :'promo' = 'Happy hour -20 %', 'la caja aplica sola el 20 % de la promoción de hoy (y no la de otro día)');
 select prueba.ok(position('Happy hour -20 %' in public.pos_bill_text(:o, 'PRECUENTA')) > 0, 'el ticket muestra la promoción debajo del plato');
+-- Con decimales dice el porcentaje exacto (antes salía redondeado)
+update public.promos set percent = 12.5 where id = :p1;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_add(:mesera, '2222', :o, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+reset role;
+select prueba.ok((select promo = 'Happy hour -12,5 %' and unit_price = round(:precio * 0.875, 2) from public.pos_items where order_id = :o order by id desc limit 1),
+  'con decimales, la promoción dice el porcentaje exacto (12,5 %) y lo cobra');
+update public.pos_items set qty = 1.5 where id = (select max(id) from public.pos_items where order_id = :o);
+select prueba.ok(position('1.5 ' in public.pos_bill_text(:o, 'PRECUENTA')) > 0, 'el ticket muestra cantidades con decimales sin redondear');
+update public.pos_items set qty = 1 where id = (select max(id) from public.pos_items where order_id = :o);
+update public.promos set percent = 20 where id = :p1;
 -- Fuera de su horario no aplica
 update public.promos set start_time = '00:00', end_time = '00:00:01' where id = :p1;
 set role authenticated;

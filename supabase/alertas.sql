@@ -36,7 +36,10 @@ language sql immutable set search_path = public as $$
                 when 'binance' then 'Binance' when 'paypal' then 'PayPal' else k end
 $$;
 create or replace function public.pos_hora(t timestamptz) returns text
-language sql stable set search_path = public as $$ select to_char(t at time zone 'America/Caracas', 'DD/MM HH12:MI am') $$;
+language sql stable set search_path = public as $$ select to_char(t at time zone 'America/Caracas', 'DD/MM HH24:MI') $$;
+-- Montos como en los correos del cierre: 1.234,56
+create or replace function public.pos_dinero(x numeric) returns text
+language sql immutable set search_path = public as $$ select translate(to_char(coalesce(x, 0), 'FM999G999G990D00'), ',.', '.,') $$;
 
 -- 1) Cierre que no cuadra
 create or replace function public.alerta_cierre() returns trigger
@@ -49,14 +52,14 @@ begin
                             / case when k in ('efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito') then nullif(rt, 0) else 1 end), 2), 0),
          string_agg(public.pos_metodo_nombre(k) || ': ' || case when (new.counted ->> k)::numeric >= coalesce((new.expected ->> k)::numeric, 0) then 'sobra ' else 'falta ' end ||
                     case when k in ('efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito') then 'Bs ' else '$ ' end ||
-                    to_char(abs((new.counted ->> k)::numeric - coalesce((new.expected ->> k)::numeric, 0)), 'FM999G999G990D00'), ' · ')
+                    public.pos_dinero(abs((new.counted ->> k)::numeric - coalesce((new.expected ->> k)::numeric, 0))), ' · ')
            filter (where abs((new.counted ->> k)::numeric - coalesce((new.expected ->> k)::numeric, 0)) >= 0.01)
     into dif, det
   from jsonb_object_keys(new.counted) k where k not like '\_%' and jsonb_typeof(new.counted -> k) = 'number';
   select alert_cash_diff into lim from public.gestion_settings limit 1;
   if abs(dif) <= coalesce(lim, 10) then return null; end if;
   perform public.pos_alerta('cierre-' || new.id,
-    'El cierre de caja no cuadra: ' || case when dif > 0 then 'sobran' else 'faltan' end || ' Ref ' || to_char(abs(dif), 'FM999G999G990D00'),
+    'El cierre de caja no cuadra: ' || case when dif > 0 then 'sobran' else 'faltan' end || ' Ref ' || public.pos_dinero(abs(dif)),
     array['Cerró: ' || coalesce(public.pos_emp_name(new.closed_by), '—') || ' · ' || public.pos_hora(new.closed_at),
           'Diferencia por método: ' || coalesce(det, '—'),
           'Nota del cierre: ' || coalesce(nullif(trim(new.notes), ''), '(sin nota)')]);
@@ -72,11 +75,11 @@ declare monto numeric := round(new.qty * new.unit_price, 2); hoy date := (now() 
 begin
   if new.status <> 'anulado' or old.status <> 'enviado' then return null; end if;
   if monto >= 20 then
-    perform public.pos_alerta('anulado-' || new.id, 'Se anuló un plato que ya estaba en cocina (Ref ' || to_char(monto, 'FM999G990D00') || ')',
-      array[trim(to_char(new.qty, 'FM990.##')) || ' × ' || new.name || case when new.variant <> '' then ' ' || new.variant else '' end || ' · ' || public.pos_order_label(new.order_id),
+    perform public.pos_alerta('anulado-' || new.id, 'Se anuló un plato que ya estaba en cocina (Ref ' || public.pos_dinero(monto) || ')',
+      array[trim_scale(new.qty)::text || ' × ' || new.name || case when new.variant <> '' then ' ' || new.variant else '' end || ' · ' || public.pos_order_label(new.order_id),
             'Motivo: ' || coalesce(nullif(trim(new.void_reason), ''), '—'), 'Lo anuló: ' || coalesce(public.pos_emp_name(new.voided_by), '—') || ' · ' || public.pos_hora(coalesce(new.voided_at, now()))]);
   end if;
-  select count(*), array_agg(trim(to_char(i.qty, 'FM990.##')) || ' × ' || i.name || ' · ' || public.pos_order_label(i.order_id) || ' · ' || coalesce(nullif(trim(i.void_reason), ''), 'sin motivo')
+  select count(*), array_agg(trim_scale(i.qty)::text || ' × ' || i.name || ' · ' || public.pos_order_label(i.order_id) || ' · ' || coalesce(nullif(trim(i.void_reason), ''), 'sin motivo')
                              || ' (' || coalesce(public.pos_emp_name(i.voided_by), '—') || ')' order by i.voided_at)
     into n, lista
   from public.pos_items i where i.status = 'anulado' and i.sent_at is not null and (coalesce(i.voided_at, now()) at time zone 'America/Caracas')::date = hoy;
@@ -97,8 +100,8 @@ begin
   select subtotal into sub from public.pos_totals(new.id);
   if new.discount < 15 and new.discount <= coalesce(sub, 0) * 0.25 then return null; end if;
   perform public.pos_alerta('descuento-' || new.id || '-' || new.discount,
-    'Descuento grande: Ref ' || to_char(new.discount, 'FM999G990D00') || case when sub > 0 then ' (' || round(new.discount / sub * 100) || ' % de la cuenta)' else '' end,
-    array[public.pos_order_label(new.id) || ' · cuenta de Ref ' || to_char(coalesce(sub, 0), 'FM999G990D00'),
+    'Descuento grande: Ref ' || public.pos_dinero(new.discount) || case when sub > 0 then ' (' || round(new.discount / sub * 100) || ' % de la cuenta)' else '' end,
+    array[public.pos_order_label(new.id) || ' · cuenta de Ref ' || public.pos_dinero(sub),
           'Motivo: ' || coalesce(nullif(trim(new.discount_reason), ''), '—'), 'Lo hizo: ' || coalesce(public.pos_emp_name(new.discount_by), '—') || ' · ' || public.pos_hora(now())]);
   return null;
 end $$;
@@ -115,7 +118,7 @@ begin
   if visto is null or visto > now() - interval '15 minutes' then return; end if;
   select count(*) into abiertos from public.pos_orders where status = 'abierta';
   perform public.pos_alerta('laptop-' || extract(epoch from visto)::bigint,
-    'La laptop de caja no se conecta desde ' || to_char(visto at time zone 'America/Caracas', 'HH12:MI am'),
+    'La laptop de caja no se conecta desde ' || to_char(visto at time zone 'America/Caracas', 'HH24:MI'),
     array['La caja sigue abierta' || case when abiertos > 0 then ' y hay ' || abiertos || ' pedido' || case when abiertos = 1 then '' else 's' end || ' abierto' || case when abiertos = 1 then '' else 's' end else '' end || '.',
           'Mientras tanto no salen comandas ni tickets por la impresora.',
           'Revisa que la laptop esté encendida, con internet y con el puente abierto.']);
