@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-GN9phattQpbwpG+ybRfQUUAsBTo1Y8LPmJVct5In8EU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-OtO/UHqefSYS2sSf8nQ8DIrhuS4FrIZS/LsyZAkHR60='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -296,7 +296,7 @@
     <section data-panel="ventas" hidden>
       <div class="row between">
         <p class="muted" style="margin:0">Ventas del mes, comisiones del banco, reparto del servicio y resultado.</p>
-        <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button class="primary" id="addSale">+ Día</button></div>
+        <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button id="xlsContador" title="Ventas por día con IVA, cobros por método, gastos y nómina del mes">Excel para el contador</button><button class="primary" id="addSale">+ Día</button></div>
       </div>
       <div class="kpis" style="margin-top:12px" id="salesKpis"></div>
       <div class="card"><h2>Estado de resultados del mes</h2><div id="salesResult"></div></div>
@@ -1707,6 +1707,132 @@
     }
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
+  });
+
+  // ---------------------------------------------------------------- Excel (.xlsx) sin librerías: hojas con texto y números
+  var XL = (function () {
+    var CRC = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC[n] = c >>> 0; }
+    function crc32(u) { var c = 0xFFFFFFFF; for (var i = 0; i < u.length; i++) c = CRC[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    function zip(files) {  // ZIP sin comprimir (lo abren Excel, LibreOffice, Google Sheets y Numbers)
+      var enc = new TextEncoder(), parts = [], central = [], off = 0;
+      files.forEach(function (f) {
+        var name = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length, lh = new DataView(new ArrayBuffer(30)), ch = new DataView(new ArrayBuffer(46));
+        lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true);
+        lh.setUint32(14, crc, true); lh.setUint32(18, sz, true); lh.setUint32(22, sz, true); lh.setUint16(26, name.length, true);
+        ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true);
+        ch.setUint32(16, crc, true); ch.setUint32(20, sz, true); ch.setUint32(24, sz, true); ch.setUint16(28, name.length, true); ch.setUint32(42, off, true);
+        parts.push(new Uint8Array(lh.buffer), name, f.data); central.push(new Uint8Array(ch.buffer), name);
+        off += 30 + name.length + sz;
+      });
+      var csz = central.reduce(function (t, x) { return t + x.length; }, 0), end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, csz, true); end.setUint32(16, off, true);
+      return new Blob(parts.concat(central, [new Uint8Array(end.buffer)]), { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    }
+    function x(s) { return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/[<>&"]/g, function (ch) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[ch]; }); }
+    function col(i) { var s = ""; i++; while (i) { s = String.fromCharCode(65 + (i - 1) % 26) + s; i = Math.floor((i - 1) / 26); } return s; }
+    // Celda: texto, número (2 decimales) o {v, s}; s: 1 negrita · 2 número · 3 número en negrita · 4 tasa (4 decimales) · 5 entero
+    function sheet(sh) {
+      var out = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+        (sh.widths ? "<cols>" + sh.widths.map(function (w, i) { return '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>'; }).join("") + "</cols>" : "") + "<sheetData>";
+      sh.rows.forEach(function (r, ri) {
+        out += '<row r="' + (ri + 1) + '">' + r.map(function (c, ci) {
+          if (c === null || c === undefined || c === "") return "";
+          var o = typeof c === "object", v = o ? c.v : c, s = o ? c.s || 0 : typeof c === "number" ? 2 : 0, ref = col(ci) + (ri + 1);
+          if (typeof v === "number") return isFinite(v) ? '<c r="' + ref + '"' + (s ? ' s="' + s + '"' : "") + "><v>" + v + "</v></c>" : "";
+          return '<c r="' + ref + '" t="inlineStr"' + (s ? ' s="' + s + '"' : "") + "><is><t xml:space=\"preserve\">" + x(v) + "</t></is></c>";
+        }).join("") + "</row>";
+      });
+      return out + "</sheetData></worksheet>";
+    }
+    var STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.0000"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+      '<xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+      '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    function book(sheets) {
+      var enc = new TextEncoder(), f = function (name, s) { return { name: name, data: enc.encode(s) }; }, H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+      var R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships", P = "http://schemas.openxmlformats.org/package/2006/relationships";
+      return zip([
+        f("[Content_Types].xml", H + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+          '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+          sheets.map(function (s, i) { return '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'; }).join("") + "</Types>"),
+        f("_rels/.rels", H + '<Relationships xmlns="' + P + '"><Relationship Id="rId1" Type="' + R + '/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+        f("xl/workbook.xml", H + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="' + R + '"><sheets>' +
+          sheets.map(function (s, i) { return '<sheet name="' + x(s.name.replace(/[:\\/?*\[\]]/g, " ").slice(0, 31)) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>'; }).join("") + "</sheets></workbook>"),
+        f("xl/_rels/workbook.xml.rels", H + '<Relationships xmlns="' + P + '">' + sheets.map(function (s, i) { return '<Relationship Id="rId' + (i + 1) + '" Type="' + R + '/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>'; }).join("") +
+          '<Relationship Id="rId' + (sheets.length + 1) + '" Type="' + R + '/styles" Target="styles.xml"/></Relationships>'),
+        f("xl/styles.xml", STYLES)
+      ].concat(sheets.map(function (s, i) { return f("xl/worksheets/sheet" + (i + 1) + ".xml", sheet(s)); })));
+    }
+    return { book: book };
+  })();
+
+  // ---------------------------------------------------------------- Excel para el contador (Dinero › Ventas)
+  var MET_XL = [["efectivo_usd", "Efectivo $", "$"], ["efectivo_bs", "Efectivo Bs", "Bs"], ["pago_movil", "Pago móvil", "Bs"], ["punto_debito", "Punto débito", "Bs"],
+    ["punto_credito", "Punto crédito", "Bs"], ["zelle", "Zelle", "$"], ["binance", "Binance", "$"], ["paypal", "PayPal", "$"], ["cuenta", "A cuenta de empleado", "Ref"]];
+  var DIVISAS = { efectivo_usd: 1, zelle: 1, binance: 1, paypal: 1 };
+  function r2(n) { return Math.round(num(n) * 100) / 100; }
+  function fechaXl(d) { d = String(d).slice(0, 10); return d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4); }
+  function contadorXlsx(c) {
+    var iva = num(c.iva_pct), fac = 1 + iva / 100, B = function (v) { return { v: v, s: 1 }; }, N = function (v) { return { v: r2(v), s: 3 }; };
+    var mes = new Date(String(c.mes) + "T12:00:00").toLocaleDateString("es-VE", { month: "long", year: "numeric" });
+    var T = { v: 0, base: 0, iv: 0, s: 0, de: 0, tot: 0, vBs: 0, baseBs: 0, ivBs: 0, sBs: 0, deBs: 0, totBs: 0, n: 0, met: {}, div: 0, syth: 0, sinTasa: 0 };
+    var ventas = [[B("Fecha"), B("Origen"), B("Tasa BCV €"), B("Pedidos"), B("Ventas Ref (IVA incluido)"), B("Base imponible Ref"), B("IVA " + iva + " % Ref"), B("Servicio Ref"), B("Delivery Ref"), B("Total cobrado Ref"),
+      B("Ventas Bs"), B("Base imponible Bs"), B("IVA Bs"), B("Servicio Bs"), B("Total cobrado Bs")]];
+    var cobros = [[B("Fecha")].concat(MET_XL.map(function (m) { return B(m[1] + " (Ref)"); }), [B("Cobrado en divisas Ref (base IGTF)"), B("IGTF 3 % Ref (si aplica)")])];
+    (c.dias || []).forEach(function (d) {
+      var t = num(d.tasa), v = r2(d.ventas), base = r2(v / fac), iv = r2(v - base), s = r2(d.servicio), de = r2(d.delivery), tot = r2(v + s + de), bs = function (n) { return t ? r2(n * t) : ""; };
+      ventas.push([fechaXl(d.fecha), d.fuente === "pos" ? "Sistema" : "Syth", t ? { v: t, s: 4 } : "", { v: num(d.tickets), s: 5 }, v, base, iv, s, de, tot, bs(v), bs(base), bs(iv), bs(s), bs(tot)]);
+      T.v += v; T.base += base; T.iv += iv; T.s += s; T.de += de; T.tot += tot; T.n += num(d.tickets);
+      if (t) { T.vBs += v * t; T.baseBs += base * t; T.ivBs += iv * t; T.sBs += s * t; T.deBs += de * t; T.totBs += tot * t; } else T.sinTasa++;
+      if (d.fuente !== "pos") { T.syth++; return; }
+      var div = 0, row = [fechaXl(d.fecha)].concat(MET_XL.map(function (m) {
+        var x = (d.metodos || {})[m[0]]; if (!x) return "";
+        T.met[m[0]] = T.met[m[0]] || { ref: 0, monto: 0 }; T.met[m[0]].ref += num(x.ref); T.met[m[0]].monto += num(x.monto);
+        if (DIVISAS[m[0]]) div += num(x.ref);
+        return r2(x.ref);
+      }));
+      T.div += div; cobros.push(row.concat([r2(div), r2(div * 0.03)]));
+    });
+    ventas.push([B("Total"), "", "", { v: T.n, s: 5 }, N(T.v), N(T.base), N(T.iv), N(T.s), N(T.de), N(T.tot), N(T.vBs), N(T.baseBs), N(T.ivBs), N(T.sBs), N(T.totBs)]);
+    cobros.push([B("Total")].concat(MET_XL.map(function (m) { return T.met[m[0]] ? N(T.met[m[0]].ref) : ""; }), [N(T.div), N(T.div * 0.03)]));
+    var gastos = [[B("Fecha"), B("Concepto"), B("Tipo"), B("Monto Ref"), B("Foto de la factura")]], tg = 0;
+    (c.gastos || []).forEach(function (g) { tg += num(g.monto); gastos.push([fechaXl(g.fecha), g.concepto, g.tipo, r2(g.monto), g.factura ? "Sí (en Gestión › Gastos)" : ""]); });
+    gastos.push([B("Total"), "", "", N(tg), ""]);
+    var nomina = [[B("Quincena"), B("Empleado"), B("Pagado Ref"), B("Tasa BCV €"), B("Pagado Bs"), B("Fecha de pago")]], tnr = 0, tnb = 0;
+    (c.nomina || []).forEach(function (y) {
+      tnr += num(y.ref); tnb += num(y.bs);
+      var q = String(y.quincena); nomina.push([(q.slice(8, 10) === "01" ? "1 al 15" : "16 al fin") + " " + q.slice(5, 7) + "/" + q.slice(0, 4), y.empleado, r2(y.ref), y.tasa ? { v: num(y.tasa), s: 4 } : "", y.bs != null ? r2(y.bs) : "", fechaXl(y.fecha)]);
+    });
+    if (nomina.length === 1) nomina.push(["Sin pagos marcados como «Pagado» en Gestión › Personal › Nómina este mes."]); else nomina.push([B("Total"), "", N(tnr), "", N(tnb), ""]);
+    var res = [[B("Ichiraku Ramen · resumen de " + mes)],
+      ["Del " + fechaXl(c.mes) + " al " + fechaXl(c.hasta) + ". Precios con IVA " + iva + " % incluido. Ref = euro BCV; los Bs van a la tasa BCV de cada día."], [],
+      [B("Ventas"), B("Ref"), B("Bs")],
+      ["Ventas (IVA incluido, sin servicio ni delivery)", r2(T.v), r2(T.vBs)], ["   Base imponible", r2(T.base), r2(T.baseBs)], ["   IVA " + iva + " %", r2(T.iv), r2(T.ivBs)],
+      ["Servicio 10 % (para el personal)", r2(T.s), r2(T.sBs)], ["Delivery", r2(T.de), r2(T.deBs)], [B("Total cobrado"), N(T.tot), N(T.totBs)], ["Pedidos", { v: T.n, s: 5 }], [],
+      [B("Cobros por método (sistema propio)"), B("Ref"), B("En su moneda"), B("Moneda")]];
+    MET_XL.forEach(function (m) { var x = T.met[m[0]]; if (x) res.push([m[1], r2(x.ref), r2(x.monto), m[2]]); });
+    res.push(["Cobrado en divisas (efectivo $, Zelle, Binance, PayPal): base del IGTF", r2(T.div)], ["IGTF 3 % (si aplica; confírmalo con el contador)", r2(T.div * 0.03)], [],
+      [B("Gastos del mes (fijos, del mes y salidas de caja)"), N(tg)], [B("Nómina pagada (marcada en Gestión)"), N(tnr), N(tnb)], []);
+    if (T.syth) res.push([T.syth + (T.syth === 1 ? " día viene" : " días vienen") + " de Syth: tienen el total y el servicio, sin el detalle por método de pago."]);
+    if (T.sinTasa) res.push([T.sinTasa + (T.sinTasa === 1 ? " día no tiene" : " días no tienen") + " tasa BCV registrada: sus Bs quedan en blanco."]);
+    return XL.book([{ name: "Resumen", rows: res, widths: [58, 16, 16, 10] },
+      { name: "Ventas por día", rows: ventas, widths: [12, 9, 12, 9, 16, 16, 14, 13, 13, 16, 16, 16, 14, 14, 16] },
+      { name: "Cobros por día", rows: cobros, widths: [12, 13, 13, 13, 13, 13, 11, 11, 11, 13, 20, 16] },
+      { name: "Gastos", rows: gastos, widths: [12, 40, 30, 13, 24] },
+      { name: "Nómina", rows: nomina, widths: [18, 28, 13, 13, 16, 14] }]);
+  }
+  $("xlsContador").addEventListener("click", function () {
+    var ym = $("salesMonth").value || ymNow(), btn = $("xlsContador");
+    btn.disabled = true;
+    q(sb.rpc("gestion_contador", { p_mes: ym + "-01" })).then(function (c) {
+      var a = document.createElement("a"); a.href = URL.createObjectURL(contadorXlsx(c)); a.download = "ichiraku-contador-" + ym + ".xlsx";
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+      toast("Listo: ichiraku-contador-" + ym + ".xlsx");
+    }).catch(fail).then(function () { btn.disabled = false; });
   });
 
   // ---------------------------------------------------------------- Inventario

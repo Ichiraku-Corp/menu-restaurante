@@ -64,6 +64,15 @@
         pagos: G.tables.payroll_payments.filter(function (x) { return x.period === d; }).map(function (x) {
           return { employee_id: x.employee_id, amount: x.amount_ref, rate: x.rate, bs: x.amount_bs, por: "dueno@ejemplo.test", at: x.created_at }; }) };
     },
+    gestion_contador: function (a) {
+      G.calls.push({ rpc: "gestion_contador", args: a }); var m = String(a.p_mes), d = function (n) { return m.slice(0, 8) + n; };
+      return { mes: m, hasta: d("30"), iva_pct: 16,
+        dias: [{ fecha: d("06"), tasa: 990.5, fuente: "syth", tickets: 30, ventas: 325.39, servicio: 17.38, delivery: 0, metodos: {} },
+               { fecha: d("14"), tasa: 1009.3413, fuente: "pos", tickets: 61, ventas: 1210.4, servicio: 111.81, delivery: 16.7,
+                 metodos: { efectivo_usd: { ref: 420, monto: 420 }, pago_movil: { ref: 350.5, monto: 353774.13 }, punto_debito: { ref: 400.41, monto: 404156.29 }, zelle: { ref: 168, monto: 168 } } }],
+        gastos: [{ fecha: m, concepto: "Alquiler", tipo: "Fijo del mes", monto: 900, factura: false }, { fecha: d("14"), concepto: "Compra de hielo & agua <2>", tipo: "Salida de caja (Efectivo $)", monto: 5, factura: true }],
+        nomina: [{ quincena: m, empleado: "Ana Pérez", ref: 120, tasa: 1009.3413, bs: 121120.96, fecha: d("15") }] };
+    },
     gestion_meta: function () { return { dia: new Date().toISOString().slice(0, 10), meta: 620, vendido: 320.45, pedidos: 21, promedio: 617.94, dias: 8, pct: 0 }; },
     gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
       caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },
