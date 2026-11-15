@@ -34,7 +34,7 @@ language sql immutable set search_path = public as $$
   end
 $$;
 create or replace function public.imp_family(u text) returns text
-language sql immutable as $$ select case when u in ('kg', 'g') then 'peso' when u in ('l', 'ml') then 'volumen' when u = 'unidad' then 'unidad' end $$;
+language sql immutable set search_path = public as $$ select case when u in ('kg', 'g') then 'peso' when u in ('l', 'ml') then 'volumen' when u = 'unidad' then 'unidad' end $$;
 -- Números escritos «12,50», «1.234,5» o «1,234.5»
 create or replace function public.imp_num(p text) returns numeric
 language plpgsql immutable set search_path = public as $$

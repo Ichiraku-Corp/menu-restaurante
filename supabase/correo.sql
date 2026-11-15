@@ -15,7 +15,11 @@ grant execute on function public.pos_report_next(integer), public.pos_report_don
 do $$
 begin
   if exists (select 1 from pg_available_extensions where name = 'pg_net') then
-    create extension if not exists pg_net;
+    -- En el esquema «extensions» (no en public); sus funciones viven en el esquema «net»
+    if exists (select 1 from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname = 'pg_net' and n.nspname = 'public') then
+      drop extension pg_net;
+    end if;
+    create extension if not exists pg_net with schema extensions;
   end if;
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then
     create extension if not exists pg_cron;

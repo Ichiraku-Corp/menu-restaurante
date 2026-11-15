@@ -497,7 +497,13 @@ begin
     if oid is not null then return oid; end if;
     if not exists (select 1 from public.pos_tables where id = p_table and active) then raise exception 'Mesa no encontrada'; end if;
     select coalesce(service_pct, 10) into svc from public.gestion_settings limit 1;
-    insert into public.pos_orders (kind, table_id, service_pct, opened_by, day_number) values ('mesa', p_table, coalesce(svc, 10), p_emp, public.pos_next_number()) returning id into oid;
+    begin
+      insert into public.pos_orders (kind, table_id, service_pct, opened_by, day_number) values ('mesa', p_table, coalesce(svc, 10), p_emp, public.pos_next_number()) returning id into oid;
+    exception when unique_violation then
+      -- Otra tablet abrió esta mesa en el mismo instante: se entra a esa
+      select id into oid from public.pos_orders where table_id = p_table and status = 'abierta';
+      return oid;
+    end;
   else
     insert into public.pos_orders (kind, label, service_pct, opened_by, day_number) values ('llevar', left(coalesce(trim(p_label), ''), 40), 0, p_emp, public.pos_next_number()) returning id into oid;
   end if;

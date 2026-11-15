@@ -34,7 +34,7 @@ create policy manage_all on public.uniform_checks for all to authenticated using
 revoke all on public.uniform_checks from anon;
 
 create or replace function public.att_today() returns date
-language sql stable as $$ select (now() at time zone 'America/Caracas')::date $$;
+language sql stable set search_path = public as $$ select (now() at time zone 'America/Caracas')::date $$;
 
 -- Marcas de hoy de una persona y qué le toca marcar ahora
 create or replace function public.pos_mark_status(p_emp bigint, p_pin text) returns jsonb
