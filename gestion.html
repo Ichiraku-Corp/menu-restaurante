@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-iDk7S9j+b8uVP17OZzvTcrqgnxlhDMx2XmFCy0/+bmI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-saz2A28RBPUj/nJobXifY0FQIyhAIy8H1RBlBG0gZ0Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -121,7 +121,12 @@
   .vh-leg i { display:inline-block; width:18px; height:12px; border-radius:3px; }
   .vh-top { margin:10px 0 0; padding-left:20px; }
   .vh-top li { margin:2px 0; }
-  details.tview { margin-top:8px; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  details.tview { margin-top:8px; }
+  .chipsel { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .chipsel label { display:inline-flex; align-items:center; gap:6px; margin:0; padding:6px 10px; border:1px solid var(--line); border-radius:999px; font-weight:600; cursor:pointer; }
+  .chipsel label:has(input:checked) { background:color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color:var(--accent); }
+  .prdishes { max-height:220px; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px 10px; margin-top:6px; }
+  .prdishes label { display:flex; align-items:center; gap:8px; margin:4px 0; font-weight:500; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
   .perfrules { margin:6px 0 10px; padding:10px; border-radius:12px; background:var(--raised, rgba(127,127,127,.08)); }
   .perfrules label { font-size:13px; display:flex; flex-direction:column; gap:2px; }
   .perfrules input { width:110px; }
@@ -210,6 +215,7 @@
       <button data-tab="servicio">Servicio y bonos</button>
       <button data-tab="avisos">Avisos</button>
       <button data-tab="whatsapp">WhatsApp</button>
+      <button data-tab="promos">Promociones</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -285,6 +291,9 @@
           <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
           <div style="grid-column:1 / -1"><label for="sMails">Correos que reciben el cierre de caja detallado</label><input id="sMails" type="text" placeholder="dueno@gmail.com, socio@gmail.com" autocomplete="off">
             <div class="muted">Separados por comas. El puente de la laptop de caja los envía al cerrar caja.</div></div>
+          <div class="alertset" style="grid-column:1 / -1"><label for="sAlerts">Correos que reciben las alertas</label><input id="sAlerts" type="text" placeholder="Vacío: van a los mismos del cierre" autocomplete="off">
+            <div class="muted">Avisa al momento: cierre que no cuadra, platos anulados después de ir a cocina, descuentos grandes y laptop de caja sin conexión con la caja abierta.</div></div>
+          <div class="alertset"><label for="sAlertDiff">Avisar si el cierre no cuadra por más de (Ref)</label><input id="sAlertDiff" type="number" step="1" min="0" inputmode="decimal"></div>
         </div>
         <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
       </div>
@@ -309,6 +318,14 @@
     </section>
 
     <!-- Clientes -->
+    <section data-panel="promos" hidden>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Promociones</h2><button class="primary" id="addPromo">+ Promoción</button></div>
+        <p class="muted">Un % menos en ciertos platos o categorías, ciertos días y horas (hora de Venezuela). La caja lo aplica sola al anotar el plato, sale en el ticket y la carta lo anuncia.</p>
+        <div class="scroll" id="promoList"><div class="empty">Cargando…</div></div>
+      </div>
+    </section>
+
     <section data-panel="clientes" hidden>
       <div class="card hidden" id="cliSetup"><p class="muted" style="margin:0">Para ver los clientes, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p></div>
       <div class="kpis" id="cliKpis"></div>
@@ -375,6 +392,12 @@
         <div class="row"><label for="expMonth" style="margin:0">Variables del mes</label><input type="month" id="expMonth" style="width:auto"></div>
         <h3>Fijos mensuales</h3><div class="scroll" id="expFixed"></div>
         <h3>Variables del mes</h3><div class="scroll" id="expVar"></div>
+      </div>
+      <div class="card" id="facCard">
+        <div class="row between"><h2 style="margin:0">Facturas de la caja</h2>
+          <select id="facDays" style="width:auto" aria-label="Período"><option value="7">Últimos 7 días</option><option value="30" selected>Últimos 30 días</option><option value="90">Últimos 90 días</option></select></div>
+        <p class="muted">Fotos que tomó la caja en «Salida de caja» y «Llegó mercancía». Toca «Ver foto» para verla grande.</p>
+        <div class="scroll" id="facList"><div class="empty">Cargando…</div></div>
       </div>
     </section>
 
@@ -486,6 +509,11 @@
 </form></dialog>
 
 <!-- Editor de receta -->
+<dialog id="facDlg" style="width:min(720px, calc(100vw - 24px))">
+  <h2 id="facTitle" style="margin-top:0">Factura</h2>
+  <img id="facImg" alt="Foto de la factura" style="display:block;max-width:100%;max-height:70vh;margin:0 auto;border-radius:10px;border:1px solid var(--line)">
+  <div class="row between" style="margin-top:10px"><a id="facOpen" href="#" target="_blank" rel="noopener">Abrir en otra pestaña</a><button type="button" id="facClose">Cerrar</button></div>
+</dialog>
 <dialog id="recDlg" style="width:min(680px, calc(100vw - 24px))">
   <div class="row between"><h2 id="recTitle" style="margin:0"></h2><button type="button" id="recClose">Cerrar</button></div>
   <div class="row" id="recVariants" style="margin-top:10px"></div>
@@ -620,12 +648,13 @@
       opt(sb.from("price_updates").select("*").order("created_at", { ascending: false }).limit(60)),
       opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15)),
       opt(sb.from("attendance_events").select("id").limit(1)),
-      opt(sb.from("inventory_movements").select("id").limit(1))
+      opt(sb.from("inventory_movements").select("id").limit(1)),
+      opt(sb.from("promos").select("*").order("start_time"))
     ]).then(function (r) {
       S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
-      S.attendance = r[11] !== null; S.inventory = r[12] !== null;
+      S.attendance = r[11] !== null; S.inventory = r[12] !== null; S.promos = r[13];
       return Promise.all([loadPeriods(), loadHist()]);
     }).then(renderAll).catch(fail);
   }
@@ -665,7 +694,7 @@
   $("iniRefresh").addEventListener("click", loadInicio);
   $("iniAlertas").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (!b) return; var t = document.querySelector('#tabs [data-tab="' + b.dataset.go + '"]'); if (t) t.click(); });
   setInterval(function () { if (!document.hidden) loadInicio(); }, 60000);
-  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); loadServicio(); }
+  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); loadServicio(); }
 
   // ---------------------------------------------------------------- Servicio y bonos
   var SV = { months: [], m: null, data: null, tabs: [] };
@@ -887,7 +916,7 @@
   // Cada pestaña pertenece a una sección; la barra de abajo muestra solo las de la sección elegida
   var TAB_SEC = { inicio: "inicio", resumen: "dinero", ventas: "dinero", historico: "dinero", gastos: "dinero", servicio: "dinero",
     nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", insumos: "cocina", inventario: "cocina",
-    clientes: "clientes", whatsapp: "clientes", areas: "ajustes", importar: "ajustes" };
+    clientes: "clientes", whatsapp: "clientes", promos: "clientes", areas: "ajustes", importar: "ajustes" };
   var SEC_LAST = {};
   function syncSecs(tab) {
     var sec = TAB_SEC[tab] || "dinero"; SEC_LAST[sec] = tab;
@@ -909,6 +938,7 @@
     try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
     if (b.getAttribute("data-tab") === "historico" && S.histDays !== undefined) renderHistorico(); // los gráficos necesitan el ancho visible
     if (b.getAttribute("data-tab") === "historico") loadVentasHora();
+    if (b.getAttribute("data-tab") === "gastos") loadFacturas();
     if (b.getAttribute("data-tab") === "avisos") loadAvisos();
   });
   try { var t0 = sessionStorage.getItem("gestion-tab"); var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio"); } catch (e) { syncSecs("inicio"); }
@@ -1468,6 +1498,8 @@
     $("sIva").value = num(st.iva_pct != null ? st.iva_pct : 16);
     $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
     $("sPm").value = num(st.fee_pago_movil); $("sTol").value = num(st.late_tolerance_min != null ? st.late_tolerance_min : 5); $("sOt").value = num(st.overtime_factor != null ? st.overtime_factor : 1.5); $("sMails").value = st.report_emails || "";
+    document.querySelectorAll(".alertset").forEach(function (x) { x.hidden = st.alert_emails === undefined; });
+    $("sAlerts").value = st.alert_emails || ""; $("sAlertDiff").value = st.alert_cash_diff != null ? num(st.alert_cash_diff) : 10;
   }
   function saleForm(d) {
     var ym = $("salesMonth").value || ymNow(), items = d ? (S.itemsByMonth[ym] || []).filter(function (i) { return i.sale_date === d.sale_date; }) : [];
@@ -1499,6 +1531,11 @@
       var bad = mails.filter(function (m) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
       if (bad.length) return toast("Correo no válido: " + bad[0]);
       patch.report_emails = mails.join(", ");
+    }
+    if (S.settings.alert_emails !== undefined) {
+      var am = $("sAlerts").value.split(/[,;\s]+/).filter(Boolean), abad = am.filter(function (m) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m); });
+      if (abad.length) return toast("Correo no válido: " + abad[0]);
+      patch.alert_emails = am.join(", "); patch.alert_cash_diff = Math.max(0, num($("sAlertDiff").value));
     }
     if (patch.service_staff_pct > 100) return toast("El % del personal no puede pasar de 100");
     q(sb.from("gestion_settings").update(patch).eq("id", 1)).then(function () { toast("Ajustes guardados"); return refresh(); }).catch(fail);
@@ -1937,6 +1974,105 @@
     }
     renderHistTop();
   }
+
+  // ---- Promociones programadas: Gestión las crea; la caja las aplica sola (pos_add) y la carta las anuncia
+  var DOWS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+  function promoDays(d) { var a = (d || []).slice().sort(); return a.length === 7 ? "Todos los días" : a.map(function (x) { return DOWS[x - 1]; }).join(" · "); }
+  function promoHora(t) { var h = Number(String(t).slice(0, 2)), m = String(t).slice(3, 5); return (h % 12 || 12) + ":" + m + (h < 12 ? " a. m." : " p. m."); }
+  function promoTargets(p) {
+    var c = (p.category_ids || []).map(function (id) { var x = S.cats.find(function (k) { return k.id === id; }); return x ? x.name : null; }).filter(Boolean);
+    var d = (p.dish_ids || []).map(function (id) { var x = S.dishes.find(function (k) { return k.id === id; }); return x ? x.name : null; }).filter(Boolean);
+    return c.concat(d).join(", ") || "—";
+  }
+  function promoState(p) {
+    var now = new Date(Date.now() - 4 * 3600e3), hoy = now.toISOString().slice(0, 10), hm = now.toISOString().slice(11, 16), dow = (now.getUTCDay() + 6) % 7 + 1;
+    if (!p.active) return '<span class="pill">Pausada</span>';
+    if (p.date_to && p.date_to < hoy) return '<span class="pill">Terminó</span>';
+    if (p.date_from && p.date_from > hoy) return '<span class="pill warn">Empieza el ' + dmy(p.date_from) + "</span>";
+    if ((p.days || []).indexOf(dow) >= 0 && hm >= String(p.start_time).slice(0, 5) && hm < String(p.end_time).slice(0, 5)) return '<span class="pill ok">Ahora</span>';
+    return '<span class="pill">Activa</span>';
+  }
+  function renderPromos() {
+    if (S.promos === null || S.promos === undefined) { $("promoList").innerHTML = '<div class="empty">Para usar promociones, ejecuta supabase/promos.sql en Supabase (después de pos.sql).</div>'; return; }
+    if (!S.promos.length) { $("promoList").innerHTML = '<div class="empty">Todavía no hay promociones. Pulsa «+ Promoción» (por ejemplo, Happy hour: 20 % menos en ramen de lunes a jueves, de 3 a 6 p. m.).</div>'; return; }
+    $("promoList").innerHTML = '<table class="tbl"><thead><tr><th>Promoción</th><th class="n">Descuento</th><th>Días y horario</th><th class="hide-sm">Aplica a</th><th>Estado</th></tr></thead><tbody>' +
+      S.promos.map(function (p) {
+        return '<tr class="click" data-promo="' + p.id + '"><td><b>' + esc(p.name) + "</b>" + (p.date_from || p.date_to ? '<div class="muted">' + (p.date_from ? "del " + dmy(p.date_from) : "") + (p.date_to ? " al " + dmy(p.date_to) : "") + "</div>" : "") +
+          '</td><td class="n">' + nf2.format(num(p.percent)).replace(/,00$/, "") + ' %</td><td>' + promoDays(p.days) + "<br>" + promoHora(p.start_time) + " a " + promoHora(p.end_time) +
+          '</td><td class="hide-sm">' + esc(promoTargets(p)) + "</td><td>" + promoState(p) + "</td></tr>";
+      }).join("") + "</tbody></table>";
+  }
+  function promoForm(p) {
+    p = p || { name: "", percent: 20, days: [1, 2, 3, 4, 5, 6, 7], start_time: "15:00", end_time: "18:00", date_from: "", date_to: "", dish_ids: [], category_ids: [], active: true };
+    var extra = '<div style="margin-top:10px"><label>Días</label><div class="chipsel" id="prDays">' + DOWS.map(function (n, i) {
+        return '<label><input type="checkbox" value="' + (i + 1) + '"' + ((p.days || []).indexOf(i + 1) >= 0 ? " checked" : "") + "> " + n + "</label>"; }).join("") + "</div></div>" +
+      '<div style="margin-top:10px"><label>Aplica a categorías completas</label><div class="chipsel" id="prCats">' + S.cats.map(function (c) {
+        return '<label><input type="checkbox" value="' + c.id + '"' + ((p.category_ids || []).indexOf(c.id) >= 0 ? " checked" : "") + "> " + esc(c.name) + "</label>"; }).join("") + "</div></div>" +
+      '<div style="margin-top:10px"><label for="prDishQ">…o a platos sueltos</label><input type="search" id="prDishQ" placeholder="Buscar plato"><div class="prdishes" id="prDishes">' + S.dishes.map(function (d) {
+        return '<label data-n="' + esc(d.name.toLowerCase()) + '"><input type="checkbox" value="' + d.id + '"' + ((p.dish_ids || []).indexOf(d.id) >= 0 ? " checked" : "") + "> " + esc(d.name) + "</label>"; }).join("") + "</div></div>";
+    function picked(id) { return Array.prototype.map.call(document.querySelectorAll("#" + id + " input:checked"), function (i) { return Number(i.value); }); }
+    openForm({ title: p.id ? "Editar promoción" : "Nueva promoción",
+      fields: [{ k: "name", label: "Nombre (sale en la carta y en el ticket)", req: true, full: true, ph: "Happy hour" }, { k: "percent", label: "Descuento (%)", step: "1", hint: "De 1 a 90" },
+               { k: "active", label: "Activa", type: "check" }, { k: "start_time", label: "Desde (hora)", type: "time" }, { k: "end_time", label: "Hasta (hora)", type: "time" },
+               { k: "date_from", label: "Desde la fecha (opcional)", type: "date" }, { k: "date_to", label: "Hasta la fecha (opcional)", type: "date" }],
+      values: { name: p.name, percent: p.percent, active: p.active !== false, start_time: String(p.start_time).slice(0, 5), end_time: String(p.end_time).slice(0, 5), date_from: p.date_from || "", date_to: p.date_to || "" },
+      extra: extra,
+      onInput: function (e) {
+        if (!e || e.target.id !== "prDishQ") return;
+        var t = e.target.value.trim().toLowerCase();
+        document.querySelectorAll("#prDishes label").forEach(function (l) { l.hidden = !!t && l.dataset.n.indexOf(t) < 0; });
+      },
+      validate: function (v) {
+        if (v.name.length < 2) return "Escribe el nombre de la promoción.";
+        if (!(v.percent >= 1 && v.percent <= 90)) return "El descuento va de 1 % a 90 %.";
+        if (!v.start_time || !v.end_time || v.end_time <= v.start_time) return "La hora de fin debe ser después de la de inicio.";
+        if (!picked("prDays").length) return "Elige al menos un día.";
+        if (!picked("prCats").length && !picked("prDishes").length) return "Elige las categorías o los platos de la promoción.";
+        if (v.date_from && v.date_to && v.date_to < v.date_from) return "La fecha final va después de la inicial.";
+      },
+      onSave: function (v) {
+        return q(sb.rpc("gestion_promo_guardar", { p: { id: p.id || null, name: v.name, percent: v.percent, active: v.active, start_time: v.start_time, end_time: v.end_time,
+          date_from: v.date_from || null, date_to: v.date_to || null, days: picked("prDays"), category_ids: picked("prCats"), dish_ids: picked("prDishes") } }));
+      },
+      onDelete: p.id ? function () { return q(sb.rpc("gestion_promo_borrar", { p_id: p.id })); } : null });
+  }
+  $("addPromo").addEventListener("click", function () { promoForm(null); });
+  $("promoList").addEventListener("click", function (e) { var tr = e.target.closest("[data-promo]"); if (!tr) return; promoForm(S.promos.find(function (x) { return x.id === Number(tr.dataset.promo); })); });
+
+  // ---- Facturas de la caja: fotos de salidas de caja y mercancía (bucket privado; se ven con un enlace de 5 minutos)
+  function loadFacturas() {
+    if (!mfaOk) return;
+    q(sb.rpc("gestion_facturas", { p_days: num($("facDays").value) || 30 })).then(drawFacturas).catch(function (e) {
+      $("facList").innerHTML = '<div class="empty">' + (/gestion_facturas|schema cache|function/i.test(String(e.message || e)) ? "Para ver las facturas, ejecuta supabase/facturas.sql en Supabase." : "No se pudo cargar: " + esc(e.message || e)) + "</div>";
+    });
+  }
+  function facWhen(t) { return new Date(t).toLocaleString("es-VE", { timeZone: "America/Caracas", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+  function facWhat(f) {
+    var d = f.detalle || {};
+    return f.kind === "salida" ? esc(d.motivo || "") + " · " + (d.metodo === "efectivo_bs" ? "Bs " : "$ ") + nf2.format(num(d.monto))
+      : (d.insumos || []).map(function (x) { return esc(x.nombre) + " " + nf3.format(num(x.cantidad)) + " " + esc(x.unidad || ""); }).join(" · ") || "Mercancía";
+  }
+  var FACS = [];
+  function drawFacturas(list) {
+    FACS = list || [];
+    if (!FACS.length) { $("facList").innerHTML = '<div class="empty">No hay fotos de facturas en este período.</div>'; return; }
+    $("facList").innerHTML = '<table class="tbl"><thead><tr><th>Fecha</th><th>Qué</th><th>Detalle</th><th class="hide-sm">Quién</th><th></th></tr></thead><tbody>' + FACS.map(function (f, i) {
+      return "<tr><td>" + facWhen(f.at) + "</td><td>" + (f.kind === "salida" ? "Salida de caja" : "Llegó mercancía") + "</td><td>" + facWhat(f) + '</td><td class="hide-sm">' + esc(f.por || "") +
+        '</td><td><button type="button" class="small" data-fac="' + i + '">Ver foto</button></td></tr>';
+    }).join("") + "</tbody></table>";
+  }
+  $("facDays").addEventListener("change", loadFacturas);
+  $("facList").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-fac]"); if (!b) return;
+    var f = FACS[Number(b.dataset.fac)]; if (!f) return;
+    b.disabled = true;
+    sb.storage.from("facturas").createSignedUrl(f.path, 300).then(function (r) {
+      b.disabled = false; if (r.error) throw r.error;
+      $("facTitle").textContent = (f.kind === "salida" ? "Salida de caja" : "Llegó mercancía") + " · " + facWhen(f.at) + (f.por ? " · " + f.por : "");
+      $("facImg").src = r.data.signedUrl; $("facOpen").href = r.data.signedUrl; $("facDlg").showModal();
+    }).catch(function (err) { b.disabled = false; fail(err); });
+  });
+  $("facClose").addEventListener("click", function () { $("facDlg").close(); $("facImg").removeAttribute("src"); });
 
   // ---- Ventas por hora y día (pedidos cobrados en la caja): para decidir horarios y cuánta gente poner por turno
   var VH = { weeks: 8, data: null };

@@ -37,15 +37,17 @@ function drawMenu() {
     : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
     var img = d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>";
-    return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
-      "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span></span></button>";
+    var pr = d.available && promoOf(d);
+    return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
+      "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span>" +
+      (pr ? '<em class="promo">' + esc(promoTxt(pr)) + "</em>" : "") + "</span></button>";
   }).join("") || '<p class="muted">Sin resultados.</p>';
 }
 $("search").addEventListener("input", drawMenu);
 $("cats").addEventListener("click", function (e) { var b = e.target.closest("[data-cat]"); if (!b) return; cur.cat = b.dataset.cat === "top" ? "top" : Number(b.dataset.cat); $("search").value = ""; drawMenu(); });
 // Los platos más pedidos (últimos 30 días): se piden al entrar y cada 10 minutos
 function loadTopDishes() { q(sb.rpc("pos_top_dishes", { p_days: 30 })).then(function (ids) { MENU.top = ids || []; if (cur.order) drawMenu(); }).catch(function () { /* sin la lista: la carta funciona igual */ }); }
-setInterval(function () { if (U) loadTopDishes(); }, 600000);
+setInterval(function () { if (U) { loadTopDishes(); loadPromos(); } }, 600000);
 // «Más opciones»: dividir, descuento, mover y anular, plegados para que no estorben ni se toquen sin querer
 function moreOpen(on) { $("moreBox").classList.toggle("hidden", !on); $("moreBtn").setAttribute("aria-expanded", on ? "true" : "false"); $("moreBtn").classList.toggle("on", !!on); }
 $("moreBtn").addEventListener("click", function () {
@@ -87,7 +89,7 @@ function pickDish(d) {
   pick = { dish: d, variant: "", option: "", qty: 1 };
   var vs = variantsOf(d), ops = d.options || [];
   $("dishTitle").textContent = d.name;
-  $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(num(v.price)) + "</button>"; }).join("") + "</div>" : "";
+  $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño' + (promoOf(d) ? " · " + esc(promoTxt(promoOf(d))) : "") + '</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(promoPrice(d, num(v.price))) + "</button>"; }).join("") + "</div>" : "";
   $("dishOptions").innerHTML = ops.length ? '<div class="muted">Elige una opción</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
   if (vs && vs.length === 1) pick.variant = vs[0].label;
   $("qVal").textContent = "1"; $("dishNote").value = ""; markPick();
@@ -132,13 +134,13 @@ function drawTicket() {
   d.items.forEach(function (i) {
     var cls = i.status === "anulado" ? "void" : "click";
     h += '<div class="line ' + cls + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
-      (i.option ? "<small>" + esc(i.option) + "</small>" : "") + (i.notes ? "<small>» " + esc(i.notes) + "</small>" : "") +
+      (i.option ? "<small>" + esc(i.option) + "</small>" : "") + (i.notes ? "<small>» " + esc(i.notes) + "</small>" : "") + (i.promo ? '<small class="promo">' + esc(i.promo) + "</small>" : "") +
       (i.status === "anulado" ? "<small>Anulado: " + esc(i.void_reason) + "</small>" : i.status === "pendiente" ? "<small>sin enviar</small>" : "") +
       '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + personDots(d, i) + "</span></div>";
   });
   cur.cart.forEach(function (c, ix) {
     h += '<div class="line new" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
-      (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + '<small>nuevo, sin enviar · toca para ' + (c.notes ? "cambiar la nota" : "agregar nota") + '</small></span><span class="p">' +
+      (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + (promoOf(c.dish) ? '<small class="promo">' + esc(promoTxt(promoOf(c.dish))) + "</small>" : "") + '<small>nuevo, sin enviar · toca para ' + (c.notes ? "cambiar la nota" : "agregar nota") + '</small></span><span class="p">' +
       ref(c.qty * priceOf(c.dish, c.variant)) + "</span></div>";
   });
   $("lines").innerHTML = h || '<p class="emptyline">Sin platos todavía.<br>Elige de la carta.</p>';

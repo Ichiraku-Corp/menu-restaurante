@@ -19,6 +19,7 @@ function table(head, rows, right) {
 }
 function reportHtml(d) {
   if (d && d.kind === "semanal") return weekHtml(d);
+  if (d && d.kind === "alerta") return alertHtml(d);
   const prev = d.preview ? `<p style="background:#fff4d6;border:1px solid #e9b949;border-radius:8px;padding:8px 10px;margin:0 0 12px"><b>Vista previa</b> · todavía no se ha cerrado la caja. Se enviará a: ${he(d.recipients || "(sin correos configurados)")}</p>` : "";
   const s = d.session || {}, t = d.totals || {}, exp = s.expected || {}, cnt = s.counted || {};
   const H = (x) => `<h2 style="font-size:17px;margin:22px 0 4px;color:#e5206b">${x}</h2>`;
@@ -103,9 +104,21 @@ ${H("Control")}${table([], [["Platos anulados", fq((d.voids || {}).count) + " ·
 <p style="color:#777;font-size:12px;margin-top:24px">Enviado automáticamente cada lunes por el sistema de ventas de Ichiraku. Precios con IVA incluido.</p></div>`;
 }
 
-  const api = { reportHtml: reportHtml, weekHtml: weekHtml, weekSubject: weekSubject };
+// Alertas al correo del dueño (cierre que no cuadra, anulados, descuentos grandes, laptop sin conexión)
+function alertSubject(d) { return "⚠ " + String((d && d.titulo) || "Alerta de la caja"); }
+function alertHtml(d) {
+  const lines = (d.lineas || []).map((x) => `<li style="margin:4px 0">${he(x)}</li>`).join("");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#222">
+<h1 style="font-size:20px;margin:0 0 6px;color:#b3261e">⚠ ${he(d.titulo)}</h1>
+<p style="margin:0 0 12px;color:#555">${hh(d.at)} · Ichiraku Ramen</p>
+${lines ? `<ul style="padding-left:20px;margin:0 0 16px;font-size:15px">${lines}</ul>` : ""}
+<p style="color:#777;font-size:12px;margin-top:20px">Alerta automática del sistema de ventas. A quién le llega y desde cuánto avisa un cierre que no cuadra se cambia en Gestión → Dinero → Ventas (Ajustes).</p></div>`;
+}
+
+  const api = { reportHtml: reportHtml, weekHtml: weekHtml, weekSubject: weekSubject, alertHtml: alertHtml, alertSubject: alertSubject };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.IchirakuReporte = api;
 })(typeof window !== "undefined" ? window : this);
 
 export const reportHtml = module.exports.reportHtml;
 export const weekSubject = module.exports.weekSubject;
+export const alertSubject = module.exports.alertSubject;

@@ -408,6 +408,9 @@ function reportSubject(d) {
   if (d && d.kind === "semanal") {
     try { return require(path.join(DIR, "app", "reporte-cierre.js")).weekSubject(d); } catch (e) { return "Resumen semanal Ichiraku"; }
   }
+  if (d && d.kind === "alerta") {
+    try { return require(path.join(DIR, "app", "reporte-cierre.js")).alertSubject(d); } catch (e) { return "⚠ " + (d.titulo || "Alerta de la caja"); }
+  }
   const s = (d && d.session) || {};
   return `Cierre de caja ${hh(s.closed_at)} · Ref ${fm(d && d.totals && d.totals.total)}`;
 }
@@ -423,7 +426,7 @@ async function sendReports() {
         if (!to.length) throw new Error("Sin destinatarios");
         await smtpSend(cfg.correo, to, reportSubject(r.data), reportHtml(r.data));
         await rpc("pos_report_done", { p_id: r.id, p_ok: true });
-        log(`${r.data && r.data.kind === "semanal" ? "Resumen semanal" : "Cierre"} enviado por correo a ${to.join(", ")}`);
+        log(`${r.data && r.data.kind === "semanal" ? "Resumen semanal" : r.data && r.data.kind === "alerta" ? "Alerta" : "Cierre"} enviado por correo a ${to.join(", ")}`);
       } catch (e) {
         await rpc("pos_report_done", { p_id: r.id, p_ok: false, p_error: e.message }).catch(() => {});
         log("ERROR al enviar el cierre por correo: " + e.message);

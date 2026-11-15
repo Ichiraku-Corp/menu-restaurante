@@ -13,20 +13,20 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=6ed2159d24">
+<link rel="stylesheet" href="pos.css?v=32039d9044">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos-base.js?v=eee5b5dee1" defer></script>
-<script src="pos-acceso.js?v=0933d2fa3c" defer></script>
-<script src="pos-mesas.js?v=b855ed80b7" defer></script>
-<script src="pos-pedido.js?v=1bcdc46882" defer></script>
+<script src="reporte-cierre.js?v=60390cb61b"></script>
+<script src="pos-base.js?v=3b7c33de0b" defer></script>
+<script src="pos-acceso.js?v=b4f0762537" defer></script>
+<script src="pos-mesas.js?v=a7acc2e318" defer></script>
+<script src="pos-pedido.js?v=599b078690" defer></script>
 <script src="pos-cobro.js?v=7fd009d0e2" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=2d61ba0b3f" defer></script>
-<script src="pos-caja.js?v=4f0ab85fc1" defer></script>
+<script src="pos-caja.js?v=a9f8ef97e9" defer></script>
 </head>
 <body>
 <header>
@@ -141,6 +141,16 @@
   <input id="askInput">
   <p id="askErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between" style="margin-top:10px"><button type="button" id="askCancel">Cancelar</button><button type="button" class="primary" id="askOk">Aceptar</button></div>
+</dialog>
+
+<!-- Foto de la factura (salida de caja o mercancía que llegó) -->
+<dialog id="photoDlg">
+  <h2 id="photoTitle">Foto de la factura</h2>
+  <p class="muted" id="photoHelp">Tómale una foto a la factura o al recibo. Solo la ve el dueño, en Gestión.</p>
+  <img id="photoPrev" alt="Foto de la factura" hidden>
+  <label class="filebtn" id="photoPick"><input type="file" id="photoFile" accept="image/*" capture="environment"><span id="photoPickTxt"></span></label>
+  <p id="photoErr" class="muted" style="color:var(--danger)"></p>
+  <div class="row between" style="margin-top:10px"><button type="button" id="photoSkip">Seguir sin foto</button><button type="button" class="primary" id="photoOk" disabled>Usar esta foto</button></div>
 </dialog>
 
 <!-- Mover mesa -->

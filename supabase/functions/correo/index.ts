@@ -5,7 +5,7 @@
 // y opcionales SMTP_FROM, SMTP_FROM_NAME. Sin ellas no hace nada y la laptop sigue enviando.
 // Se publica con verify_jwt = false: llamarla solo hace salir lo pendiente hacia los correos ya configurados.
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
-import { reportHtml, weekSubject } from "./reporte.js";
+import { alertSubject, reportHtml, weekSubject } from "./reporte.js";
 
 export type Smtp = { host: string; port: number; user: string; password: string; from: string; from_name: string };
 type Conn = { read(p: Uint8Array): Promise<number | null>; write(p: Uint8Array): Promise<number>; close(): void };
@@ -56,6 +56,7 @@ const hh = (t: string) => (t ? new Date(t).toLocaleString("es-VE", { timeZone: "
 // deno-lint-ignore no-explicit-any
 export function subjectOf(d: any) {
   if (d && d.kind === "semanal") return weekSubject(d);
+  if (d && d.kind === "alerta") return alertSubject(d);
   const s = (d && d.session) || {};
   return `Cierre de caja ${hh(s.closed_at)} · Ref ${fm(d && d.totals && d.totals.total)}`;
 }

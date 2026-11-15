@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-iwhXOAl9wczXbUl0IP38GD0imDE8gqbxHk0c/O411iI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-KXR9J7zpo3wqmRWYiAvqZCcHr9LCmKfO4ym7ibhAmkQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -96,6 +96,12 @@
     background: var(--sky); color: #fff; font-weight: 800; font-size: 14px; display: grid; place-items: center;
     box-shadow: 0 0 0 2px #fff; }
   .chip.tag { background: #fff1d6; color: #9a5a00; }
+  .chip.promo { background: var(--pink); color: #fff; }
+  .price s { opacity: .75; font-weight: 500; margin-right: 2px; }
+  .promobar { max-width: 720px; margin: 12px auto 0; padding: 0 16px; display: grid; gap: 8px; }
+  .promobar div { background: #fff; border: 2px solid var(--pink); border-radius: 14px; padding: 10px 14px; font-size: 14px; color: var(--text); }
+  .promobar b { color: var(--pink); }
+  .promobar .now { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--pink); color: #fff; font-size: 12px; font-weight: 800; }
   /* Barra del pedido */
   body.has-order main { padding-bottom: 96px; }
   .orderbar { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 10;
@@ -189,6 +195,7 @@
   <p id="tagline"></p>
   <p class="tasa" id="tasa" hidden></p>
 </header>
+<div class="promobar" id="promoBar" hidden></div>
 <nav aria-label="Categorías"><ul id="nav"></ul>
   <div class="search"><input id="q" type="search" placeholder="Buscar plato, sabor…" aria-label="Buscar en el menú" autocomplete="off" enterkeyhint="search"></div>
 </nav>
@@ -286,11 +293,41 @@
   var RATE = null;
   // En bolívares enteros (con la tasa sobre Bs 1.000 los céntimos no dicen nada y así cabe al lado del precio)
   function bsFmt(ref) { return "Bs " + Math.round(ref * RATE).toLocaleString("es-VE", { maximumFractionDigits: 0 }); }
-  // Cada precio en Ref y, con la tasa del día, su equivalente en Bs al lado
+  // Promociones de hoy (Gestión): valen en su horario (hora de Venezuela); la caja cobra lo mismo
+  var PROMOS = [];
+  function hhmm() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(11, 16); }
+  function hoyVE() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10); }
+  function promoOf(d) {
+    var t = hhmm(), best = null;
+    PROMOS.forEach(function (p) {
+      if (t < p.start || t >= p.end) return;
+      if ((p.dish_ids || []).indexOf(d.id) < 0 && (p.category_ids || []).indexOf(d.category_id) < 0) return;
+      if (!best || Number(p.percent) > Number(best.percent)) best = p;
+    });
+    return best;
+  }
+  function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(base * (1 - Number(p.percent) / 100) * 100) / 100 : base; }
+  function pct(n) { return String(Math.round(Number(n) * 100) / 100).replace(".", ","); }
+  function hora12(t) { var h = Number(t.slice(0, 2)); return (h % 12 || 12) + ":" + t.slice(3, 5) + (h < 12 ? " a. m." : " p. m."); }
+  function showPromos(data) {
+    PROMOS = data.promos_dia === hoyVE() && Array.isArray(data.promos) ? data.promos : [];
+    var t = hhmm(), list = PROMOS.filter(function (p) { return t < p.end; }), names = function (p) {
+      var c = (p.category_ids || []).map(function (id) { var x = (data.categories || []).find(function (k) { return k.id === id; }); return x && x.name; }).filter(Boolean);
+      var d = (p.dish_ids || []).map(function (id) { var x = (data.dishes || []).find(function (k) { return k.id === id; }); return x && x.name; }).filter(Boolean);
+      return c.concat(d).join(", ");
+    };
+    $("promoBar").hidden = !list.length;
+    $("promoBar").innerHTML = list.map(function (p) {
+      return "<div><b>" + esc(p.name) + "</b>: " + pct(p.percent) + " % menos en " + esc(names(p) || "platos seleccionados") + " · hoy de " + hora12(p.start) + " a " + hora12(p.end) +
+        (t >= p.start ? '<span class="now">¡Ahora!</span>' : "") + "</div>";
+    }).join("");
+  }
+  // Cada precio en Ref y, con la tasa del día, su equivalente en Bs al lado (con la promoción, si la hay)
   function priceHtml(d) {
     var v = variants(d), bsRow = !!RATE && d.available;
-    var one = function (label, price) {
-      var chip = '<span class="price">' + (label ? "<b>" + esc(label) + "</b>" : "") + esc(fmt(price)) + "</span>";
+    var one = function (label, base) {
+      var price = d.available ? promoPrice(d, base) : base;
+      var chip = '<span class="price">' + (label ? "<b>" + esc(label) + "</b>" : "") + (price !== base ? "<s>" + esc(fmt(base)) + "</s> " : "") + esc(fmt(price)) + "</span>";
       return bsRow ? '<span class="prow">' + chip + '<span class="pbs">' + esc(bsFmt(price)) + "</span></span>" : chip;
     };
     if (!v.length) return one("", Number(d.price) || 0);
@@ -298,8 +335,8 @@
   }
   function unitPrice(d, label) {
     var v = variants(d);
-    if (!v.length) return Number(d.price) || 0;
-    for (var k = 0; k < v.length; k++) if (v[k].label === label) return Number(v[k].price) || 0;
+    if (!v.length) return promoPrice(d, Number(d.price) || 0);
+    for (var k = 0; k < v.length; k++) if (v[k].label === label) return promoPrice(d, Number(v[k].price) || 0);
     return null;
   }
 
@@ -316,7 +353,7 @@
       RATE.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " por 1 €";
   }
   function render(data) {
-    showTasa(data.tasa);
+    showTasa(data.tasa); showPromos(data);
     DISHES = {};
     var cats = (data.categories || []).slice().sort(function (a, b) { return a.position - b.position; });
     var byCat = {};
@@ -344,7 +381,8 @@
           '<div class="info"><h3>' + esc(d.name) +
           (d.subtitle ? '<span class="jp" lang="ja">' + esc(d.subtitle) + "</span>" : "") + "</h3>" +
           (d.description ? "<p>" + esc(d.description) + "</p>" : "") +
-          ((opts.length || tags.length) ? '<div class="chips">' +
+          ((opts.length || tags.length || (d.available && promoOf(d))) ? '<div class="chips">' +
+            (d.available && promoOf(d) ? '<span class="chip promo">' + esc(promoOf(d).name) + " -" + pct(promoOf(d).percent) + " %</span>" : "") +
             tags.map(tagHtml).join("") +
             opts.map(function (t) { return '<span class="chip">' + esc(t) + "</span>"; }).join("") + "</div>" : "") +
           // Precios (en Ref y su equivalente en Bs) y el «+» a la derecha
@@ -572,7 +610,7 @@
       (d.description ? '<p class="desc">' + esc(d.description) + "</p>" : "") +
       (v.length > 1 ? "<h4>Tamaño</h4><div class=\"pills\">" + v.map(function (x, i) {
         return '<label><input type="radio" name="v" value="' + esc(x.label) + '"' + (i === 0 ? " checked" : "") + "><span>" +
-          esc(x.label) + "<small>" + esc(fmt(Number(x.price) || 0)) + "</small></span></label>";
+          esc(x.label) + "<small>" + esc(fmt(promoPrice(d, Number(x.price) || 0))) + "</small></span></label>";
       }).join("") + "</div>" : (v.length === 1 ? '<input type="radio" name="v" value="' + esc(v[0].label) + '" checked hidden>' : "")) +
       (opts.length ? "<h4>" + (opts.length > 1 ? "Elige una opción" : "Opción") + "</h4><div class=\"pills\">" + opts.map(function (o) {
         return '<label><input type="radio" name="o" value="' + esc(o) + '"' + (opts.length === 1 ? " checked" : "") + "><span>" + esc(o) + "</span></label>";
@@ -638,16 +676,18 @@
     // La tasa del día para mostrar también los precios en bolívares (si no llega, la carta sale igual en Ref)
     var tasa = fetch(base + "rpc/menu_tasa", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, h), body: "{}" })
       .then(function (x) { return x.ok ? x.json() : null; }).catch(function () { return null; });
+    var promos = fetch(base + "rpc/menu_promos", { method: "POST", headers: Object.assign({ "Content-Type": "application/json" }, h), body: "{}" })
+      .then(function (x) { return x.ok ? x.json() : []; }).catch(function () { return []; });
     return Promise.all([
       fetchJson(base + "categories?select=id,name,subtitle,position&order=position", h),
       fetchJson(base + "dishes?select=id,category_id,name,subtitle,description,price,variants,options,photo_url,tags,available,position&order=position", h),
-      tasa
+      tasa, promos
     ]).then(function (r) {
       // Los productos «solo-caja» (envases y bolsa para llevar) no salen en la carta pública
       var dishes = r[1].filter(function (d) { return (d.tags || []).indexOf("solo-caja") < 0; });
       var cats = r[0].filter(function (c) { return dishes.some(function (d) { return d.category_id === c.id; }); });
       var t = r[2] && Number(r[2].rate) > 0 ? { rate: Number(r[2].rate), date: r[2].date || "" } : null;
-      return { categories: cats, dishes: dishes, tasa: t };
+      return { categories: cats, dishes: dishes, tasa: t, promos: Array.isArray(r[3]) ? r[3] : [], promos_dia: hoyVE() };
     });
   }
 

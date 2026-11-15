@@ -277,7 +277,14 @@ function cashOut() {
       if (cur2 === null) return; var method = /bs/i.test(cur2) ? "efectivo_bs" : "efectivo_usd";
       ask({ title: "Motivo de la salida", help: "Ej.: Pago delivery semanal, compra de hielo, adelanto a Héctor.", value: "" }).then(function (why) {
         if (why === null) return;
-        rpc("pos_cash_out", { p_method: method, p_amount: num(a), p_reason: why }).then(function () { toast("Salida registrada"); openCash(); }).catch(fail);
+        askPhoto("Foto de la factura o recibo").then(function (ph) {
+          if (ph === null) return; // canceló
+          uploadFactura(ph).then(function (path) {
+            if (path === null) return;
+            var args = { p_method: method, p_amount: num(a), p_reason: why }; if (path) args.p_photo = path;
+            rpc("pos_cash_out", args).then(function () { toast(path ? "Salida registrada con su foto" : "Salida registrada"); openCash(); }).catch(fail);
+          });
+        });
       });
     });
   });
@@ -343,7 +350,9 @@ function openPurchase() {
     invRows = rows || []; listMode = "compra"; $("listTitle").textContent = "Llegó mercancía";
     $("listHelp").textContent = invRows.length ? "Escribe cuánto llegó de cada producto (en su unidad). Se suma al inventario y lo agotado vuelve solo a la carta." : "Todavía no hay productos de afuera. Se cargan en Gestión → Insumos (zona Afuera).";
     $("listSearch").value = ""; drawList();
-    $("listFoot").innerHTML = invRows.length ? '<button type="button" class="primary big" id="savePurchase" style="width:100%">Registrar lo que llegó</button>' : "";
+    buyPhoto = null;
+    $("listFoot").innerHTML = invRows.length ? '<button type="button" id="buyPhoto" style="width:100%;margin-bottom:8px">' + icon("camera") + "<span>Foto de la factura (opcional)</span></button>" +
+      '<button type="button" class="primary big" id="savePurchase" style="width:100%">Registrar lo que llegó</button>' : "";
     $("listDlg").showModal();
   }).catch(fail);
 }
@@ -371,11 +380,23 @@ $("listBody").addEventListener("click", function (e) {
   var d = MENU.dishes.find(function (x) { return x.id === Number(b.dataset.av); });
   rpc("pos_set_available", { p_dish: d.id, p_available: !d.available }).then(function () { d.available = !d.available; toast(d.name + (d.available ? " disponible" : " AGOTADO")); drawList(); drawMenu(); }).catch(fail);
 });
+var buyPhoto = null;
 $("listFoot").addEventListener("click", function (e) {
+  if (e.target.closest("#buyPhoto")) {
+    askPhoto("Foto de la factura de la mercancía").then(function (ph) {
+      if (!ph || ph.skip) return;
+      buyPhoto = ph; $("buyPhoto").innerHTML = icon("camera") + "<span>Foto lista ✓ (tocar para cambiarla)</span>"; $("buyPhoto").classList.add("on");
+    });
+    return;
+  }
   if (e.target.id === "savePurchase") {
     var items = invRows.filter(function (r) { return r._c != null && num(r._c) > 0; }).map(function (r) { return { id: r.id, qty: num(r._c) }; });
     if (!items.length) return toast("No escribiste ninguna cantidad", true);
-    rpc("pos_purchase", { p_items: items }).then(function (n) { toast("Mercancía registrada (" + n + " productos)"); $("listDlg").close(); loadMenu(); refreshState(); }).catch(fail);
+    uploadFactura(buyPhoto).then(function (path) {
+      if (path === null) return;
+      var args = { p_items: items }; if (path) args.p_photo = path;
+      rpc("pos_purchase", args).then(function (n) { buyPhoto = null; toast("Mercancía registrada (" + n + " productos)" + (path ? " con su foto" : "")); $("listDlg").close(); loadMenu(); refreshState(); }).catch(fail);
+    });
     return;
   }
   if (e.target.id !== "saveCount") return;
@@ -403,6 +424,58 @@ $("askInput").addEventListener("keydown", function (e) { if (e.key === "Enter") 
 $("askCancel").addEventListener("click", function () { askDone(null); });
 $("askDlg").addEventListener("cancel", function () { if (askResolve) { var r = askResolve; askResolve = null; r(null); } });
 
+// ---- Foto de la factura: se achica a JPG (máx. 1600 px, ~200 KB) y se sube al bucket privado «facturas».
+// askPhoto() devuelve { blob } si tomaron la foto, { skip: true } si siguen sin foto, o null si cancelan.
+var photoResolve = null, photoBlob = null;
+function askPhoto(title) {
+  photoBlob = null; $("photoTitle").textContent = title || "Foto de la factura"; $("photoErr").textContent = "";
+  var img = $("photoPrev"); img.hidden = true; img.removeAttribute("src"); $("photoOk").disabled = true; $("photoFile").value = "";
+  $("photoPickTxt").innerHTML = icon("camera") + "<span>Tomar foto</span>";
+  $("photoDlg").showModal();
+  return new Promise(function (res) { photoResolve = res; });
+}
+function photoDone(v) { var r = photoResolve; photoResolve = null; if ($("photoDlg").open) $("photoDlg").close(); if (r) r(v); }
+$("photoFile").addEventListener("change", function () {
+  var f = this.files && this.files[0]; if (!f) return;
+  $("photoErr").textContent = ""; $("photoPickTxt").textContent = "Preparando la foto…";
+  shrinkPhoto(f).then(function (b) {
+    photoBlob = b; var img = $("photoPrev"), u = URL.createObjectURL(b);
+    if (img.dataset.url) URL.revokeObjectURL(img.dataset.url);
+    img.dataset.url = u; img.src = u; img.hidden = false;
+    $("photoOk").disabled = false; $("photoPickTxt").innerHTML = icon("camera") + "<span>Tomar otra</span>";
+  }).catch(function (e) { $("photoErr").textContent = errMsg(e); $("photoPickTxt").innerHTML = icon("camera") + "<span>Tomar foto</span>"; });
+});
+$("photoOk").addEventListener("click", function () { if (photoBlob) photoDone({ blob: photoBlob }); });
+$("photoSkip").addEventListener("click", function () { photoDone({ skip: true }); });
+$("photoDlg").addEventListener("cancel", function () { if (photoResolve) { var r = photoResolve; photoResolve = null; r(null); } });
+function shrinkPhoto(file) {
+  return new Promise(function (res, rej) {
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var s = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.naturalWidth * s)); c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(function (b) { if (b) res(b); else rej(new Error("No se pudo preparar la foto")); }, "image/jpeg", 0.72);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); rej(new Error("Esa imagen no se pudo abrir. Toma la foto otra vez.")); };
+    img.src = url;
+  });
+}
+// Ruta «AAAA-MM/32 letras.jpg» (mes de Venezuela); crypto.getRandomValues funciona también en la copia de la laptop
+function newPhotoPath() {
+  var a = new Uint8Array(16); crypto.getRandomValues(a);
+  var hex = Array.prototype.map.call(a, function (x) { return (x < 16 ? "0" : "") + x.toString(16); }).join("");
+  return new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 7) + "/" + hex + ".jpg";
+}
+// Sube la foto. Devuelve la ruta, "" (sin foto) o null (canceló porque no se pudo subir)
+function uploadFactura(ph) {
+  if (!ph || ph.skip || !ph.blob) return Promise.resolve("");
+  var path = newPhotoPath();
+  return sb.storage.from("facturas").upload(path, ph.blob, { contentType: "image/jpeg", upsert: false }).then(function (r) {
+    if (r.error) throw r.error;
+    return path;
+  }).catch(function (e) { return confirm("No se pudo subir la foto (" + errMsg(e) + "). ¿Registrar sin la foto?") ? "" : null; });
+}
 function anyDialogOpen() { return Array.prototype.some.call(document.querySelectorAll("dialog"), function (d) { return d.open; }); }
 function closeDialogs() { document.querySelectorAll("dialog").forEach(function (d) { if (d.open) d.close(); }); if (askResolve) { var r = askResolve; askResolve = null; r(null); } }
 

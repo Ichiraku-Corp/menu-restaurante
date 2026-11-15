@@ -103,7 +103,7 @@ function tryPin() {
     U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
     document.body.classList.toggle("nocharge", !U.charge);
     show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-    touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); waStart();
+    touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); waStart();
   }).catch(fail);
 }
 $("btnUser").addEventListener("click", lock);

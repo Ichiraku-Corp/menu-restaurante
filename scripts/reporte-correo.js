@@ -7,7 +7,7 @@ const ROOT = path.join(__dirname, "..");
 const src = fs.readFileSync(path.join(ROOT, "reporte-cierre.js"), "utf8");
 const out = "// GENERADO por scripts/reporte-correo.js desde reporte-cierre.js: no editar a mano.\n" +
   "// deno-lint-ignore-file\n// @ts-nocheck\nconst module = { exports: {} };\n" + src +
-  "\nexport const reportHtml = module.exports.reportHtml;\nexport const weekSubject = module.exports.weekSubject;\n";
+  "\nexport const reportHtml = module.exports.reportHtml;\nexport const weekSubject = module.exports.weekSubject;\nexport const alertSubject = module.exports.alertSubject;\n";
 const dest = path.join(ROOT, "supabase", "functions", "correo", "reporte.js");
 if (process.argv.includes("--check")) {
   const cur = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : "";

@@ -496,7 +496,7 @@ begin
     'totals', (select to_jsonb(x) from public.pos_totals(o.id) x),
     'items', (select coalesce(jsonb_agg(jsonb_build_object(
                 'id', i.id, 'dish_id', i.dish_id, 'name', i.name, 'variant', i.variant, 'option', i.option, 'notes', i.notes,
-                'qty', i.qty, 'unit_price', i.unit_price, 'status', i.status, 'void_reason', i.void_reason,
+                'qty', i.qty, 'unit_price', i.unit_price, 'promo', i.promo, 'status', i.status, 'void_reason', i.void_reason,
                 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
               from public.pos_items i where i.order_id = o.id),
     'split', o.split, 'channel', o.channel,
@@ -534,9 +534,56 @@ begin
 end $$;
 
 -- p_items: [{"dish_id": 1, "variant": "Peq", "option": "Fresa", "notes": "sin cebollín", "qty": 2}]
+-- ---------------------------------------------------------------- Promociones programadas
+-- Happy hour y similares: un % menos en ciertos platos o categorías, ciertos días y horas (hora de Venezuela).
+-- La caja lo aplica sola al anotar el plato (queda en la línea, p. ej. «Happy hour -20 %») y la carta lo anuncia.
+-- Se crean en Gestión (supabase/promos.sql).
+create table if not exists public.promos (
+  id           bigint generated always as identity primary key,
+  name         text not null check (length(trim(name)) between 2 and 40),
+  percent      numeric(5,2) not null check (percent > 0 and percent <= 90),
+  days         int[] not null default '{1,2,3,4,5,6,7}' check (cardinality(days) between 1 and 7 and days <@ array[1,2,3,4,5,6,7]),
+  start_time   time not null,
+  end_time     time not null,
+  date_from    date,
+  date_to      date,
+  dish_ids     bigint[] not null default '{}',
+  category_ids bigint[] not null default '{}',
+  active       boolean not null default true,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  check (end_time > start_time),
+  check (date_to is null or date_from is null or date_to >= date_from),
+  check (cardinality(dish_ids) + cardinality(category_ids) > 0)
+);
+alter table public.promos enable row level security;
+drop policy if exists "manage promos" on public.promos;
+create policy "manage promos" on public.promos for select to authenticated using (public.can_manage());
+revoke all on public.promos from anon;
+revoke insert, update, delete, truncate on public.promos from authenticated;
+alter table public.pos_items add column if not exists promo text not null default '';
+alter table public.pos_items add column if not exists list_price numeric(10,2);
+
+-- La mejor promoción que aplica a un plato en un momento (ninguna fila si no hay)
+create or replace function public.promo_de(p_dish bigint, p_at timestamptz default now())
+returns table (id bigint, name text, percent numeric)
+language sql stable security definer set search_path = public as $$
+  select p.id, p.name, p.percent
+  from public.promos p join public.dishes d on d.id = p_dish
+  where p.active
+    and extract(isodow from p_at at time zone 'America/Caracas')::int = any (p.days)
+    and (p_at at time zone 'America/Caracas')::time >= p.start_time and (p_at at time zone 'America/Caracas')::time < p.end_time
+    and (p.date_from is null or (p_at at time zone 'America/Caracas')::date >= p.date_from)
+    and (p.date_to is null or (p_at at time zone 'America/Caracas')::date <= p.date_to)
+    and (d.id = any (p.dish_ids) or d.category_id = any (p.category_ids))
+  order by p.percent desc, p.id
+  limit 1
+$$;
+revoke execute on function public.promo_de(bigint, timestamptz) from anon, public, authenticated;
+
 create or replace function public.pos_add(p_emp bigint, p_pin text, p_order bigint, p_items jsonb)
 returns int language plpgsql security definer set search_path = public as $$
-declare it record; d record; price numeric; n int := 0;
+declare it record; d record; price numeric; n int := 0; pid bigint; pname text; ppct numeric;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if not exists (select 1 from public.pos_orders where id = p_order and status = 'abierta') then raise exception 'El pedido ya está cerrado'; end if;
@@ -551,8 +598,11 @@ begin
       select (v ->> 'price')::numeric into price from jsonb_array_elements(d.variants) v where v ->> 'label' = coalesce(it.variant, '');
       if price is null then raise exception 'Elige el tamaño de %', d.name; end if;
     end if;
-    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by)
-    values (p_order, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty, price, p_emp);
+    pid := null; select x.id, x.name, x.percent into pid, pname, ppct from public.promo_de(d.id) x;
+    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, promo, list_price)
+    values (p_order, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty,
+            case when pid is null then price else round(price * (1 - ppct / 100), 2) end, p_emp,
+            case when pid is null then '' else pname || ' -' || trim(to_char(ppct, 'FM990.##')) || ' %' end, price);
     n := n + 1;
   end loop;
   return n;
@@ -673,10 +723,11 @@ language sql stable security definer set search_path = public as $$
   select E'~^ICHIRAKU RAMEN\n~' || p_title || E'\n' || public.pos_order_label(p_order) || '   ' || public.pos_now_txt() || E'\n=\n' ||
     case when coalesce((o.split ->> 'n')::int, 0) < 2 then
     coalesce((select string_agg(public.pos_line(trim(to_char(g.q, 'FM990.##')) || ' ' || g.name ||
-                case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)), E'\n' order by g.first)
-              from (select i.name, i.variant, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
+                case when g.variant <> '' then ' ' || g.variant else '' end, public.pos_money(g.amt)) ||
+                case when g.promo <> '' then E'\n  ' || g.promo else '' end, E'\n' order by g.first)
+              from (select i.name, i.variant, i.promo, sum(i.qty) q, sum(i.qty * i.unit_price) amt, min(i.id) first
                     from public.pos_items i where i.order_id = p_order and i.status <> 'anulado'
-                    group by i.name, i.variant, i.unit_price) g), '') || E'\n=\n'
+                    group by i.name, i.variant, i.unit_price, i.promo) g), '') || E'\n=\n'
     else
     -- Cuenta dividida: una sección por persona con sus platos y lo que le toca pagar
     (select string_agg(
@@ -1171,9 +1222,28 @@ begin
 end $$;
 
 -- ---- Salidas de caja (solo efectivo) y mesas abiertas por error
-create or replace function public.pos_cash_out(p_emp bigint, p_pin text, p_method text, p_amount numeric, p_reason text)
+-- Fotos de facturas (salidas de caja y mercancía que llegó). La imagen vive en el bucket privado «facturas»
+-- (supabase/facturas.sql); aquí queda a qué corresponde. Solo el dueño las ve, en Gestión.
+create table if not exists public.pos_facturas (
+  id          bigserial primary key,
+  kind        text not null check (kind in ('salida', 'compra')),
+  path        text not null unique,
+  payment_id  bigint references public.pos_payments(id) on delete set null,
+  detail      jsonb not null default '{}'::jsonb,
+  created_by  bigint references public.employees(id),
+  session_id  bigint references public.pos_sessions(id),
+  created_at  timestamptz not null default now()
+);
+alter table public.pos_facturas enable row level security;
+revoke all on public.pos_facturas from anon, authenticated;
+-- Ruta que arma la caja: «AAAA-MM/32 letras hexadecimales.jpg» (nada más se acepta)
+create or replace function public.pos_factura_ok(p text) returns boolean
+language sql immutable set search_path = public as $$ select coalesce(p ~ '^[0-9]{4}-[0-9]{2}/[0-9a-f]{32}\.jpg$', false) $$;
+
+drop function if exists public.pos_cash_out(bigint, text, text, numeric, text);
+create or replace function public.pos_cash_out(p_emp bigint, p_pin text, p_method text, p_amount numeric, p_reason text, p_photo text default null)
 returns void language plpgsql security definer set search_path = public as $$
-declare sess bigint; rt numeric; cur text;
+declare sess bigint; rt numeric; cur text; pid bigint;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   if p_method not in ('efectivo_usd', 'efectivo_bs') then raise exception 'Las salidas de caja son solo de efectivo'; end if;
@@ -1184,10 +1254,16 @@ begin
   rt := public.pos_rate();
   cur := case when p_method = 'efectivo_usd' then 'REF' else 'BS' end;
   if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día'; end if;
+  if p_photo is not null and not public.pos_factura_ok(p_photo) then raise exception 'La foto de la factura no es válida'; end if;
   insert into public.pos_payments (order_id, method, currency, amount, amount_ref, rate, reference, created_by, session_id, device, alert_seen, cash_out_reason, verified_at, verified_how)
   values (null, p_method, cur, -round(p_amount, 2), -round(case when cur = 'REF' then p_amount else p_amount / rt end, 2), case when cur = 'BS' then rt end,
-          'salida', p_emp, sess, 'Caja', true, left(trim(p_reason), 80), now(), 'salida');
-  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'salida_caja', jsonb_build_object('metodo', p_method, 'monto', p_amount, 'motivo', trim(p_reason)));
+          'salida', p_emp, sess, 'Caja', true, left(trim(p_reason), 80), now(), 'salida')
+  returning id into pid;
+  if p_photo is not null then
+    insert into public.pos_facturas (kind, path, payment_id, detail, created_by, session_id)
+    values ('salida', p_photo, pid, jsonb_build_object('metodo', p_method, 'monto', round(p_amount, 2), 'motivo', left(trim(p_reason), 80)), p_emp, sess);
+  end if;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'salida_caja', jsonb_build_object('metodo', p_method, 'monto', p_amount, 'motivo', trim(p_reason), 'foto', p_photo is not null));
 end $$;
 -- Salir de una mesa abierta por error (sin platos ni pagos): se borra sin dejar rastro de «anulada»
 create or replace function public.pos_drop_empty(p_emp bigint, p_pin text, p_order bigint) returns boolean
@@ -1602,18 +1678,27 @@ language sql stable security definer set search_path = public as $$
   from public.ingredients where zone = 'afuera'
 $$;
 -- p_items: [{"id": 3, "qty": 24}] en la unidad de compra
-create or replace function public.pos_purchase(p_emp bigint, p_pin text, p_items jsonb) returns int
+drop function if exists public.pos_purchase(bigint, text, jsonb);
+create or replace function public.pos_purchase(p_emp bigint, p_pin text, p_items jsonb, p_photo text default null) returns int
 language plpgsql security definer set search_path = public as $$
 declare c record; n int := 0; who text;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
+  if p_photo is not null and not public.pos_factura_ok(p_photo) then raise exception 'La foto de la factura no es válida'; end if;
   select name into who from public.employees where id = p_emp;
   for c in select * from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as x(id bigint, qty numeric) loop
     if coalesce(c.qty, 0) <= 0 then continue; end if;
     perform public.register_movement(c.id::text, 'compra', c.qty, null, 'Llegó mercancía (caja)', who, 'pos');
     n := n + 1;
   end loop;
-  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'mercancia', jsonb_build_object('insumos', n));
+  if p_photo is not null then
+    insert into public.pos_facturas (kind, path, detail, created_by, session_id)
+    values ('compra', p_photo, jsonb_build_object('insumos', (
+              select coalesce(jsonb_agg(jsonb_build_object('nombre', i.name, 'cantidad', x.qty, 'unidad', i.buy_unit) order by i.name), '[]'::jsonb)
+              from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as x(id bigint, qty numeric) join public.ingredients i on i.id = x.id where x.qty > 0)),
+            p_emp, (select id from public.pos_sessions where status = 'abierta'));
+  end if;
+  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'mercancia', jsonb_build_object('insumos', n, 'foto', p_photo is not null));
   return n;
 end $$;
 -- Conteo de afuera al cerrar: arma la lista esperado/contado y (si p_apply) lo registra
@@ -1819,8 +1904,8 @@ begin
     'pos_incoming_checked(text, text)', 'pos_bridge_check(int, jsonb)', 'pos_alerts_seen(bigint, text)',
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
-    'pos_purchase(bigint, text, jsonb)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
-    'pos_cash_out(bigint, text, text, numeric, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen()', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
+    'pos_purchase(bigint, text, jsonb, text)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
+    'pos_cash_out(bigint, text, text, numeric, text, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen()', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

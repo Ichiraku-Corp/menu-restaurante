@@ -27,7 +27,7 @@
     pos_cash_out:function(a){ auth(a); window.__out=a; },
     pos_drop_empty:function(a){ auth(a); window.__drop=a.p_order; S.orders=S.orders.filter(function(o){return o.id!==a.p_order}); return true; },
     pos_outside:function(){ return [{id:3,name:'Agua (botella)',unit:'unidad',stock:4,min:6,active:true},{id:7,name:'Bolsa para llevar',unit:'unidad',stock:0,min:20,active:false}]; },
-    pos_purchase:function(a){ auth(a); window.__buy=a.p_items; return a.p_items.length; },
+    pos_purchase:function(a){ auth(a); window.__buy=a.p_items; window.__buyPhoto=a.p_photo||null; return a.p_items.length; },
     pos_tabs_list:function(){ return [{id:11,name:'Ana',full_name:'Ana Prueba',balance:50,limit:100},{id:1,name:'Mesera',full_name:'Mesera Prueba',balance:100,limit:100}]; },
     pos_tab_pay:function(a){ auth(a); window.__tabPay=a; return {paid:a.p_payments[0].amount, balance:30}; },
     pos_device_hello:function(a){ window.__hello=a; return 'Tablet 3'; },
@@ -43,8 +43,10 @@
     pos_set_split:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.split=a.p_split&&a.p_split.n>=2?a.p_split:null; window.__split=o.split; },
     pos_open:function(a){ auth(a); if(a.p_table){ var ex=S.orders.find(function(o){return o.table_id===a.p_table&&o.status==='abierta'}); if(ex) return ex.id; }
       var o={id:++id,kind:a.p_table?'mesa':'llevar',table_id:a.p_table||null,label:a.p_label||'',status:'abierta',service_pct:a.p_table?10:0,opened_at:new Date().toISOString(),opened_by_id:a.p_emp||null}; S.orders.push(o); return o.id; },
+    menu_promos:function(){ return window.__PROMOS||[]; },
     pos_add:function(a){ auth(a); a.p_items.forEach(function(it){ var d=menu.dishes.find(function(x){return x.id===it.dish_id}); var p=d.price; if(d.variants&&d.variants.length){ var v=d.variants.find(function(x){return x.label===it.variant}); if(!v) throw {message:'Elige el tamaño de '+d.name}; p=v.price; }
-      S.items.push({id:++id,order_id:a.p_order,dish_id:d.id,name:d.name,variant:it.variant||'',option:it.option||'',notes:it.notes||'',qty:it.qty,unit_price:p,status:'pendiente'}); }); return a.p_items.length; },
+      var pr=(window.__PROMOS||[]).find(function(x){return (x.dish_ids||[]).indexOf(d.id)>=0||(x.category_ids||[]).indexOf(d.category_id)>=0;}), lp=p; if(pr) p=Math.round(p*(1-pr.percent/100)*100)/100;
+      S.items.push({id:++id,order_id:a.p_order,dish_id:d.id,name:d.name,variant:it.variant||'',option:it.option||'',notes:it.notes||'',qty:it.qty,unit_price:p,list_price:lp,promo:pr?pr.name+' -'+pr.percent+' %':'',status:'pendiente'}); }); return a.p_items.length; },
     pos_send:function(a){ auth(a); var n=0; S.items.forEach(function(i){ if(i.order_id===a.p_order&&i.status==='pendiente'){i.status='enviado';i.sent_at=new Date(Date.now()-60000).toISOString();n++;} }); S.jobs.push('cocina'); return n; },
     pos_void:function(a){ auth(a); var i=S.items.find(function(x){return x.id===a.p_item}); if(i.status==='pendiente'){S.items.splice(S.items.indexOf(i),1);return 'quitado';} if((a.p_reason||'').length<3) throw {message:'Escribe el motivo'}; i.status='anulado'; i.void_reason=a.p_reason; return 'anulado'; },
     pos_discount:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.discount=a.p_amount; o.discount_reason=a.p_reason; },
@@ -74,6 +76,8 @@
   Q.prototype.then=function(res,rej){ if(window.__OFFLINE) return Promise.resolve({data:null,error:{message:'TypeError: Failed to fetch'}}).then(res,rej); var d=this.t==='categories'?menu.categories:menu.dishes; return Promise.resolve({data:JSON.parse(JSON.stringify(d)),error:null}).then(res,rej); };
   window.supabase={createClient:function(){ var cbs=[],session=null; return {
     from:function(t){return new Q(t)},
+    storage:{ from:function(b){ return { upload:function(path,blob,o){ if(window.__OFFLINE||window.__UPLOAD_FAIL) return Promise.resolve({data:null,error:{message:'Failed to fetch'}});
+      (S.uploads=S.uploads||[]).push({bucket:b,path:path,type:o&&o.contentType,size:blob&&blob.size}); return Promise.resolve({data:{path:path},error:null}); } }; } },
     functions:{ invoke:function(n,o){ (window.__invokes=window.__invokes||[]).push({fn:n,body:o&&o.body}); return Promise.resolve({data:{sent:0,failed:0},error:null}); } },
     rpc:function(n,a){ return Promise.resolve().then(function(){ if(window.__OFFLINE) return {data:null,error:{message:'TypeError: Failed to fetch'}}; try{ return {data:R[n](a||{}),error:null}; }catch(e){ return {data:null,error:e}; } }); },
     auth:{ onAuthStateChange:function(cb){cbs.push(cb); window.__authEmit=function(ev){ cbs.forEach(function(c){c(ev,session)}); }; setTimeout(function(){cb('INITIAL',session)})},

@@ -9,8 +9,25 @@ function loadMenu() {
 }
 setInterval(function () { if (U) loadMenu(); }, 60000);
 function variantsOf(d) { return Array.isArray(d.variants) && d.variants.length ? d.variants : null; }
-function priceOf(d, v) { var vs = variantsOf(d); if (!vs) return num(d.price); var x = vs.find(function (y) { return y.label === v; }); return x ? num(x.price) : num(d.price); }
-function minPrice(d) { var vs = variantsOf(d); return vs ? Math.min.apply(null, vs.map(function (v) { return num(v.price); })) : num(d.price); }
+// Promociones de hoy (se crean en Gestión). La caja muestra el precio con la promo antes de enviar; el que vale es
+// el que pone el servidor al anotar el plato (pos_add), con la misma regla.
+var PROMOS = [];
+function hhmmCaracas() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(11, 16); }
+function promoOf(d) {
+  if (!d || !PROMOS.length) return null;
+  var t = hhmmCaracas(), best = null;
+  PROMOS.forEach(function (p) {
+    if (t < p.start || t >= p.end) return;
+    if ((p.dish_ids || []).indexOf(d.id) < 0 && (p.category_ids || []).indexOf(d.category_id) < 0) return;
+    if (!best || num(p.percent) > num(best.percent)) best = p;
+  });
+  return best;
+}
+function promoTxt(p) { return p ? p.name + " -" + nf2.format(num(p.percent)).replace(/,00$/, "") + " %" : ""; }
+function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(base * (1 - num(p.percent) / 100) * 100) / 100 : base; }
+function priceOf(d, v) { var vs = variantsOf(d), x = vs && vs.find(function (y) { return y.label === v; }); return promoPrice(d, x ? num(x.price) : num(d.price)); }
+function minPrice(d) { var vs = variantsOf(d); return promoPrice(d, vs ? Math.min.apply(null, vs.map(function (v) { return num(v.price); })) : num(d.price)); }
+function loadPromos() { q(sb.rpc("menu_promos")).then(function (l) { PROMOS = l || []; if (cur.order) { drawMenu(); drawTicket(); } }).catch(function () { /* sin promociones: precios normales */ }); }
 
 // ---------------------------------------------------------------- Estado de sala
 // Indicador Internet · Laptop · Impresora: verde si funciona, rojo si no (al tocarlo explica qué pasa)

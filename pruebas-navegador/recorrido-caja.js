@@ -152,6 +152,33 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await S(() => window.__S.uni && window.__S.uni[1] === true), "la cajera anota el uniforme de quien llegó");
     await page.click("#uniClose");
     ok(await page.locator("#cashBody .banner", { hasText: "Bolívares de hoy" }).count() > 0, "recuerda los bolívares del día en la caja");
+    // Salida de caja con foto de la factura (se achica a JPG y se sube al bucket privado «facturas»)
+    const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    await page.click('#cashBody [data-ctab="tools"]'); await page.click("#cashOutBtn");
+    for (const v of ["5", "$", "Compra de hielo"]) { await page.fill("#askInput", v); await page.click("#askOk"); await page.waitForTimeout(150); }
+    ok(await page.isVisible("#photoDlg") && await page.isDisabled("#photoOk"), "después del motivo pide la foto de la factura (se puede seguir sin foto)");
+    await page.setInputFiles("#photoFile", { name: "factura.png", mimeType: "image/png", buffer: PNG });
+    await page.waitForSelector("#photoPrev:not([hidden])", { timeout: 5000 });
+    await page.click("#photoOk"); await page.waitForTimeout(400);
+    const salida = await S(() => ({ out: window.__out, up: (window.__S.uploads || []).slice(-1)[0] }));
+    ok(salida.up && salida.up.bucket === "facturas" && salida.up.type === "image/jpeg" && /^\d{4}-\d{2}\/[0-9a-f]{32}\.jpg$/.test(salida.up.path), "la foto se sube como JPG al espacio privado de facturas");
+    ok(salida.out && salida.out.p_photo === salida.up.path && salida.out.p_reason === "Compra de hielo", "la salida queda registrada con su foto");
+    // Si no se puede subir (sin internet), pregunta y registra sin la foto
+    await S(() => { window.__UPLOAD_FAIL = true; });
+    await page.click("#cashOutBtn");
+    for (const v of ["2", "$", "Propina delivery"]) { await page.fill("#askInput", v); await page.click("#askOk"); await page.waitForTimeout(150); }
+    await page.setInputFiles("#photoFile", { name: "factura.png", mimeType: "image/png", buffer: PNG });
+    await page.waitForSelector("#photoPrev:not([hidden])", { timeout: 5000 }); await page.click("#photoOk"); await page.waitForTimeout(400);
+    ok(await S(() => window.__out.p_reason === "Propina delivery" && !window.__out.p_photo), "si la foto no sube, avisa y registra la salida sin foto");
+    await S(() => { window.__UPLOAD_FAIL = false; });
+    // Mercancía con foto
+    await page.click('#cashBody [data-ctab="tools"]'); await page.click("#buyBtn"); await page.waitForSelector("#listDlg[open]");
+    await page.locator('#listBody [data-ing="3"]').fill("12");
+    await page.click("#buyPhoto"); await page.setInputFiles("#photoFile", { name: "factura.png", mimeType: "image/png", buffer: PNG });
+    await page.waitForSelector("#photoPrev:not([hidden])", { timeout: 5000 }); await page.click("#photoOk"); await page.waitForTimeout(200);
+    ok(/Foto lista/.test(await page.textContent("#buyPhoto")), "en «Llegó mercancía» se puede adjuntar la foto de la factura");
+    await page.click("#savePurchase"); await page.waitForTimeout(400);
+    ok(await S(() => /^\d{4}-\d{2}\/[0-9a-f]{32}\.jpg$/.test(window.__buyPhoto || "") && window.__buy[0].qty === 12), "la mercancía queda registrada con su foto");
     await page.click('#cashBody [data-ctab="cierre"]');
     ok(await page.isVisible('#cashBody .cnt[data-m="efectivo_usd"]') && !(await page.isVisible('#cashBody .cnt[data-m="pago_movil"]')), "el cierre empieza por el efectivo, un paso a la vez");
     ok(await page.isVisible("#cashTotalDiff") && await page.isVisible("#cstepNext"), "la diferencia y «Siguiente» quedan fijos abajo");

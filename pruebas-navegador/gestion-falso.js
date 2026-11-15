@@ -5,10 +5,11 @@
   var G = window.__G = {
     calls: [],
     tables: {
-      categories: M.categories, dishes: M.dishes, cost_areas: [], employees: [], expenses: [], suppliers: [], gestion_settings: [{ id: 1, iva_pct: 16 }],
+      categories: M.categories, dishes: M.dishes, cost_areas: [], employees: [], expenses: [], suppliers: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 10 }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
-      recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: []
+      recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
+      promos: [{ id: 1, name: "Happy hour", percent: 20, days: [1, 2, 3, 4], start_time: "15:00:00", end_time: "18:00:00", date_from: null, date_to: null, dish_ids: [], category_ids: [3], active: true }]
     }
   };
   var gy = M.dishes.find(function (d) { return d.name === "Gyozas"; });
@@ -28,6 +29,11 @@
     svc_month: function (a) { return { month: a.p_month, info: { status: "borrador", rate: 100, max_from_bonus: 40 }, service_pos: 0, tips_pos: 0, service_hist: 0, lines: [], employees: [] }; },
     perf_month: function () { return { no_data: true, people: [], rules: {} }; },
     announcements_admin: function () { return []; },
+    gestion_promo_guardar: function (a) { G.calls.push({ rpc: "gestion_promo_guardar", args: a }); return 2; },
+    gestion_promo_borrar: function (a) { G.calls.push({ rpc: "gestion_promo_borrar", args: a }); },
+    gestion_facturas: function (a) { G.calls.push({ rpc: "gestion_facturas", args: a }); var t = new Date().toISOString();
+      return [{ id: 2, kind: "compra", path: "2026-11/fedcba9876543210fedcba9876543210.jpg", at: t, por: "Cajera", detalle: { insumos: [{ nombre: "Agua (botella)", cantidad: 12, unidad: "unidad" }] } },
+              { id: 1, kind: "salida", path: "2026-11/0123456789abcdef0123456789abcdef.jpg", at: t, por: "Cajera", detalle: { motivo: "Compra de hielo", monto: 5, metodo: "efectivo_usd" } }]; },
     gestion_ventas_hora: function (a) { G.calls.push({ rpc: "gestion_ventas_hora", args: a });
       var c = [], d = new Date(Date.now() - 56 * 864e5).toISOString().slice(0, 10);
       [5, 6, 7].forEach(function (dow) { for (var h = 12; h <= 21; h++) c.push({ dow: dow, hora: h, ventas: dow === 6 && h === 13 ? 85.2 : 10 + h + dow, pedidos: dow === 6 && h === 13 ? 6.5 : 2 }); });
@@ -57,6 +63,8 @@
       mfa: { getAuthenticatorAssuranceLevel: function () { return res({ currentLevel: "aal2" }); }, listFactors: function () { return res({ totp: [] }); } }
     },
     from: builder,
+    storage: { from: function (b) { return { createSignedUrl: function (path, s) { G.calls.push({ storage: b, path: path, secs: s });
+      return res({ signedUrl: "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#eee"/><text x="20" y="200" font-size="22">Factura</text></svg>') }); } }; } },
     rpc: function (n, a) {
       return Promise.resolve().then(function () {
         if (!R[n]) return { data: null, error: { message: "función falsa no definida: " + n } };

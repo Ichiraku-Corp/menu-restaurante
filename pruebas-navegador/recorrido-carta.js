@@ -28,10 +28,11 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   await p.route("**/config.js", (r) => r.fulfill({ contentType: "application/javascript", body:
     'window.MENU_CONFIG={SUPABASE_URL:"https://krjryvtnzgwwhanmbdrn.supabase.co",SUPABASE_ANON_KEY:"anon",RESTAURANT_NAME:"Ichiraku Ramen",TAGLINE:"Ramen",PRICE_PREFIX:"Ref",CURRENCY:"USD",LOCALE:"es-VE",SERVICE_PERCENT:10,ORDER_ACTIONS:false};' }));
   // Misma dirección que la carta real, interceptada: nunca sale a internet.
-  let tasa = { rate: 100, date: hoy };
+  let tasa = { rate: 100, date: hoy }, promos = [];
   await p.route("https://krjryvtnzgwwhanmbdrn.supabase.co/**", (r) => {
     const u = r.request().url();
     if (u.includes("/rpc/menu_tasa")) return tasa ? r.fulfill({ contentType: "application/json", body: JSON.stringify(tasa) }) : r.fulfill({ status: 404, body: "" });
+    if (u.includes("/rpc/menu_promos")) return r.fulfill({ contentType: "application/json", body: JSON.stringify(promos) });
     return r.fulfill({ contentType: "application/json", body: JSON.stringify(u.includes("/categories") ? m.categories : m.dishes) });
   });
 
@@ -65,6 +66,18 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   const dm = antes(6).slice(8, 10) + "/" + antes(6).slice(5, 7);
   await p.reload(); await esperar(p, (x) => document.getElementById("tasa").textContent.includes("del " + x), dm).catch(() => {});
   ok((await p.textContent("#tasa")).startsWith("Tasa euro BCV del " + dm), "si la tasa es vieja, dice de qué día es (" + (await p.textContent("#tasa")) + ")");
+
+  // Promoción de hoy: banner arriba, precio tachado con el nuevo (y su Bs) y el total del pedido con la promo
+  promos = [{ id: 1, name: "Happy hour", percent: 20, start: "00:00", end: "23:59", dish_ids: [], category_ids: [1], ahora: true }];
+  await p.reload(); await esperar(p, () => !document.getElementById("promoBar").hidden).catch(() => {});
+  ok(/Happy hour: 20 % menos en Entradas · hoy de 12:00 a\. m\. a 11:59 p\. m\.[\s\S]*¡Ahora!/.test(await p.textContent("#promoBar")), "arriba anuncia la promoción de hoy y que vale ahora");
+  const gyoP = p.locator("article", { hasText: "Gyozas" }).first();
+  ok(/Happy hour -20 %/.test(await gyoP.textContent()) && (await gyoP.locator(".price s").textContent()) === "Ref 5" && /Ref 4/.test(await gyoP.locator(".price").textContent()) &&
+     (await gyoP.locator(".pbs").textContent()) === "Bs 480", "el plato muestra la promo, el precio normal tachado, el nuevo y su Bs");
+  await p.click("#orderbar"); await p.waitForSelector("#orderSheet[open]");
+  ok(/Ref 4\.4 · Bs 528$/.test(await p.textContent("#osTotal")), "el total del pedido sale con la promoción (" + (await p.textContent("#osTotal")) + ")");
+  await p.keyboard.press("Escape");
+  promos = [];
 
   // Sin tasa (servidor sin la función o sin internet para eso): la carta sale igual, solo en Ref
   tasa = null;

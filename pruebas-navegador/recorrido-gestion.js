@@ -49,6 +49,34 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/Sábado 13:00 a 14:00[\s\S]*Ref 85,20 de promedio[\s\S]*8 sábados con ventas/.test(await page.textContent("#vhMap .tip")), "al pasar o tocar un cuadro dice el promedio, los pedidos y cuántos días cuenta");
     await page.click('#vhWeeks [data-w="4"]'); await page.waitForTimeout(300);
     ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_ventas_hora").pop().args.p_weeks) === 4, "se puede ver el promedio de 4 semanas");
+    // Promociones (Clientes › Promociones)
+    await page.click('#secs [data-sec="clientes"]'); await page.click('#tabs [data-tab="promos"]'); await page.waitForTimeout(200);
+    ok(/Happy hour[\s\S]*20 %[\s\S]*Lun · Mar · Mié · Jue[\s\S]*3:00 p\. m\. a 6:00 p\. m\./.test(await page.textContent("#promoList")), "Promociones muestra la de happy hour con días y horario");
+    await page.click("#addPromo"); await page.waitForSelector("#dlg[open]");
+    await page.fill("#f_name", "Martes de ramen"); await page.fill("#f_percent", "15");
+    await page.locator("#prDays input").evaluateAll((l) => l.forEach((i) => { i.checked = i.value === "2"; }));
+    await page.click('#dlgForm button[type="submit"]'); await page.waitForTimeout(200);
+    ok(/categorías o los platos/.test(await page.textContent("#dlgErr")), "pide elegir a qué platos o categorías aplica");
+    await page.fill("#prDishQ", "gyo"); await page.waitForTimeout(100);
+    ok(await page.locator("#prDishes label:not([hidden])").count() === 1, "el buscador de platos filtra la lista");
+    await page.locator("#prDishes label:not([hidden]) input").check();
+    await page.click('#dlgForm button[type="submit"]'); await page.waitForTimeout(300);
+    const pg = await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_promo_guardar").pop());
+    ok(pg && pg.args.p.name === "Martes de ramen" && pg.args.p.percent === 15 && JSON.stringify(pg.args.p.days) === "[2]" && pg.args.p.dish_ids.length === 1 && pg.args.p.start_time === "15:00",
+      "guarda la promoción con nombre, %, días, horario y platos");
+    // Alertas al correo (Dinero › Ventas › Ajustes)
+    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(200);
+    ok(await page.isVisible("#sAlerts") && (await page.inputValue("#sAlertDiff")) === "10", "Ajustes tiene los correos de alertas y desde cuánto avisa un cierre (Ref 10)");
+    await page.fill("#sAlerts", "dueno@ejemplo.test"); await page.fill("#sAlertDiff", "15"); await page.click("#saveSettings"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.alert_emails === "dueno@ejemplo.test" && c.value.alert_cash_diff === 15)),
+      "guarda a quién le llegan las alertas y el límite del cierre");
+    // Facturas de la caja (Dinero › Gastos)
+    await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
+    ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidad/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");
+    await page.click('#facList [data-fac="1"]'); await page.waitForSelector("#facDlg[open]", { timeout: 3000 });
+    ok(await page.evaluate(() => { const c = window.__G.calls.filter((x) => x.storage).pop(); return c.storage === "facturas" && c.path === "2026-11/0123456789abcdef0123456789abcdef.jpg" && c.secs === 300; }) &&
+       /^data:image/.test(await page.getAttribute("#facImg", "src")), "«Ver foto» abre la factura con un enlace privado que vence en 5 minutos");
+    await page.click("#facClose");
     await page.click('#secs [data-sec="ajustes"]');
     ok(await page.isVisible('#tabs [data-tab="importar"]') && !(await page.isVisible('#tabs [data-tab="recetas"]')), "cada sección muestra solo sus pestañas");
     await page.click('#tabs [data-tab="importar"]');
