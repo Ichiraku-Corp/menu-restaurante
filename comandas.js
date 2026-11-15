@@ -7,6 +7,14 @@
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
   var WARN_MIN = 10, BAD_MIN = 20, POLL_MS = 4000;
   var data = null, skew = 0, known = {}, first = true, timer = null, soundOn = false, audio = null;
+  // Estación de esta pantalla (vacío = todas); se guarda en este equipo
+  var STATION = 0;
+  try { STATION = Number(localStorage.getItem("comandas-estacion")) || 0; } catch (e) { /* sin almacenamiento: todas */ }
+  function setStation(id) {
+    STATION = id || 0; known = {}; first = true;
+    try { if (STATION) localStorage.setItem("comandas-estacion", String(STATION)); else localStorage.removeItem("comandas-estacion"); } catch (e) { /* sigue igual */ }
+    load();
+  }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
   function fmtQ(n) { n = Number(n); return n % 1 ? String(n).replace(".", ",") : String(n); }
@@ -26,7 +34,11 @@
 
   // ---------------------------------------------------------------- Datos
   function load() {
-    return q(sb.rpc("pos_kitchen")).then(function (d) {
+    var st = STATION;
+    return q(sb.rpc("pos_kitchen", st ? { p_station: st } : {})).then(function (d) {
+      if (st !== STATION) return;   // cambió de estación mientras cargaba
+      // La estación elegida ya no existe (o se apagó): vuelve a «Todas»
+      if (st && !(d.stations || []).some(function (s) { return s.id === st; })) { setStation(0); return; }
       $("net").classList.add("hidden");
       skew = new Date(d.now).getTime() - Date.now();
       var fresh = (d.orders || []).some(function (o) { return o.items.some(function (i) { return !known[i.id]; }); });
@@ -38,7 +50,17 @@
       $("net").textContent = /autorizado/.test(e.message || "") ? "Esta cuenta no puede ver la cocina: entra con la cuenta de sala." : "Sin conexión: reintentando…";
     });
   }
+  function drawStations() {
+    var list = (data && data.stations) || [], el = $("stations"), cur = list.find(function (s) { return s.id === STATION; });
+    el.classList.toggle("hidden", !list.length);
+    $("stName").textContent = cur ? " · " + cur.name : "";
+    var all = list.reduce(function (t, s) { return t + Number(s.pending || 0); }, 0);
+    el.innerHTML = list.length ? '<button type="button" data-st="0"' + (STATION ? "" : ' class="on"') + ">Todas<b>" + all + "</b></button>" + list.map(function (s) {
+      return '<button type="button" data-st="' + s.id + '"' + (s.id === STATION ? ' class="on"' : "") + ">" + esc(s.name) + "<b>" + Number(s.pending || 0) + "</b></button>";
+    }).join("") : "";
+  }
   function draw() {
+    drawStations();
     var orders = (data && data.orders) || [];
     $("board").innerHTML = orders.length ? orders.map(function (o) {
       var s = elapsed(o.first_sent), m = s / 60, cls = m >= BAD_MIN ? " bad" : m >= WARN_MIN ? " warn" : "";
@@ -49,6 +71,7 @@
             (i.variant || i.option ? '<span class="v">' + esc([i.variant, i.option].filter(Boolean).join(" · ")) + "</span>" : "") +
             (i.notes ? '<span class="note">' + esc(i.notes) + "</span>" : "") + "</span></button>";
         }).join("") +
+        (o.others && Object.keys(o.others).length ? '<div class="others">También lleva: ' + Object.keys(o.others).map(function (k) { return esc(k) + " <b>" + Number(o.others[k]) + "</b>"; }).join(" · ") + "</div>" : "") +
         (o.items.length > 1 ? '<button type="button" class="allready" data-all="' + o.id + '">Todo listo ✓</button>' : "") + "</section>";
     }).join("") : '<p class="empty">No hay comandas pendientes 🍜</p>';
     var t = (data && data.today) || {};
@@ -81,6 +104,7 @@
     if (all) { var ids = Array.prototype.map.call(all.closest(".card").querySelectorAll("[data-item]"), function (b) { return Number(b.dataset.item); }); ready(ids, true); }
   });
   $("recent").addEventListener("click", function (e) { var b = e.target.closest("[data-undo]"); if (b) ready([Number(b.dataset.undo)], false); });
+  $("stations").addEventListener("click", function (e) { var b = e.target.closest("[data-st]"); if (b) setStation(Number(b.dataset.st)); });
 
   // ---------------------------------------------------------------- Sonido y pantalla completa
   function beep() {

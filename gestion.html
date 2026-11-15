@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-OtO/UHqefSYS2sSf8nQ8DIrhuS4FrIZS/LsyZAkHR60='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Q+pryQaOBEY6xOIA2WwTKpdQLNMvEbCbVdBfppx3dGs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -235,6 +235,7 @@
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
       <button data-tab="recetas">Recetas</button>
+      <button data-tab="estaciones">Estaciones</button>
       <button data-tab="areas">Áreas</button>
       <button data-tab="importar">Cargar datos</button>
     </nav>
@@ -469,6 +470,21 @@
     </section>
 
     <!-- Recetas -->
+    <section data-panel="estaciones" hidden>
+      <div class="card">
+        <div class="row between"><h2 style="margin:0">Estaciones de cocina</h2><button class="primary" id="addStation">+ Estación</button></div>
+        <p class="muted">Cada tablet de comandas elige arriba su estación y ve solo sus platos. Lo que no tenga estación va a la primera de la lista (la principal).</p>
+        <p class="muted hidden" id="stSetup">Para activar las estaciones, ejecuta <code>supabase/pos.sql</code> en Supabase → SQL Editor.</p>
+        <div class="scroll" id="stList"></div>
+      </div>
+      <div class="card">
+        <h2>Qué va a cada estación</h2>
+        <p class="muted">Por categoría: se guarda al elegir. Si un plato va a otra estación que su categoría, cámbialo en «Platos que van a otra estación».</p>
+        <div class="scroll" id="stCats"></div>
+        <details style="margin-top:12px"><summary>Platos que van a otra estación</summary><div class="scroll" id="stDishes"></div></details>
+      </div>
+    </section>
+
     <section data-panel="recetas" hidden>
       <div class="card">
         <h2>Costo por receta</h2>
@@ -681,7 +697,7 @@
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
       S.attendance = r[11] !== null; S.inventory = r[12] !== null; S.promos = r[13];
-      return Promise.all([loadPeriods(), loadHist(), loadNomina()]);
+      return Promise.all([loadPeriods(), loadHist(), loadNomina(), loadStations()]);
     }).then(renderAll).catch(fail);
   }
   // Consulta opcional: si la tabla aún no existe (falta re-ejecutar gestion.sql) devuelve null.
@@ -734,7 +750,7 @@
   $("iniRefresh").addEventListener("click", loadInicio);
   $("iniAlertas").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (!b) return; var t = document.querySelector('#tabs [data-tab="' + b.dataset.go + '"]'); if (t) t.click(); });
   setInterval(function () { if (!document.hidden) loadInicio(); }, 60000);
-  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); loadServicio(); }
+  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); renderEstaciones(); loadServicio(); }
 
   // ---------------------------------------------------------------- Servicio y bonos
   var SV = { months: [], m: null, data: null, tabs: [] };
@@ -955,7 +971,7 @@
   // ---------------------------------------------------------------- Pestañas
   // Cada pestaña pertenece a una sección; la barra de abajo muestra solo las de la sección elegida
   var TAB_SEC = { inicio: "inicio", resumen: "dinero", ventas: "dinero", historico: "dinero", gastos: "dinero", servicio: "dinero",
-    nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", insumos: "cocina", inventario: "cocina",
+    nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", estaciones: "cocina", insumos: "cocina", inventario: "cocina",
     clientes: "clientes", whatsapp: "clientes", promos: "clientes", areas: "ajustes", importar: "ajustes" };
   var SEC_LAST = {};
   function syncSecs(tab) {
@@ -1118,6 +1134,61 @@
   });
   function saver(table, id) { return function (v) { return q(id ? sb.from(table).update(v).eq("id", id) : sb.from(table).insert(v)); }; }
   function deleter(table, id) { return function () { return q(sb.from(table).delete().eq("id", id)); }; }
+
+  // ---------------------------------------------------------------- Estaciones de cocina
+  // Estación de cada categoría y, si hace falta, de un plato; sin estación va a la primera (la principal)
+  function loadStations() {
+    return Promise.all([opt(sb.from("kitchen_stations").select("*").order("position").order("id")), opt(sb.from("categories").select("id,station_id")), opt(sb.from("dishes").select("id,station_id"))])
+      .then(function (r) {
+        S.stations = r[0]; S.catSt = {}; S.dishSt = {};
+        (r[1] || []).forEach(function (c) { S.catSt[c.id] = c.station_id || null; }); (r[2] || []).forEach(function (d) { S.dishSt[d.id] = d.station_id || null; });
+      });
+  }
+  function stName(id) { var x = (S.stations || []).find(function (s) { return s.id === id; }); return x ? x.name + (x.active ? "" : " (apagada)") : ""; }
+  function stOptions(sel, first) {
+    return '<option value="">' + esc(first) + "</option>" + (S.stations || []).map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === sel ? " selected" : "") + ">" + esc(s.name + (s.active ? "" : " (apagada)")) + "</option>"; }).join("");
+  }
+  function renderEstaciones() {
+    var on = S.stations !== null && S.stations !== undefined;
+    show("stSetup", !on); $("addStation").disabled = !on;
+    if (!on) { $("stList").innerHTML = $("stCats").innerHTML = $("stDishes").innerHTML = ""; return; }
+    var main = S.stations.find(function (s) { return s.active; });
+    $("stList").innerHTML = S.stations.length ? '<table class="tbl"><thead><tr><th class="n">Orden</th><th>Estación</th><th>Categorías</th><th>Estado</th></tr></thead><tbody>' + S.stations.map(function (s) {
+      var cats = S.cats.filter(function (c) { return S.catSt[c.id] === s.id; }).map(function (c) { return c.name; });
+      return '<tr class="click' + (s.active ? "" : " off") + '" data-station="' + s.id + '"><td class="n">' + num(s.position) + "</td><td><b>" + esc(s.name) + "</b>" + (main && main.id === s.id ? ' <span class="pill">principal</span>' : "") +
+        "</td><td>" + (esc(cats.join(", ")) || '<span class="muted">—</span>') + "</td><td>" + (s.active ? '<span class="pill ok">Activa</span>' : '<span class="pill">Apagada</span>') + "</td></tr>";
+    }).join("") + "</tbody></table>" : '<div class="empty">Aún no hay estaciones. Pulsa «+ Estación» (por ejemplo: Ramen, Sushi, Bebidas y postres).</div>';
+    var def = main ? "Principal (" + main.name + ")" : "Sin estación";
+    $("stCats").innerHTML = '<table class="tbl"><thead><tr><th>Categoría</th><th>Estación</th></tr></thead><tbody>' + S.cats.map(function (c) {
+      return "<tr><td><b>" + esc(c.name) + '</b></td><td><select data-stcat="' + c.id + '" aria-label="Estación de ' + esc(c.name) + '"' + (S.stations.length ? "" : " disabled") + ">" + stOptions(S.catSt[c.id] || null, def) + "</select></td></tr>";
+    }).join("") + "</tbody></table>";
+    $("stDishes").innerHTML = '<table class="tbl"><thead><tr><th>Plato</th><th>Estación</th></tr></thead><tbody>' + S.cats.map(function (c) {
+      var ds = S.dishes.filter(function (d) { return d.category_id === c.id; }), cs = S.catSt[c.id] || null;
+      return ds.length ? '<tr><td colspan="2" style="background:var(--chip);font-weight:800">' + esc(c.name) + "</td></tr>" + ds.map(function (d) {
+        return "<tr><td>" + esc(d.name) + '</td><td><select data-stdish="' + d.id + '" aria-label="Estación de ' + esc(d.name) + '"' + (S.stations.length ? "" : " disabled") + ">" +
+          stOptions(S.dishSt[d.id] || null, "Como su categoría (" + (cs ? stName(cs) : def) + ")") + "</select></td></tr>";
+      }).join("") : "";
+    }).join("") + "</tbody></table>";
+  }
+  function stationForm(st) {
+    openForm({ title: st ? "Editar estación" : "Nueva estación", values: st || { name: "", position: (S.stations || []).length + 1, active: true },
+      fields: [{ k: "name", label: "Nombre", req: true, ph: "Ramen, Sushi, Bebidas y postres…" }, { k: "position", label: "Orden (la primera es la principal)", step: "1" },
+               { k: "active", label: "Activa (sale en las pantallas de comandas)", type: "check", full: true }],
+      validate: function (v) { if (!v.name) return "Escribe el nombre."; if (v.name.length > 40) return "El nombre es muy largo (máximo 40 letras).";
+        if ((S.stations || []).some(function (x) { return x.name.toLowerCase() === v.name.toLowerCase() && (!st || x.id !== st.id); })) return "Ya hay una estación con ese nombre."; v.position = Math.round(num(v.position)); },
+      extra: st ? '<p class="muted" style="margin-top:12px">Si la borras, sus categorías y platos pasan a la estación principal.</p>' : "",
+      onSave: saver("kitchen_stations", st && st.id), onDelete: st && deleter("kitchen_stations", st.id) });
+  }
+  $("addStation").addEventListener("click", function () { stationForm(null); });
+  $("stList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-station]"); if (tr) stationForm(S.stations.find(function (x) { return x.id === Number(tr.dataset.station); })); });
+  function stSave(table, id, sel, map) {
+    var v = sel.value ? Number(sel.value) : null, before = map[id];
+    map[id] = v;
+    q(sb.from(table).update({ station_id: v }).eq("id", id)).then(function () { toast("Guardado"); renderEstaciones(); }).catch(function (er) { map[id] = before; renderEstaciones(); fail(er); });
+  }
+  $("stCats").addEventListener("change", function (ev) { var s = ev.target.closest("[data-stcat]"); if (s) stSave("categories", Number(s.dataset.stcat), s, S.catSt); });
+  $("stDishes").addEventListener("change", function (ev) { var s = ev.target.closest("[data-stdish]"); if (s) stSave("dishes", Number(s.dataset.stdish), s, S.dishSt); });
 
   // ---------------------------------------------------------------- Nómina
   // Quincena elegida, sus faltas y descuentos, lo que pasan las cuentas de empleados y lo ya pagado (gestion_nomina)

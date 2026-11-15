@@ -9,7 +9,7 @@
       employees: [{ id: 11, name: "Ana Pérez", job_title: "Mesonera", area_id: null, pay_quincena: 150, monthly_extra: 40, active: true },
                   { id: 12, name: "Luis Gómez", job_title: "Cocinero", area_id: null, pay_quincena: 180, monthly_extra: 40, active: true },
                   { id: 13, name: "Rosa Díaz", job_title: "Cajera", area_id: null, pay_quincena: 160, monthly_extra: 0, active: false }],
-      payroll_adjustments: [], payroll_payments: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0 }],
+      payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0 }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
@@ -20,7 +20,7 @@
   if (gy) G.tables.recipe_items = [{ id: 1, dish_id: gy.id, variant: "", ingredient_id: 1, qty: 80, unit: "g", position: 1 }, { id: 2, dish_id: gy.id, variant: "", ingredient_id: 2, qty: 60, unit: "g", position: 2 }];
   function res(data) { return Promise.resolve({ data: data, error: null }); }
   // Tablas «vivas»: lo que se inserta o borra queda (para recorrer la nómina como en la base real)
-  var LIVE = { payroll_adjustments: 1, payroll_payments: 1 }, nextId = 100;
+  var LIVE = { payroll_adjustments: 1, payroll_payments: 1, kitchen_stations: 1 }, nextId = 100;
   function builder(t) {
     var rows = (G.tables[t] || []).slice(), b = {}, filt = [], del = false;
     ["select", "order", "neq", "gte", "lte", "lt", "gt", "in", "limit", "is", "not", "single", "maybeSingle"].forEach(function (m) { b[m] = function () { return b; }; });

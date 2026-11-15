@@ -59,6 +59,27 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok(await tablet.isVisible("#served"), "la mesera ve «Ya lo serví»");
     await tablet.click("#served"); await tablet.waitForTimeout(300);
     ok(await tablet.evaluate(() => window.__S.items.every((i) => !i.ready_at || i.served_at)), "al tocarlo queda servido");
+    // Estaciones: cada pantalla elige la suya y ve solo sus platos (con lo que el pedido lleva en otras)
+    ok(!(await cocina.isVisible("#stations")), "sin estaciones creadas, la pantalla no muestra el selector");
+    await cocina.evaluate(() => {
+      const M = window.__MENU, cat = (n) => (M.categories.find((c) => c.name === n) || {}).id, dish = (c) => M.dishes.find((d) => d.category_id === c && !(d.variants && d.variants.length));
+      window.__STATIONS = [{ id: 1, name: "Ramen" }, { id: 2, name: "Sushi" }, { id: 3, name: "Bebidas y postres" }];
+      window.__STMAP = {}; window.__STMAP[cat("Sushi")] = 2; window.__STMAP[cat("Bebidas")] = 3;
+      const S = window.__S, o = { id: 900, kind: "mesa", table_id: S.orders[0] ? S.orders[0].table_id : 1, label: "", status: "abierta", service_pct: 10, opened_at: new Date().toISOString() };
+      S.orders.push(o);
+      [dish(cat("Entradas")), dish(cat("Sushi")), dish(cat("Bebidas"))].forEach((d, k) => S.items.push({ id: 901 + k, order_id: 900, dish_id: d.id, name: d.name, variant: "", option: "", notes: "", qty: 1, unit_price: d.price, status: "enviado", sent_at: new Date().toISOString() }));
+    });
+    await cocina.waitForSelector("#stations:not(.hidden)", { timeout: 6000 });
+    ok(/Todas\s*3/.test(await cocina.textContent("#stations")) && /Ramen\s*1/.test(await cocina.textContent("#stations")) && /Sushi\s*1/.test(await cocina.textContent("#stations")),
+      "con estaciones, arriba sale el selector con lo pendiente de cada una");
+    await cocina.click('#stations [data-st="2"]'); await cocina.waitForTimeout(400);
+    ok((await cocina.locator(".card .item").count()) === 1 && /· Sushi/.test(await cocina.textContent("#stName")) && /También lleva: Ramen 1 · Bebidas y postres 1/.test(await cocina.textContent("#board")),
+      "Sushi ve solo su plato y qué más lleva el pedido en las otras estaciones");
+    ok(await cocina.evaluate(() => localStorage.getItem("comandas-estacion")) === "2", "la estación queda guardada en esa pantalla");
+    await cocina.click('#stations [data-st="1"]'); await cocina.waitForTimeout(400);
+    ok((await cocina.locator(".card .item").count()) === 1 && /Ramen/.test(await cocina.textContent("#stName")), "lo que no tiene estación (Entradas) va a la principal: Ramen");
+    await cocina.click('#stations [data-st="0"]'); await cocina.waitForTimeout(400);
+    ok((await cocina.locator(".card .item").count()) === 3 && !(await cocina.textContent("#stName")), "«Todas» muestra el pedido completo");
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]); }
   ok(errores.length === 0, "sin errores de JavaScript" + (errores.length ? ": " + errores.join(" | ") : ""));
   await browser.close(); server.close();

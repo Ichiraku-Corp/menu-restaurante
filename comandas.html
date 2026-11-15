@@ -8,12 +8,12 @@
 <meta name="theme-color" content="#14110f">
 <title>Comandas · Cocina</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="comandas.css?v=df8734e9d0">
+<link rel="stylesheet" href="comandas.css?v=cf8c474cf9">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="comandas.js?v=2eaec4ae4f" defer></script>
+<script src="comandas.js?v=df02f84083" defer></script>
 </head>
 <body>
 <form id="login" class="login hidden">
@@ -27,13 +27,14 @@
 
 <div id="app" class="hidden">
   <header>
-    <b class="brand">Comandas</b>
+    <b class="brand">Comandas<span id="stName"></span></b>
     <span id="stats" class="muted"></span>
     <span class="grow"></span>
     <span id="clock" class="clock"></span>
     <button type="button" id="sound" class="ghost">🔔 Sonido</button>
     <button type="button" id="full" class="ghost" title="Pantalla completa">⛶</button>
   </header>
+  <nav id="stations" class="stations hidden" aria-label="Estación de esta pantalla"></nav>
   <p id="net" class="net hidden">Sin conexión: reintentando…</p>
   <main id="board" class="board"></main>
   <footer id="recent" class="recent"></footer>

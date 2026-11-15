@@ -99,6 +99,22 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/base del IGTF/.test(r1) && /<v>588<\/v>/.test(r1) && /<v>17.64<\/v>/.test(r1) && /1 día viene de Syth/.test(r1), "suma lo cobrado en divisas (base del IGTF) y avisa los días de Syth sin métodos");
     ok(/Compra de hielo &amp; agua &lt;2&gt;/.test(X["xl/worksheets/sheet4.xml"]) && /<v>905<\/v>/.test(X["xl/worksheets/sheet4.xml"]) && /Ana Pérez/.test(X["xl/worksheets/sheet5.xml"]) && /<v>121120.96<\/v>/.test(X["xl/worksheets/sheet5.xml"]),
       "gastos (con caracteres especiales) y nómina pagada en su hoja");
+    // Estaciones de cocina (Cocina › Estaciones): crear y decir qué va a cada una
+    await page.click('#secs [data-sec="cocina"]'); await page.click('#tabs [data-tab="estaciones"]'); await page.waitForTimeout(200);
+    ok(/Aún no hay estaciones/.test(await page.textContent("#stList")), "sin estaciones, invita a crearlas");
+    for (const [n, pos] of [["Ramen", "1"], ["Sushi", "2"]]) {
+      await page.click("#addStation"); await page.waitForSelector("#dlg[open]"); await page.fill("#f_name", n); await page.fill("#f_position", pos);
+      await page.click('#dlgForm button[type="submit"]'); await page.waitForTimeout(350);
+    }
+    const sts = await page.evaluate(() => window.__G.tables.kitchen_stations.map((x) => ({ id: x.id, name: x.name, position: x.position })));
+    ok(sts.length === 2 && sts[0].name === "Ramen" && sts[0].position === 1 && /Ramen[\s\S]*principal[\s\S]*Sushi/.test(await page.textContent("#stList")), "crea las estaciones; la primera es la principal");
+    const catSushi = await page.evaluate(() => (window.__MENU.categories.find((c) => c.name === "Sushi") || {}).id);
+    await page.selectOption(`#stCats [data-stcat="${catSushi}"]`, String(sts[1].id)); await page.waitForTimeout(300);
+    ok(await page.evaluate((id) => window.__G.calls.some((c) => c.table === "categories" && c.op === "update" && c.value.station_id === id), sts[1].id), "la categoría Sushi queda en la estación Sushi");
+    ok(/Principal \(Ramen\)/.test(await page.textContent("#stCats")), "lo que no tiene estación dice que va a la principal (Ramen)");
+    await page.click("#stDishes >> xpath=.."); const dishId = await page.evaluate(() => window.__MENU.dishes[0].id);
+    await page.selectOption(`#stDishes [data-stdish="${dishId}"]`, String(sts[1].id)); await page.waitForTimeout(300);
+    ok(await page.evaluate((id) => window.__G.calls.some((c) => c.table === "dishes" && c.op === "update" && c.value.station_id === id), sts[1].id), "un plato puede ir a otra estación que su categoría");
     // Nómina: tasa euro del día, faltas y descuentos de la quincena, a pagar en Bs y la casilla de pagado
     await page.click('#secs [data-sec="personal"]'); await page.click('#tabs [data-tab="nomina"]'); await page.waitForTimeout(300);
     const tasa = await page.textContent("#nomTasa");

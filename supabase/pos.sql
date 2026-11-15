@@ -1766,27 +1766,66 @@ alter table public.pos_items add column if not exists ready_at  timestamptz;
 alter table public.pos_items add column if not exists served_at timestamptz;
 create index if not exists pos_items_kitchen on public.pos_items (sent_at) where status = 'enviado' and ready_at is null;
 
-create or replace function public.pos_kitchen() returns jsonb
+-- Estaciones de cocina (ramen, sushi, bebidas…): cada pantalla de comandas elige la suya y ve solo sus platos.
+-- La estación de un plato es la del plato; si no tiene, la de su categoría; si no, la primera estación activa.
+-- Sin estaciones creadas, la pantalla muestra todo (como antes).
+create table if not exists public.kitchen_stations (
+  id         bigint generated always as identity primary key,
+  name       text not null unique check (length(trim(name)) between 1 and 40),
+  position   int not null default 0,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.kitchen_stations enable row level security;
+drop policy if exists "manage kitchen_stations" on public.kitchen_stations;
+create policy "manage kitchen_stations" on public.kitchen_stations for all to authenticated using (public.can_manage()) with check (public.can_manage());
+revoke all on public.kitchen_stations from anon;
+alter table public.categories add column if not exists station_id bigint references public.kitchen_stations(id) on delete set null;
+alter table public.dishes add column if not exists station_id bigint references public.kitchen_stations(id) on delete set null;
+
+drop function if exists public.pos_kitchen();
+create or replace function public.pos_kitchen(p_station bigint default null) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
-declare d date := (now() at time zone 'America/Caracas')::date;
+declare d date := (now() at time zone 'America/Caracas')::date; t0 timestamptz; def bigint; r jsonb;
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
-  return jsonb_build_object(
-    'now', now(),
+  t0 := d::timestamp at time zone 'America/Caracas';
+  select id into def from public.kitchen_stations where active order by position, id limit 1;
+  with it as (   -- platos pendientes o listos hoy, cada uno con su estación
+    select i.*, coalesce(sd.id, sc.id, def) st
+    from public.pos_items i
+    left join public.dishes dd on dd.id = i.dish_id
+    left join public.kitchen_stations sd on sd.id = dd.station_id and sd.active
+    left join public.categories cc on cc.id = dd.category_id
+    left join public.kitchen_stations sc on sc.id = cc.station_id and sc.active
+    where (i.status = 'enviado' and i.ready_at is null and i.sent_at > now() - interval '12 hours') or i.ready_at >= t0
+  ), pend as (
+    select it.* from it join public.pos_orders o on o.id = it.order_id
+    where it.status = 'enviado' and it.ready_at is null and it.sent_at > now() - interval '12 hours' and o.status <> 'anulada'
+  )
+  select jsonb_build_object(
+    'now', now(), 'station', p_station,
+    'stations', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'pending', (select count(*) from pend where pend.st = s.id)) order by s.position, s.id)
+                 from public.kitchen_stations s where s.active), '[]'::jsonb),
     'orders', (select coalesce(jsonb_agg(x order by x->>'first_sent'), '[]'::jsonb) from (
       select jsonb_build_object('id', o.id, 'label', public.pos_order_label(o.id), 'kind', o.kind, 'day_number', o.day_number,
-               'waiter', public.pos_emp_name(o.opened_by), 'first_sent', min(i.sent_at),
-               'items', jsonb_agg(jsonb_build_object('id', i.id, 'name', i.name, 'variant', i.variant, 'option', i.option, 'notes', i.notes,
-                          'qty', i.qty, 'sent_at', i.sent_at) order by i.sent_at, i.id)) x
-      from public.pos_items i join public.pos_orders o on o.id = i.order_id
-      where i.status = 'enviado' and i.ready_at is null and o.status <> 'anulada' and i.sent_at > now() - interval '12 hours'
+               'waiter', public.pos_emp_name(o.opened_by), 'first_sent', min(p.sent_at),
+               'items', jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'variant', p.variant, 'option', p.option, 'notes', p.notes,
+                          'qty', p.qty, 'sent_at', p.sent_at) order by p.sent_at, p.id),
+               -- Lo que el mismo pedido tiene pendiente en otras estaciones (para coordinar la salida)
+               'others', (select coalesce(jsonb_object_agg(s2.name, z.n), '{}'::jsonb) from (
+                            select p2.st, count(*) n from pend p2 where p_station is not null and p2.order_id = o.id and p2.st is distinct from p_station group by p2.st) z
+                          join public.kitchen_stations s2 on s2.id = z.st)) x
+      from pend p join public.pos_orders o on o.id = p.order_id
+      where p_station is null or p.st = p_station
       group by o.id) q),
-    'recent', (select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'name', i.name, 'qty', i.qty, 'label', public.pos_order_label(i.order_id),
-                 'minutes', round(extract(epoch from i.ready_at - i.sent_at) / 60, 1)) order by i.ready_at desc), '[]'::jsonb)
-               from (select * from public.pos_items where ready_at > now() - interval '15 minutes' order by ready_at desc limit 8) i),
-    'today', (select jsonb_build_object('count', count(*), 'avg', round(avg(extract(epoch from ready_at - sent_at) / 60)::numeric, 1))
-              from public.pos_items where ready_at is not null and (ready_at at time zone 'America/Caracas')::date = d)
-  );
+    'recent', (select coalesce(jsonb_agg(jsonb_build_object('id', z.id, 'name', z.name, 'qty', z.qty, 'label', public.pos_order_label(z.order_id),
+                 'minutes', round(extract(epoch from z.ready_at - z.sent_at) / 60, 1)) order by z.ready_at desc), '[]'::jsonb)
+               from (select * from it where it.ready_at > now() - interval '15 minutes' and (p_station is null or it.st = p_station) order by it.ready_at desc limit 8) z),
+    'today', (select jsonb_build_object('count', count(*), 'avg', round(avg(extract(epoch from it.ready_at - it.sent_at) / 60)::numeric, 1))
+              from it where it.ready_at >= t0 and (p_station is null or it.st = p_station))
+  ) into r;
+  return r;
 end $$;
 
 -- Marcar platos listos (la cocina no usa PIN: un toque). Sirve también para «deshacer» un toque equivocado.
@@ -1920,7 +1959,7 @@ begin
     'pos_cash_preview(bigint, text, jsonb, text)', 'pos_auth_charge(bigint, text)', 'pos_device_hello(text, text, text)',
     'pos_tabs_list()', 'pos_tab_pay(bigint, text, bigint, jsonb, text)', 'pos_tab_balance(bigint)', 'pos_outside()',
     'pos_purchase(bigint, text, jsonb, text)', 'pos_incoming_ignore(bigint, text, bigint)', 'pos_payment_verify(bigint, text, bigint)',
-    'pos_cash_out(bigint, text, text, numeric, text, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen()', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
+    'pos_cash_out(bigint, text, text, numeric, text, text)', 'pos_drop_empty(bigint, text, bigint)', 'pos_week_report(date)', 'pos_week_queue()', 'pos_kitchen(bigint)', 'pos_kitchen_ready(bigint[], boolean)', 'pos_served(bigint, text, bigint)', 'pos_dish_times(integer)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;

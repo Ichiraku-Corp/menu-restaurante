@@ -38,3 +38,11 @@ header { position:sticky; top:0; z-index:2; display:flex; align-items:center; ga
 .allready { display:block; width:100%; padding:12px; border:0; border-top:1px solid var(--line); background:var(--ok); color:#06210f; font-weight:900; font-size:18px; }
 .recent { display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px 16px; color:var(--muted); font-size:15px; }
 .recent button { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:999px; padding:6px 12px; }
+/* Estaciones: cada pantalla elige la suya (queda guardada en este equipo) */
+.brand span { color:var(--accent); }
+.stations { display:flex; gap:8px; flex-wrap:wrap; padding:10px 14px 0; }
+.stations button { background:var(--card); color:var(--text); border:2px solid var(--line); border-radius:999px; padding:8px 16px; font-weight:800; font-size:17px; }
+.stations button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+.stations button b { display:inline-block; min-width:1.6em; margin-left:6px; padding:0 6px; border-radius:999px; background:#0005; font-size:15px; }
+.card .others { padding:8px 12px; border-top:1px dashed var(--line); font-size:15px; color:var(--muted); }
+.card .others b { color:var(--warn); }
