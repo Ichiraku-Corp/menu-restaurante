@@ -120,6 +120,10 @@
   .dishes button:disabled img { filter:grayscale(1); opacity:.45; }
   .dishes button:disabled .tx span { color:var(--danger); font-weight:800; }
   .dishes button.flash { animation:flash .45s; }
+  /* Toque largo: sin menú de la imagen ni selección de texto */
+  .dishes button { -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+  .dishes button img { pointer-events:none; }
+  .dishhint { margin:6px 2px 0; font-size:12px; color:var(--muted); }
   @keyframes flash { 0% { box-shadow:0 0 0 0 var(--accent-line); } 100% { box-shadow:0 0 0 10px transparent; } }
   .ticket { position:sticky; top:72px; }
   .ticket .meta { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; padding-bottom:8px; border-bottom:1px solid var(--line); }
@@ -450,6 +454,18 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
   padding:12px 14px; border-radius:16px; background:var(--surface); color:var(--text); border:2px solid var(--line); box-shadow:0 14px 40px rgba(0,0,0,.25); font-weight:600;
   opacity:0; visibility:hidden; pointer-events:none; transition:transform .2s, opacity .2s, visibility .2s; }
 #notice.show { transform:translate(-50%, 0); opacity:1; visibility:visible; pointer-events:auto; }
+/* Cierre ciego: el efectivo se cuenta sin ver lo esperado ni la diferencia */
+.cierre .exp .eb { display:none; color:var(--muted); font-size:12px; font-weight:600; }
+.cierre.blind tr[data-s="1"] .exp .ev { display:none; }
+.cierre.blind tr[data-s="1"] .exp .eb { display:inline; }
+.cierre.blind tr[data-s="1"] .cdiff, .cierre.blind .cashsee, .cierre.blind tr[data-list="efectivo_usd"], .cierre.blind tr[data-list="efectivo_bs"] { display:none !important; }
+/* Plato listo: aviso verde abajo, se toca para abrir el pedido */
+#readyNote { position:fixed; left:50%; bottom:76px; transform:translate(-50%, 16px); z-index:150; display:flex; align-items:center; gap:10px; width:auto; max-width:calc(100vw - 24px);
+  min-height:52px; padding:10px 16px; border-radius:16px; border:2px solid var(--ok); background:var(--ok-soft); color:var(--text); font-weight:600; text-align:left;
+  box-shadow:0 12px 30px rgba(0,0,0,.25); opacity:0; visibility:hidden; pointer-events:none; transition:transform .2s, opacity .2s, visibility .2s; }
+#readyNote.show { transform:translate(-50%, 0); opacity:1; visibility:visible; pointer-events:auto; }
+#readyNote .rn { font-size:22px; }
+#readyNote .rv { margin-left:4px; color:var(--ok); font-weight:800; text-decoration:underline; }
 /* Dentro de una ventana abierta: arriba de ella, sin tapar nada (empuja el contenido) */
 #notice.inmodal { position:sticky; top:-12px; left:auto; transform:none; width:auto; margin:0 0 12px; z-index:6; box-shadow:0 6px 16px -8px rgba(0,0,0,.35); transition:none; }
 #notice.inmodal:not(.show) { display:none; }

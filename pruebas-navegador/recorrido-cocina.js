@@ -26,7 +26,7 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     await tablet.click('#people [data-emp="2"]'); for (const k of "2222") await tablet.click(`#pad [data-k="${k}"]`);
     await tablet.waitForSelector("#tablesView:not(.hidden)");
     await tablet.click('#areas [data-area="Feria"]'); await tablet.click('#areaBody [data-table] .num:text-is("2")'); await tablet.waitForSelector("#orderView:not(.hidden)");
-    await tablet.click('#cats button:has-text("Entradas")'); await tablet.click('#dishes button:has-text("Gyozas")'); await tablet.fill("#dishNote", "bien doradas"); await tablet.click("#dishAdd");
+    await tablet.click('#cats button:has-text("Entradas")'); await tablet.click('#dishes button:has-text("Gyozas")', { button: "right" }); await tablet.fill("#dishNote", "bien doradas"); await tablet.click("#dishAdd");
     await tablet.click("#send"); await tablet.waitForTimeout(300);
     // La cocina usa el mismo estado falso: se le pasa por evaluate
     const estado = await tablet.evaluate(() => JSON.stringify(window.__S));
@@ -45,8 +45,16 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     // La tablet recibe el estado de cocina y muestra el aviso
     const listos = await cocina.evaluate(() => JSON.stringify(window.__S.items));
     await tablet.evaluate((it) => { window.__S.items = JSON.parse(it); }, listos);
+    await tablet.evaluate(() => { window.__chimes = 0; const c = window.chime; window.chime = function () { window.__chimes++; c(); }; });
     await tablet.click("#back"); await tablet.waitForTimeout(5500);
     ok(/listo/.test(await tablet.textContent("#areaBody")), "la mesa muestra el plato listo en la tablet");
+    ok(await tablet.evaluate(() => window.__chimes) === 1, "la tablet de quien abrió la mesa suena una vez");
+    ok(await tablet.isVisible("#readyNote") && /Listo en cocina[\s\S]*Feria 2: 1 plato/.test(await tablet.textContent("#readyNote")), "y avisa abajo: «Listo en cocina · Feria 2: 1 plato»");
+    await tablet.waitForTimeout(5500);
+    ok(await tablet.evaluate(() => window.__chimes) === 1, "no vuelve a sonar por el mismo plato");
+    await tablet.click("#readyNote"); await tablet.waitForSelector("#orderView:not(.hidden)", { timeout: 3000 });
+    ok(true, "tocar el aviso abre el pedido de esa mesa");
+    await tablet.click("#back"); await tablet.waitForTimeout(300);
     await tablet.click('#areaBody [data-table] .num:text-is("2")'); await tablet.waitForSelector("#orderView:not(.hidden)"); await tablet.waitForTimeout(400);
     ok(await tablet.isVisible("#served"), "la mesera ve «Ya lo serví»");
     await tablet.click("#served"); await tablet.waitForTimeout(300);

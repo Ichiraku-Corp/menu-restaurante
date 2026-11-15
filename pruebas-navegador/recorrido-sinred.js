@@ -57,7 +57,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(true, "sin internet, la mesera entra con su PIN (ya había entrado antes en esta tablet)");
     ok(/Sin internet/.test(await page.textContent("#srBar")), "avisa arriba que no hay internet y que sigue por la laptop");
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("4")'); await page.waitForSelector("#orderView:not(.hidden)");
-    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")');
+    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")', { button: "right" });
     await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
     await page.click("#send"); await page.waitForTimeout(500);
     const e = enviados[0] || {};
@@ -68,7 +68,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click("#back"); await page.waitForTimeout(400);
     ok(await page.locator('#areaBody [data-table]:has(.num:text-is("4"))').evaluate((b) => /Comiendo|Abierta/.test(b.textContent)), "la mesa queda ocupada en el plano");
     await page.click('#areaBody [data-table] .num:text-is("4")'); await page.waitForSelector("#orderView:not(.hidden)");
-    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")'); await page.click("#dishAdd");
+    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")');
     await page.click("#send"); await page.waitForTimeout(500);
     ok(enviados.length === 2 && enviados[1].order.tmp === e.order.tmp && enviados[1].added === true, "lo que se agrega después va a la misma mesa y sale como «agregado»");
     await page.click("#back"); await page.click("#btnUser");

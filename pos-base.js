@@ -42,6 +42,24 @@ function notice(msg, kind) {
   n.className = "notice show " + (kind || "err") + (dlg ? " inmodal" : "");
   n.innerHTML = '<span class="nmsg">' + esc(msg) + '</span><button type="button" data-nok>Entendido</button>';
 }
+// Sonido corto de aviso (plato listo). El navegador solo deja sonar después de que alguien tocó la pantalla:
+// el primer toque (el PIN) prepara el audio.
+var AUDIO = null;
+document.addEventListener("pointerdown", function () {
+  try { if (!AUDIO) AUDIO = new (window.AudioContext || window.webkitAudioContext)(); if (AUDIO.state === "suspended") AUDIO.resume(); } catch (e) { AUDIO = null; }
+}, true);
+function chime() {
+  try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) { /* sin vibración */ }
+  if (!AUDIO) return;
+  try {
+    [880, 1318.5].forEach(function (f, i) {
+      var o = AUDIO.createOscillator(), g = AUDIO.createGain(), t = AUDIO.currentTime + i * 0.18;
+      o.type = "sine"; o.frequency.value = f; o.connect(g); g.connect(AUDIO.destination);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      o.start(t); o.stop(t + 0.45);
+    });
+  } catch (e) { /* sin sonido: queda el aviso en pantalla */ }
+}
 function toast(msg, err) { if (err) { notice(msg, "err"); return; } var t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, err ? 4000 : 2200); }
 function errMsg(e) { return (e && (e.message || e.error_description)) || String(e); }
 function fail(e) { console.error(e); toast(errMsg(e), true); if (/PIN incorrecto/.test(errMsg(e))) lock(); }

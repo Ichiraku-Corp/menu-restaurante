@@ -42,7 +42,7 @@ function startDevice() {
   loadMenu();
 }
 function lock() {
-  U = null; pinBuf = ""; selected = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
+  U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
   ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
   if (typeof waStop === "function") waStop();
   if ($("health")) $("health").classList.add("hidden");

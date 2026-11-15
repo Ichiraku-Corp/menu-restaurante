@@ -21,8 +21,8 @@ function openCash() {
         var v = sm.methods[m[0]] ? num(sm.methods[m[0]].amount) : 0, exp = v + (m[0] === "efectivo_usd" ? num(sm.opening_usd) : m[0] === "efectivo_bs" ? num(sm.opening_bs) : 0);
         EXPECTED[m[0]] = Math.round(exp * 100) / 100;
         var list = (sm.payments || []).filter(function (p) { return p.method === m[0]; });
-        return '<tr data-row="' + m[0] + '"' + st + '><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
-          '</td><td class="r">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px">' +
+        return '<tr data-row="' + m[0] + '"' + st + '><td><span class="mname">' + logo(m[0]) + m[1] + "</span>" + (list.length ? '<button type="button" class="seepay' + (CSTEP_OF[m[0]] === 1 ? " cashsee" : "") + '" data-see="' + m[0] + '">ver ' + list.length + " pago" + (list.length === 1 ? "" : "s") + "</button>" : "") +
+          '</td><td class="r exp"><span class="ev">' + (m[2] === "REF" ? "$ " : "Bs ") + nf2.format(exp) + '</span><span class="eb">se ve al revisar</span></td><td><input class="cnt n" data-m="' + m[0] + '" inputmode="decimal" placeholder="Contado en ' + (m[2] === "REF" ? "$" : "Bs") + '" style="padding:6px 8px">' +
           (m[0] === "efectivo_usd" ? '<button type="button" class="seepay" data-bills="1">contar billetes</button>' : "") + '<div class="cdiff" data-diff="' + m[0] + '"></div></td></tr>' +
           (m[0] === "efectivo_usd" ? '<tr class="paylist hidden" data-billrow' + st + '><td colspan="3"><div class="billgrid">' + BILLS.map(function (d) {
             return '<label>' + (d ? "$" + d : "Monedas y otros $") + '<input class="bcnt n" data-den="' + d + '" inputmode="' + (d ? "numeric" : "decimal") + '" placeholder="' + (d ? "cuántos" : "$") + '"></label>'; }).join("") +
@@ -63,6 +63,7 @@ function openCash() {
       h = '<div class="ctabs" role="tablist"><button type="button" data-ctab="res">Resumen</button><button type="button" data-ctab="cierre">Cerrar caja</button><button type="button" data-ctab="tools">Herramientas</button></div>' +
         '<div data-cpanel="res">' + h + res + '</div><div data-cpanel="cierre">' + cie + '</div><div data-cpanel="tools">' + tools + "</div>";
       $("cashBody").innerHTML = h;
+      BLIND.session !== sm.id && (BLIND = { session: sm.id, revealed: false, first: null });
       cashTab(CASHTAB || "res"); cashStep(CSTEP || 1); cashDiff();
       if (!$("cashDlg").open) $("cashDlg").showModal();
       return;
@@ -77,7 +78,7 @@ function openCash() {
 var CASHTAB = "res", CSTEP = 1;
 var CSTEP_OF = { efectivo_usd: 1, efectivo_bs: 1, pago_movil: 2, punto_debito: 2, punto_credito: 2, zelle: 3, binance: 3, paypal: 3 };
 var CSTEPS = [
-  { k: 1, t: "Efectivo", help: "Cuenta la gaveta. En dólares toca «contar billetes» y escribe cuántos hay de cada uno." },
+  { k: 1, t: "Efectivo", help: "Cuenta la gaveta <b>sin mirar el sistema</b>: lo esperado y la diferencia se ven al final, en «Revisar y enviar». En dólares toca «contar billetes» y escribe cuántos hay de cada uno." },
   { k: 2, t: "Bolívares en banco", help: "Pago móvil: lo que llegó hoy a la cuenta. Punto: el total del <b>cierre de lote</b>. Todo en <b>bolívares</b>." },
   { k: 3, t: "Divisas digitales", help: "Zelle, Binance y PayPal: lo que llegó hoy." },
   { k: 4, t: "Afuera", help: "Cuenta lo que queda de los productos de afuera." },
@@ -96,8 +97,25 @@ function cashStep(n) {
   document.querySelectorAll("#cashBody [data-cstep]").forEach(function (b) { b.classList.toggle("on", Number(b.dataset.cstep) === n); });
   var st = CSTEPS.find(function (x) { return x.k === n; }); $("cstepHelp").innerHTML = st ? st.help : "";
   var last = n === list[list.length - 1];
+  if (last && !BLIND.revealed) { BLIND.revealed = true; BLIND.first = blindCash(); }
+  var card = document.querySelector("#cashBody .cierre"); if (card) card.classList.toggle("blind", !BLIND.revealed);
+  if (typeof cashDiff === "function" && $("cashTotalDiff")) cashDiff();
   $("cstepBack").classList.toggle("invisible", n === list[0]); $("cstepNext").classList.toggle("hidden", last); $("doClose").classList.toggle("hidden", !last);
   cashDoneMarks();
+}
+// Cierre ciego: el efectivo se cuenta sin ver lo esperado ni la diferencia; todo se ve al llegar a «Revisar y enviar».
+// Si después de verlo se cambia lo contado, el primer conteo queda en la nota del cierre (y en el correo).
+var BLIND = { session: null, revealed: false, first: null };
+function blindCash() {
+  var o = {}; ["efectivo_usd", "efectivo_bs"].forEach(function (k) { var i = document.querySelector('#cashBody .cnt[data-m="' + k + '"]'); if (i) o[k] = i.value.trim(); });
+  return o;
+}
+function blindFirstNote(counted) {
+  if (!BLIND.first) return "";
+  var now = blindCash(), keys = Object.keys(BLIND.first);
+  if (!keys.some(function (k) { return BLIND.first[k] !== now[k] && !(BLIND.first[k] !== "" && now[k] !== "" && num(BLIND.first[k]) === num(now[k])); })) return "";
+  counted._primer_conteo = {}; keys.forEach(function (k) { counted._primer_conteo[k] = BLIND.first[k] === "" ? null : num(BLIND.first[k]); });
+  return "Conteo antes de ver lo esperado: " + keys.map(function (k) { var v = BLIND.first[k]; return (k === "efectivo_usd" ? "efectivo $ " : "efectivo Bs ") + (v === "" ? "sin contar" : nf2.format(num(v))); }).join(" · ") + ".";
 }
 // Un paso queda con ✓ cuando todo lo que tenía dinero esperado ya está contado
 function cashDoneMarks() {
@@ -145,7 +163,8 @@ $("cashBody").addEventListener("click", function (e) {
     }
     $("closeErr").classList.add("hidden");
     counted._inv = inv; var bb = billBreakdown(); if (bb) counted._billetes = bb.detail;
-    closing = { counted: counted, notes: $("cashNotes").value.trim() };
+    var first = blindFirstNote(counted), typed = $("cashNotes").value.trim();
+    closing = { counted: counted, notes: first ? (typed ? typed + " · " : "") + first : typed };
     rpc("pos_cash_preview", { p_counted: counted, p_notes: closing.notes }).then(function (d) {
       closing.recipients = d.recipients || "";
       $("repBody").innerHTML = window.IchirakuReporte ? window.IchirakuReporte.reportHtml(d) : "<pre>" + esc(JSON.stringify(d, null, 2)) + "</pre>";
@@ -234,7 +253,8 @@ function cashDiff() {
       (isBs && rate ? " (≈ Ref " + nf2.format(Math.abs(dRef)) + ")" : "") + "</span>") + warn;
   });
   var box = $("cashTotalDiff");
-  if (box) box.innerHTML = '<span>Diferencia total</span><span class="' + (Math.abs(total) < 0.5 ? "ok" : total > 0 ? "plus" : "minus") + '">' + (Math.abs(total) < 0.005 ? "Ref 0,00 ✓" : (total > 0 ? "+" : "−") + ref(Math.abs(total))) + "</span>";
+  if (box) box.innerHTML = !BLIND.revealed ? '<span>Diferencia total</span><span class="muted" style="font-size:16px">se ve al revisar</span>'
+    : '<span>Diferencia total</span><span class="' + (Math.abs(total) < 0.5 ? "ok" : total > 0 ? "plus" : "minus") + '">' + (Math.abs(total) < 0.005 ? "Ref 0,00 ✓" : (total > 0 ? "+" : "−") + ref(Math.abs(total))) + "</span>";
   return { total: Math.round(total * 100) / 100, uncounted: uncounted };
 }
 // Arqueo por billetes: cuántos de cada uno → total del efectivo $ (y el detalle queda en el cierre)

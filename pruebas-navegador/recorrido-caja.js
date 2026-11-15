@@ -75,7 +75,19 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.isVisible("#cancel") && await page.isVisible("#move"), "«Más opciones» muestra dividir, descuento, mover y anular");
     await page.click("#moreBtn");
     await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")');
-    ok(await page.isVisible("#dishDlg"), "el plato abre su ventana (cantidad, opción y nota)");
+    ok(!(await page.isVisible("#dishDlg")) && /Gyozas/.test(await page.textContent("#lines")), "toque rápido: un toque añade el plato sin abrir ventana");
+    await page.click('#dishes button:has-text("Gyozas")');
+    ok(/^2$/.test((await page.locator("#lines .line.new b").first().textContent()).trim()), "otro toque suma uno más en la misma línea");
+    await page.locator("#lines .line.new [data-dec]").first().click(); await page.locator("#lines .line.new [data-dec]").first().click();
+    await page.click('#dishes button:has-text("Pollo Kobayashi")');
+    ok(await page.isVisible("#dishDlg") && /Tamaño/.test(await page.textContent("#dishVariants")), "un plato con tamaños abre la ventana para elegir");
+    await page.click("#dishCancel");
+    await page.click('#dishes button:has-text("Gyozas")', { delay: 650 }); await page.waitForTimeout(150);
+    ok(await page.isVisible("#dishDlg"), "mantener presionado abre la ventana (cantidad, opción y nota)");
+    await page.click("#dishCancel");
+    ok(!(await page.locator("#lines .line.new").count()), "el toque largo no añade nada por su cuenta");
+    await page.click('#dishes button:has-text("Gyozas")', { button: "right" });
+    ok(await page.isVisible("#dishDlg"), "en la laptop, el clic derecho también abre la ventana");
     await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
     await page.click("#send"); await page.waitForTimeout(300);
     ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
@@ -146,6 +158,12 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#cashBody [data-bills="1"]');
     await page.locator('#cashBody .bcnt[data-den="10"]').fill("1"); await page.locator('#cashBody .bcnt[data-den="5"]').fill("1");
     ok((await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').inputValue()) === "15.00", "contar billetes: 1 de $10 + 1 de $5 = 15");
+    const ciego = await S(() => {
+      const fila = document.querySelector('#cashBody tr[data-row="efectivo_usd"]'), vis = (el) => !!el && getComputedStyle(el).display !== "none" && el.offsetParent !== null;
+      return { esperado: vis(fila.querySelector(".ev")), aviso: vis(fila.querySelector(".eb")), dif: vis(fila.querySelector(".cdiff")) && fila.querySelector(".cdiff").textContent.trim() !== "",
+               pie: document.getElementById("cashTotalDiff").textContent };
+    });
+    ok(!ciego.esperado && ciego.aviso && !ciego.dif && /se ve al revisar/.test(ciego.pie), "cierre ciego: el efectivo se cuenta sin ver lo esperado ni la diferencia");
     await page.click("#cstepNext");
     ok(await page.isVisible('#cashBody .cnt[data-m="pago_movil"]') && /cierre de lote/.test(await page.textContent("#cstepHelp")), "paso 2: bolívares en banco, con la explicación del lote");
     await page.locator('#cashBody .cnt[data-m="pago_movil"]').fill("247.98");
@@ -153,6 +171,12 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.locator("#cashBody .cwarn").count() > 0, "avisa si el pago móvil parece escrito en dólares");
     await page.click('#cashBody [data-cstep="5"]');
     ok(await page.isVisible("#doClose") && await page.isVisible("#cashNotes") && await page.isVisible('#cashBody .cnt[data-m="efectivo_usd"]'), "el último paso muestra todo para revisar, la nota y el botón de enviar");
+    ok(await page.isVisible('#cashBody tr[data-row="efectivo_usd"] .ev') && !/se ve al revisar/.test(await page.textContent("#cashTotalDiff")), "al revisar ya se ve lo esperado y la diferencia");
+    // Si después de ver lo esperado cambia lo contado, el primer conteo queda en la nota
+    await page.click('#cashBody [data-cstep="1"]');
+    ok(await page.isVisible('#cashBody tr[data-row="efectivo_usd"] .ev'), "lo ya visto no se vuelve a esconder");
+    await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').fill("16"); await page.locator('#cashBody .cnt[data-m="efectivo_usd"]').dispatchEvent("input");
+    await page.click('#cashBody [data-cstep="5"]');
     await page.click("#doClose"); await page.waitForTimeout(300);
     ok(!(await S(() => !!window.__closed)), "no deja cerrar con diferencia grande sin nota");
     ok(await page.isVisible("#closeErr") && /Falta la nota para cerrar/.test(await page.textContent("#closeErr")), "explica junto al botón que falta la nota (no solo un aviso que se va)");
@@ -160,6 +184,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(!(await page.isVisible("#closeErr")), "al escribir la nota desaparece el aviso");
     await page.click("#doClose"); await page.waitForSelector("#repDlg[open]", { timeout: 5000 });
     ok(true, "con la nota escrita, el cierre avanza a la revisión");
+    ok(/Vuelto dado por pago móvil · Conteo antes de ver lo esperado: efectivo \$ 15,00/.test(await page.textContent("#repBody")), "la nota del cierre lleva el primer conteo (15) porque se cambió después de ver lo esperado");
   } catch (e) {
     fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
   }

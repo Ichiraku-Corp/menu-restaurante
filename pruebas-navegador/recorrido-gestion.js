@@ -38,6 +38,17 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     // Entra por «Inicio» y navega por secciones
     ok(await page.isVisible('#secs [data-sec="inicio"].on') && await page.isVisible("#iniKpis") && !(await page.isVisible("#tabs")), "Gestión abre en «Inicio», sin la fila de pestañas");
     ok(/Ventas de hoy/.test(await page.textContent("#iniKpis")) && /Laptop de caja/.test(await page.textContent("#iniEstado")), "Inicio muestra ventas de hoy y el estado de la laptop");
+    // Ventas por hora y día (Dinero › Histórico)
+    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="historico"]');
+    await page.waitForSelector("#vhMap .vh-grid", { timeout: 5000 });
+    const vh = await page.evaluate(() => ({ celdas: document.querySelectorAll("#vhMap .vh-grid .c").length, fuerte: document.querySelectorAll("#vhMap .vh-grid .c.l5").length,
+      top: document.querySelector("#vhMap .vh-top li").textContent, horas: [...document.querySelectorAll("#vhMap .vh-grid .hd")].map((x) => x.textContent).join(",") }));
+    ok(vh.celdas === 7 * 10 && vh.horas === "12,13,14,15,16,17,18,19,20,21", "el mapa tiene los 7 días y las horas con ventas (12 a 21)");
+    ok(/^Sábado 13:00 · Ref 85,20 · 6,5 pedidos$/.test(vh.top) && vh.fuerte >= 1, "la hora más fuerte sale primera y en el tono más oscuro (" + vh.top + ")");
+    await page.hover('#vhMap .c[data-k="6-13"]');
+    ok(/Sábado 13:00 a 14:00[\s\S]*Ref 85,20 de promedio[\s\S]*8 sábados con ventas/.test(await page.textContent("#vhMap .tip")), "al pasar o tocar un cuadro dice el promedio, los pedidos y cuántos días cuenta");
+    await page.click('#vhWeeks [data-w="4"]'); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_ventas_hora").pop().args.p_weeks) === 4, "se puede ver el promedio de 4 semanas");
     await page.click('#secs [data-sec="ajustes"]');
     ok(await page.isVisible('#tabs [data-tab="importar"]') && !(await page.isVisible('#tabs [data-tab="recetas"]')), "cada sección muestra solo sus pestañas");
     await page.click('#tabs [data-tab="importar"]');

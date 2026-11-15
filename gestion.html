@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-drtaqUoyawxjTdT+8VIZSUx4jvcKW2idw605lbW6Wb4='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-iDk7S9j+b8uVP17OZzvTcrqgnxlhDMx2XmFCy0/+bmI='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -101,6 +101,26 @@
   .legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:0 0 8px; }
   .legend i { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-2px; margin-right:5px; background:var(--accent); }
   .legend i.proj { background:repeating-linear-gradient(45deg, var(--accent) 0 2px, transparent 2px 5px); border:1.5px solid var(--accent); }
+  /* Ventas por hora y día: un solo tono (la marca), más oscuro = más ventas; en modo oscuro se invierte solo */
+  .seg { display:inline-flex; gap:4px; flex-wrap:wrap; }
+  .seg button { min-height:34px; padding:4px 10px; font-size:13px; }
+  .seg button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .vh { position:relative; }
+  .vh-scroll { overflow-x:auto; }
+  .vh-grid { display:grid; grid-template-columns:38px repeat(var(--cols), minmax(22px, 1fr)); gap:2px; min-width:calc(38px + var(--cols) * 24px); }
+  .vh-grid .hd { font-size:11px; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums; padding-bottom:2px; }
+  .vh-grid .dy { font-size:12px; font-weight:700; color:var(--muted); align-self:center; }
+  .vh-grid .c { min-height:28px; padding:0; border:0; border-radius:4px; background:color-mix(in srgb, var(--text) 5%, var(--surface)); cursor:pointer; }
+  .vh-grid .c:focus-visible, .vh-grid .c.on { outline:2px solid var(--text); outline-offset:1px; }
+  .vh .l1 { background:color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+  .vh .l2 { background:color-mix(in srgb, var(--accent) 34%, var(--surface)); }
+  .vh .l3 { background:color-mix(in srgb, var(--accent) 52%, var(--surface)); }
+  .vh .l4 { background:color-mix(in srgb, var(--accent) 72%, var(--surface)); }
+  .vh .l5 { background:color-mix(in srgb, var(--accent) 92%, var(--surface)); }
+  .vh-leg { display:flex; align-items:center; gap:4px; margin-top:8px; font-size:12px; color:var(--muted); flex-wrap:wrap; }
+  .vh-leg i { display:inline-block; width:18px; height:12px; border-radius:3px; }
+  .vh-top { margin:10px 0 0; padding-left:20px; }
+  .vh-top li { margin:2px 0; }
   details.tview { margin-top:8px; } details.tview summary { cursor:pointer; color:var(--muted); font-size:13px; }
   .perfrules { margin:6px 0 10px; padding:10px; border-radius:12px; background:var(--raised, rgba(127,127,127,.08)); }
   .perfrules label { font-size:13px; display:flex; flex-direction:column; gap:2px; }
@@ -278,6 +298,12 @@
       <div class="card"><h2>Ventas por mes</h2><div id="histMonths"></div></div>
       <div class="card"><h2>Lo que se gana</h2><div id="histProfit"></div></div>
       <div class="card"><h2>Promedio por día de la semana</h2><p class="muted" style="margin-top:0">Últimos 12 meses, solo días con ventas.</p><div id="histWeek"></div></div>
+      <div class="card" id="vhCard">
+        <div class="row between"><h2 style="margin:0">Ventas por hora y día</h2>
+          <div class="seg" id="vhWeeks" role="group" aria-label="Período"><button type="button" data-w="4">4 semanas</button><button type="button" data-w="8" class="on">8 semanas</button><button type="button" data-w="12">12 semanas</button></div></div>
+        <p class="muted" id="vhNote">Cargando…</p>
+        <div id="vhMap"></div>
+      </div>
       <div class="card"><h2>Platos más vendidos</h2><p class="muted" style="margin-top:0" id="histTopNote"></p><div class="scroll" id="histTop"></div></div>
       <div class="card"><h2>Ventas por grupo</h2><div class="scroll" id="histGroups"></div></div>
     </section>
@@ -882,6 +908,7 @@
     document.querySelectorAll("[data-panel]").forEach(function (p) { p.hidden = p.getAttribute("data-panel") !== b.getAttribute("data-tab"); });
     try { sessionStorage.setItem("gestion-tab", b.getAttribute("data-tab")); } catch (e2) {}
     if (b.getAttribute("data-tab") === "historico" && S.histDays !== undefined) renderHistorico(); // los gráficos necesitan el ancho visible
+    if (b.getAttribute("data-tab") === "historico") loadVentasHora();
     if (b.getAttribute("data-tab") === "avisos") loadAvisos();
   });
   try { var t0 = sessionStorage.getItem("gestion-tab"); var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio"); } catch (e) { syncSecs("inicio"); }
@@ -1910,6 +1937,72 @@
     }
     renderHistTop();
   }
+
+  // ---- Ventas por hora y día (pedidos cobrados en la caja): para decidir horarios y cuánta gente poner por turno
+  var VH = { weeks: 8, data: null };
+  function loadVentasHora() {
+    if (!mfaOk) return;
+    q(sb.rpc("gestion_ventas_hora", { p_weeks: VH.weeks })).then(function (d) { VH.data = d; drawVentasHora(); }).catch(function (e) {
+      $("vhNote").textContent = /gestion_ventas_hora|schema cache|function/i.test(String(e.message || e)) ? "Para ver este mapa, ejecuta supabase/reportes.sql en Supabase." : "No se pudo cargar: " + (e.message || e);
+      $("vhMap").innerHTML = "";
+    });
+  }
+  function drawVentasHora() {
+    var d = VH.data || {}, cells = d.celdas || [], dias = d.dias || {};
+    $("vhNote").textContent = "Promedio de las últimas " + d.semanas + " semanas, contando solo los días que hubo ventas, según la hora en que llegó el pedido" +
+      (d.primera && d.primera > d.desde ? " (la caja nueva tiene pedidos desde el " + dmy(d.primera) + ")" : "") + ". El rosado más intenso marca las horas que más venden.";
+    if (!cells.length) { $("vhMap").innerHTML = '<div class="empty">Todavía no hay pedidos cobrados en este período.</div>'; return; }
+    var h0 = 24, h1 = 0, max = 0, by = {};
+    cells.forEach(function (c) { h0 = Math.min(h0, c.hora); h1 = Math.max(h1, c.hora); max = Math.max(max, num(c.ventas)); by[c.dow + "-" + c.hora] = c; });
+    var hours = []; for (var h = h0; h <= h1; h++) hours.push(h);
+    function lvl(v) { return v > 0 ? Math.max(1, Math.min(5, Math.ceil(v / max * 5))) : 0; }
+    function hh(h) { return (h < 10 ? "0" : "") + h + ":00"; }
+    function tipOf(c, dow, h) {
+      var n = num(dias[dow]), dn = DOW[dow - 1].toLowerCase();
+      return "<b>" + DOW[dow - 1] + " " + hh(h) + " a " + hh(h + 1) + "</b><br>" + (c ? money(num(c.ventas)) + " de promedio · " + nf3.format(num(c.pedidos)) + " pedidos" : "Sin ventas a esta hora") +
+        "<br>" + (n ? n + " " + dn + (n === 1 ? "" : "s") + " con ventas" : "Ningún " + dn + " con ventas");
+    }
+    var g = '<div class="vh-grid" style="--cols:' + hours.length + '"><span></span>' + hours.map(function (h) { return '<span class="hd">' + h + "</span>"; }).join("");
+    for (var dow = 1; dow <= 7; dow++) {
+      g += '<span class="dy">' + DOW[dow - 1].slice(0, 3) + "</span>";
+      hours.forEach(function (h) {
+        var c = by[dow + "-" + h], v = c ? num(c.ventas) : 0;
+        g += '<button type="button" class="c l' + lvl(v) + '" data-k="' + dow + "-" + h + '" aria-label="' + esc(tipOf(c, dow, h).replace(/<br>/g, ". ").replace(/<[^>]+>/g, "")) + '"></button>';
+      });
+    }
+    g += "</div>";
+    var top = cells.slice().sort(function (a, b) { return num(b.ventas) - num(a.ventas); }).slice(0, 5);
+    $("vhMap").innerHTML = '<div class="vh chart"><div class="vh-scroll">' + g + '</div><div class="tip" hidden></div></div>' +
+      '<div class="vh vh-leg"><span>Menos</span><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><i class="l5"></i><span>Más · la hora más fuerte vende ' + money(max) + " en promedio</span></div>" +
+      '<p style="margin:12px 0 0"><b>Horas más fuertes</b></p><ol class="vh-top">' + top.map(function (c) {
+        return "<li>" + DOW[c.dow - 1] + " " + hh(c.hora) + " · " + money(num(c.ventas)) + " · " + nf3.format(num(c.pedidos)) + " pedidos</li>"; }).join("") + "</ol>" +
+      '<details class="tview"><summary>Ver tabla</summary><div class="scroll"><table class="tbl"><thead><tr><th>Día</th>' + hours.map(function (h) { return '<th class="n">' + h + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      [1, 2, 3, 4, 5, 6, 7].map(function (dw) { return "<tr><td>" + DOW[dw - 1] + "</td>" + hours.map(function (h) { var c = by[dw + "-" + h]; return '<td class="n">' + (c ? nfc.format(num(c.ventas)) : "—") + "</td>"; }).join("") + "</tr>"; }).join("") +
+      "</tbody></table></div></details>";
+    var box = $("vhMap").querySelector(".vh.chart"), tip = box.querySelector(".tip"), cur = null;
+    function showTip(b) {
+      if (cur) cur.classList.remove("on"); cur = b; b.classList.add("on");
+      var k = b.dataset.k.split("-"); tip.innerHTML = tipOf(by[b.dataset.k], Number(k[0]), Number(k[1])); tip.hidden = false;
+      // .tip se centra y sube solo (transform); si no hay espacio arriba, va debajo del cuadro
+      var br = box.getBoundingClientRect(), cr = b.getBoundingClientRect(), half = tip.offsetWidth / 2, cx = cr.left - br.left + cr.width / 2;
+      var arriba = cr.top - br.top >= tip.offsetHeight + 10;
+      tip.style.left = Math.min(Math.max(cx, half), br.width - half) + "px";
+      tip.style.top = (arriba ? cr.top - br.top : cr.bottom - br.top) + "px";
+      tip.style.transform = arriba ? "" : "translate(-50%, 8px)";
+    }
+    function hideTip() { tip.hidden = true; if (cur) cur.classList.remove("on"); cur = null; }
+    box.addEventListener("pointermove", function (e) { var b = e.target.closest(".c"); if (b) showTip(b); else hideTip(); });
+    box.addEventListener("pointerleave", hideTip);
+    box.addEventListener("click", function (e) { var b = e.target.closest(".c"); if (b) showTip(b); });
+    box.addEventListener("focusin", function (e) { var b = e.target.closest(".c"); if (b) showTip(b); });
+    box.addEventListener("focusout", hideTip);
+  }
+  $("vhWeeks").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-w]"); if (!b) return;
+    VH.weeks = Number(b.dataset.w);
+    document.querySelectorAll("#vhWeeks [data-w]").forEach(function (x) { x.classList.toggle("on", x === b); });
+    loadVentasHora();
+  });
 
   var NOT_PRODUCT = /PARA LLEVAR|DELIVERY|RESERVACI|BOLSA|ENVASE/i;
   function renderHistTop() {

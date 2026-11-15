@@ -53,11 +53,34 @@ $("moreBtn").addEventListener("click", function () {
   if (on) $("moreBox").scrollIntoView({ block: "nearest" }); // en la tablet, «Anular» quedaba por debajo de la pantalla
 });
 $("moreBox").addEventListener("click", function (e) { if (e.target.closest("button")) setTimeout(function () { moreOpen(false); }, 0); });
+// Toque rápido: un toque añade 1 del plato. Si el plato pide tamaño u opción, abre la ventana para elegir.
+// Mantener presionado (o clic derecho en la laptop) abre la ventana completa: cantidad, opciones y nota.
+// La nota también se agrega después tocando la línea en la cuenta.
+var LONG = { t: 0, fired: false };
+function dishOf(b) { return b && MENU.dishes.find(function (x) { return x.id === Number(b.dataset.dish); }); }
+function needsChoice(d) { var vs = variantsOf(d); return (vs && vs.length > 1) || (d.options || []).length > 0; }
+$("dishes").addEventListener("pointerdown", function (e) {
+  var b = e.target.closest("[data-dish]"); LONG.fired = false; clearTimeout(LONG.t);
+  if (!b || b.disabled) return;
+  LONG.t = setTimeout(function () {
+    var d = dishOf(b); if (!d) return;
+    LONG.fired = true; try { if (navigator.vibrate) navigator.vibrate(25); } catch (x) {}
+    pickDish(d);
+  }, 450);
+});
+["pointerup", "pointercancel", "pointerleave"].forEach(function (ev) { $("dishes").addEventListener(ev, function () { clearTimeout(LONG.t); }); });
+$("dishes").addEventListener("contextmenu", function (e) {
+  var b = e.target.closest("[data-dish]"); if (!b) return;
+  e.preventDefault(); clearTimeout(LONG.t);
+  if (!LONG.fired && !b.disabled) { var d = dishOf(b); if (d) { LONG.fired = true; pickDish(d); } }
+});
 $("dishes").addEventListener("click", function (e) {
   var b = e.target.closest("[data-dish]"); if (!b) return;
-  var d = MENU.dishes.find(function (x) { return x.id === Number(b.dataset.dish); });
-  if (!d) return;
-  pickDish(d); // todos los platos abren la ventanita: cantidad, opciones y nota para cocina
+  if (LONG.fired) { LONG.fired = false; return; } // ya se abrió la ventana con el toque largo
+  var d = dishOf(b); if (!d) return;
+  if (needsChoice(d)) return pickDish(d);
+  var vs = variantsOf(d);
+  addToCart({ dish: d, variant: vs && vs.length === 1 ? vs[0].label : "", option: "", qty: 1, notes: "" });
 });
 var pick = null;
 function pickDish(d) {

@@ -28,6 +28,11 @@
     svc_month: function (a) { return { month: a.p_month, info: { status: "borrador", rate: 100, max_from_bonus: 40 }, service_pos: 0, tips_pos: 0, service_hist: 0, lines: [], employees: [] }; },
     perf_month: function () { return { no_data: true, people: [], rules: {} }; },
     announcements_admin: function () { return []; },
+    gestion_ventas_hora: function (a) { G.calls.push({ rpc: "gestion_ventas_hora", args: a });
+      var c = [], d = new Date(Date.now() - 56 * 864e5).toISOString().slice(0, 10);
+      [5, 6, 7].forEach(function (dow) { for (var h = 12; h <= 21; h++) c.push({ dow: dow, hora: h, ventas: dow === 6 && h === 13 ? 85.2 : 10 + h + dow, pedidos: dow === 6 && h === 13 ? 6.5 : 2 }); });
+      c.push({ dow: 2, hora: 19, ventas: 12, pedidos: 1 });
+      return { desde: d, hasta: new Date().toISOString().slice(0, 10), semanas: a.p_weeks, primera: d, dias: { 2: 3, 5: 8, 6: 8, 7: 8 }, celdas: c }; },
     gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
       caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },
       laptop: new Date().toISOString(), impresion_atrasada: 0, poco_afuera: ["Agua (botella)"], precios_por_aprobar: 2, pagos_por_comprobar: 0,

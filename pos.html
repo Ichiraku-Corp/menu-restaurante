@@ -13,20 +13,20 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=e5cd38b9b5">
+<link rel="stylesheet" href="pos.css?v=6ed2159d24">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=6cf424d38d"></script>
-<script src="pos-base.js?v=74a9f7a21e" defer></script>
-<script src="pos-acceso.js?v=90d6ad500c" defer></script>
-<script src="pos-mesas.js?v=5d646e4b5c" defer></script>
-<script src="pos-pedido.js?v=324c98805f" defer></script>
+<script src="pos-base.js?v=eee5b5dee1" defer></script>
+<script src="pos-acceso.js?v=0933d2fa3c" defer></script>
+<script src="pos-mesas.js?v=b855ed80b7" defer></script>
+<script src="pos-pedido.js?v=1bcdc46882" defer></script>
 <script src="pos-cobro.js?v=7fd009d0e2" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=2d61ba0b3f" defer></script>
-<script src="pos-caja.js?v=5d8fc3f323" defer></script>
+<script src="pos-caja.js?v=4f0ab85fc1" defer></script>
 </head>
 <body>
 <header>
@@ -86,6 +86,7 @@
       <div class="menu card" style="margin-top:10px">
         <div class="search"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Buscar plato…" aria-label="Buscar plato"></div>
         <div class="cats" id="cats" style="margin-top:8px"></div>
+        <p class="dishhint">Toca un plato para añadirlo · mantenlo presionado para cantidad y nota</p>
         <div class="dishes" id="dishes"></div>
       </div>
       <div class="ticket card" style="margin-top:10px">

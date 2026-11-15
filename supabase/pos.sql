@@ -453,7 +453,7 @@ begin
                from public.pos_tables t where t.active),
     'orders', (select coalesce(jsonb_agg(jsonb_build_object(
                  'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'day_number', o.day_number,
-                 'opened_at', o.opened_at, 'opened_by', public.pos_emp_name(o.opened_by),
+                 'opened_at', o.opened_at, 'opened_by', public.pos_emp_name(o.opened_by), 'opened_by_id', o.opened_by,
                  'total', tt.total,
                  'paid', tt.paid,
                  'precuenta_at', o.precuenta_at, 'phone', o.phone, 'channel', o.channel,

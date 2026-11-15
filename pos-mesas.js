@@ -37,12 +37,41 @@ $("health").addEventListener("click", function () {
 });
 function refreshState() {
   return q(sb.rpc("pos_state")).then(function (s) {
-    ST = s; healthDraw(true);
+    ST = s; healthDraw(true); readyCheck(s);
     $("rate").classList.toggle("bad", !s.rate);
     $("rate").textContent = s.rate ? "€ BCV " + nf2.format(s.rate) + (s.rate_date && s.rate_date !== today() ? " (de " + s.rate_date.slice(8, 10) + "/" + s.rate_date.slice(5, 7) + ")" : "") : "Sin tasa del día";
     if (!$("tablesView").classList.contains("hidden")) drawTables();
     drawBanners();
   }, function (e) { healthDraw(false); throw e; });
+}
+// Plato listo: cuando cocina marca listo un plato de una mesa que abrí yo (o, si cobro, de un pedido para llevar
+// o delivery), la tablet suena, vibra y avisa abajo; tocar el aviso abre el pedido.
+var READY = null;
+function readyMine(o) {
+  if (!U) return false;
+  var mine = o.opened_by_id != null ? o.opened_by_id === U.id : o.opened_by === U.name;
+  return mine || (o.kind !== "mesa" && !!U.charge);
+}
+function readyCheck(s) {
+  var now = {}, news = [];
+  (s.orders || []).forEach(function (o) {
+    var r = num(o.ready); now[o.id] = r;
+    if (READY && r > (READY[o.id] || 0) && readyMine(o)) news.push(o);
+  });
+  READY = now;
+  if (!news.length) return;
+  chime(); readyNote(news);
+}
+function readyNote(list) {
+  var n = $("readyNote");
+  if (!n) {
+    n = document.createElement("button"); n.type = "button"; n.id = "readyNote"; document.body.appendChild(n);
+    n.addEventListener("click", function () { n.classList.remove("show"); var id = Number(n.dataset.order); if (id && U) openOrder(id); });
+  }
+  n.innerHTML = '<span class="rn">🍜</span><span><b>Listo en cocina</b> · ' + esc(list.map(function (o) { return o.label + ": " + o.ready + (num(o.ready) === 1 ? " plato" : " platos"); }).join(" · ")) +
+    '</span><span class="rv">Ver</span>';
+  n.dataset.order = list[0].id;
+  n.classList.add("show"); clearTimeout(readyNote._t); readyNote._t = setTimeout(function () { n.classList.remove("show"); }, 12000);
 }
 function today() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10); }
 setInterval(function () { if (U && !document.hidden) refreshState().catch(function () {}); }, 5000);
