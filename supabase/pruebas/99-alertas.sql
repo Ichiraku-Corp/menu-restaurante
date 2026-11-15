@@ -1,7 +1,8 @@
 -- Alertas al correo del dueño: cierre que no cuadra, anulados después de cocina, descuentos grandes, laptop sin conexión
 \set ON_ERROR_STOP 1
 \set QUIET 1
-update public.gestion_settings set alert_emails = 'alertas@prueba.test', alert_cash_diff = 10;
+select prueba.ok((select alert_cash_diff from public.gestion_settings limit 1) = 5, 'si no se cambia, avisa de cierres que no cuadran por más de Ref 5');
+update public.gestion_settings set alert_emails = 'alertas@prueba.test';
 delete from public.pos_reports where data ->> 'kind' = 'alerta';
 select (select id from public.employees where name = 'Cajera Prueba') caja, (select id from public.employees where name = 'Mesera Prueba') mesera,
        (select id from public.dishes where jsonb_array_length(coalesce(variants, '[]'::jsonb)) = 0 and available order by id limit 1) plato,
@@ -61,11 +62,13 @@ update public.pos_sessions set status = 'cerrada', closed_at = now(), closed_by 
        expected = '{"efectivo_usd": 100, "zelle": 20}'::jsonb, counted = '{"efectivo_usd": 75, "zelle": 20, "_inv": []}'::jsonb where id = :ses;
 select prueba.ok(exists (select 1 from public.pos_reports where data ->> 'clave' = 'cierre-' || :ses and data ->> 'titulo' = 'El cierre de caja no cuadra: faltan Ref 25,00'
                          and data -> 'lineas' ->> 1 = 'Diferencia por método: Efectivo $: falta $ 25,00' and data -> 'lineas' ->> 2 = 'Nota del cierre: (sin nota)'),
-  'un cierre que no cuadra por más de Ref 10 avisa con la diferencia por método y la nota');
+  'un cierre que no cuadra por más de Ref 5 avisa con la diferencia por método y la nota');
 insert into public.pos_sessions (opened_by, status) values (:caja, 'abierta') returning id as ses2 \gset
 update public.pos_sessions set status = 'cerrada', closed_at = now(), closed_by = :caja,
        expected = '{"efectivo_usd": 100}'::jsonb, counted = '{"efectivo_usd": 95}'::jsonb where id = :ses2;
-select prueba.ok(not exists (select 1 from public.pos_reports where data ->> 'clave' = 'cierre-' || :ses2), 'una diferencia chica (Ref 5) no avisa');
+select prueba.ok(not exists (select 1 from public.pos_reports where data ->> 'clave' = 'cierre-' || :ses2), 'una diferencia de Ref 5 o menos no avisa');
+select prueba.ok(not has_function_privilege('anon', 'public.alerta_cierre()', 'execute') and not has_function_privilege('authenticated', 'public.alerta_descuento()', 'execute'),
+  'nadie de afuera puede llamar las funciones internas de las alertas');
 -- La caja queda abierta para las pruebas que siguen
 insert into public.pos_sessions (opened_by, status) values (:caja, 'abierta');
 update public.gestion_settings set alert_emails = '';

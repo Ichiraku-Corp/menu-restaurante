@@ -66,7 +66,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
       "guarda la promoción con nombre, %, días, horario y platos");
     // Alertas al correo (Dinero › Ventas › Ajustes)
     await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(200);
-    ok(await page.isVisible("#sAlerts") && (await page.inputValue("#sAlertDiff")) === "10", "Ajustes tiene los correos de alertas y desde cuánto avisa un cierre (Ref 10)");
+    ok(await page.isVisible("#sAlerts") && (await page.inputValue("#sAlertDiff")) === "5", "Ajustes tiene los correos de alertas y desde cuánto avisa un cierre (Ref 5)");
     await page.fill("#sAlerts", "dueno@ejemplo.test"); await page.fill("#sAlertDiff", "15"); await page.click("#saveSettings"); await page.waitForTimeout(300);
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.alert_emails === "dueno@ejemplo.test" && c.value.alert_cash_diff === 15)),
       "guarda a quién le llegan las alertas y el límite del cierre");

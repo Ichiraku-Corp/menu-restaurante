@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Alertas al correo del dueño (Ichiraku)
---  · Cierre de caja que no cuadra por más de lo indicado en Gestión → Dinero → Ventas (Ajustes); Ref 10 si no se cambia.
+--  · Cierre de caja que no cuadra por más de lo indicado en Gestión → Dinero → Ventas (Ajustes); Ref 5 si no se cambia
+--    (igual que la regla del cierre: si pasa de Ref 5, se explica en la nota).
 --  · Platos anulados después de ir a cocina: uno caro (Ref 20 o más) o el tercero del día.
 --  · Descuentos grandes: Ref 15 o más, o más del 25 % de la cuenta.
 --  · La laptop de caja sin conectarse 15 minutos con la caja abierta.
@@ -11,7 +12,7 @@
 -- ============================================================================
 
 alter table public.gestion_settings add column if not exists alert_emails text not null default '';
-alter table public.gestion_settings add column if not exists alert_cash_diff numeric(10,2) not null default 10;
+alter table public.gestion_settings add column if not exists alert_cash_diff numeric(10,2) not null default 5;
 
 -- Encola una alerta. La misma clave no se repite en 12 horas. Sin correos configurados, no hace nada.
 create or replace function public.pos_alerta(p_clave text, p_titulo text, p_lineas text[]) returns boolean
@@ -57,7 +58,7 @@ begin
     into dif, det
   from jsonb_object_keys(new.counted) k where k not like '\_%' and jsonb_typeof(new.counted -> k) = 'number';
   select alert_cash_diff into lim from public.gestion_settings limit 1;
-  if abs(dif) <= coalesce(lim, 10) then return null; end if;
+  if abs(dif) <= coalesce(lim, 5) then return null; end if;
   perform public.pos_alerta('cierre-' || new.id,
     'El cierre de caja no cuadra: ' || case when dif > 0 then 'sobran' else 'faltan' end || ' Ref ' || public.pos_dinero(abs(dif)),
     array['Cerró: ' || coalesce(public.pos_emp_name(new.closed_by), '—') || ' · ' || public.pos_hora(new.closed_at),
@@ -67,6 +68,7 @@ begin
 end $$;
 drop trigger if exists alerta_cierre on public.pos_sessions;
 create trigger alerta_cierre after update of status on public.pos_sessions for each row execute function public.alerta_cierre();
+revoke execute on function public.alerta_cierre() from anon, public, authenticated;
 
 -- 2) Platos anulados después de ir a cocina
 create or replace function public.alerta_anulado() returns trigger
@@ -90,6 +92,7 @@ begin
 end $$;
 drop trigger if exists alerta_anulado on public.pos_items;
 create trigger alerta_anulado after update of status on public.pos_items for each row execute function public.alerta_anulado();
+revoke execute on function public.alerta_anulado() from anon, public, authenticated;
 
 -- 3) Descuentos grandes
 create or replace function public.alerta_descuento() returns trigger
@@ -107,6 +110,7 @@ begin
 end $$;
 drop trigger if exists alerta_descuento on public.pos_orders;
 create trigger alerta_descuento after update of discount on public.pos_orders for each row execute function public.alerta_descuento();
+revoke execute on function public.alerta_descuento() from anon, public, authenticated;
 
 -- 4) Laptop sin conexión con la caja abierta (se revisa cada 5 minutos)
 create or replace function public.pos_alertas_revisar() returns void

@@ -5,7 +5,7 @@
   var G = window.__G = {
     calls: [],
     tables: {
-      categories: M.categories, dishes: M.dishes, cost_areas: [], employees: [], expenses: [], suppliers: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 10 }],
+      categories: M.categories, dishes: M.dishes, cost_areas: [], employees: [], expenses: [], suppliers: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5 }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
