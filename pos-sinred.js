@@ -181,15 +181,21 @@ var SRH = {
   pos_open_delivery: function (a) {
     var id = srNewId();
     SR.tmp[id] = { id: id, kind: "delivery", table_id: null, label: (a.p_channel === "yummy" ? "Yummy" : "Delivery") + ": " + (a.p_name || ""), phone: a.p_phone || "", address: a.p_address || "",
-                   opened_at: new Date().toISOString(), opened_by: U ? U.name : "" };
+                   delivery_fee: Math.max(0, Math.min(100, num(a.p_fee))), opened_at: new Date().toISOString(), opened_by: U ? U.name : "" };
     srSaveOrders(); return id;
   },
   // Una cuenta: lo que se guardó de ella con internet (o su total, si esta tablet no la abrió) más lo de sin internet
   pos_order: function (a) {
     var id = a.p_order, info = srOrderInfo(id); if (!info) throw new Error("Pedido no encontrado");
     var cached = id > 0 ? (srGet("ords") || {})[id] : null, so = id > 0 && ST ? ST.orders.find(function (x) { return x.id === id; }) : null;
-    var base = cached ? (cached.items || []).filter(function (i) { return i.status !== "pendiente"; }) : [];
     var off = srSentItems(id).map(function (i, k) { return Object.assign({ id: -1 - k, status: "enviado", offline: true }, i); });
+    // La copia de la cuenta es de cuando se abrió en esta tablet; la lista de cuentas se refresca cada 5 s. Si la lista es más
+    // nueva y no cuadra (otra tablet le agregó platos, un abono o un descuento), se cobra con el total de la lista, no con la copia
+    if (cached && so && cached.totals && num((srGet("st") || {})._saved) >= num(cached._saved)) {
+      var lt = num(so.total) - srSum(off) * (100 + (info.kind === "mesa" ? srSvcPct() : 0)) / 100;
+      if (Math.abs(lt - num(cached.totals.total)) > 0.05 || Math.abs(num(so.paid) - num(cached.totals.paid)) > 0.05) cached = null;
+    }
+    var base = cached ? (cached.items || []).filter(function (i) { return i.status !== "pendiente"; }) : [];
     var pend = (SR.pend[id] || []).map(function (i, k) { return Object.assign({ id: -100 - k, status: "pendiente" }, i); });
     var pct = cached ? num(cached.service_pct) : info.kind === "mesa" ? srSvcPct() : 0, ct = cached && cached.totals, prev = null, items, tt;
     if (ct) {
@@ -199,9 +205,9 @@ var SRH = {
     } else {
       // Cuenta abierta con internet en otra tablet: se conoce su total, no sus platos
       var pt = so ? num(so.total) - srSum(off) * (100 + (info.kind === "mesa" ? srSvcPct() : 0)) / 100 : 0, pp = so ? num(so.paid) : 0;
-      var s2 = srSum(off) + srSum(pend), v2 = Math.round(s2 * pct) / 100;
+      var s2 = srSum(off) + srSum(pend), v2 = Math.round(s2 * pct) / 100, dl = id < 0 ? num(info.delivery_fee) : 0;   // delivery abierto sin internet
       items = (pt > 0.009 ? [{ id: -999, name: "Consumo anterior (con internet)", qty: 1, unit_price: Math.round(pt * 100) / 100, status: "enviado", synthetic: true }] : []).concat(off, pend);
-      tt = { subtotal: Math.round((pt + s2) * 100) / 100, discount: 0, service: v2, delivery: 0, total: Math.round((pt + s2 + v2) * 100) / 100, paid: pp };
+      tt = { subtotal: Math.round((pt + s2) * 100) / 100, discount: 0, service: v2, delivery: dl, total: Math.round((pt + s2 + v2 + dl) * 100) / 100, paid: pp };
       prev = pt > 0.009 || pp ? { total: Math.round(pt * 100) / 100, paid: pp } : null;
     }
     return { id: info.id, kind: info.kind, table_id: info.table_id, label: info.label + (info.existing ? " (sin internet)" : ""), status: "abierta", items: items,
@@ -253,7 +259,8 @@ var SRH = {
     var body = { uuid: "sr" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), device: devName(), emp: U.id, emp_name: U.name, pin: U.pin,
                  added: !!(info.existing || srSentItems(a.p_order).length),
                  order: info.existing ? { id: info.id, kind: info.kind, table_id: info.table_id, label: info.label }
-                                      : { tmp: "sr-" + Math.abs(info.id), kind: info.kind, table_id: info.table_id, label: info.label, phone: info.phone, address: info.address },
+                                      : { tmp: "sr-" + Math.abs(info.id), kind: info.kind, table_id: info.table_id, label: info.label, phone: info.phone, address: info.address,
+                                          delivery_fee: num(info.delivery_fee) },
                  items: list };
     return srBridge("/api/sinred/enviar", { method: "POST", body: JSON.stringify(body) }).then(function (r) {
       SR.mine.push({ type: "comanda", uuid: body.uuid, at: new Date().toISOString(), emp_name: U.name, order: body.order, items: list }); delete SR.pend[a.p_order]; srSaveOrders();
@@ -281,14 +288,14 @@ sb.rpc = function (name, args) {
     }
     // Con internet: se guarda lo necesario para seguir sin él
     if (!r.error) {
-      if (name === "pos_state" && r.data) srSet("st", r.data);
+      if (name === "pos_state" && r.data) srSet("st", Object.assign({}, r.data, { _saved: Date.now() }));   // _saved: para saber qué copia es más nueva
       else if (name === "pos_staff" && r.data) srSet("staff", r.data);
       else if (name === "pos_check_pin" && r.data && r.data.ok && args) { var p = srGet("pins") || {}; p[args.p_emp] = { h: srPinKey(args.p_emp, args.p_pin), name: r.data.name, charge: !!r.data.can_charge }; srSet("pins", p); srLanToken(); }
       else if (name === "pos_order" && r.data && args) {
         // Copia de cada cuenta abierta (para cobrarla sin internet con sus platos); se quitan las que ya se cerraron
         var m = srGet("ords") || {}, open = {}; (ST && ST.orders || []).forEach(function (o) { open[o.id] = true; });
         Object.keys(m).forEach(function (k) { if (!open[k]) delete m[k]; });
-        if (r.data.status === "abierta") m[args.p_order] = r.data; else delete m[args.p_order];
+        if (r.data.status === "abierta") m[args.p_order] = Object.assign({}, r.data, { _saved: Date.now() }); else delete m[args.p_order];
         srSet("ords", m);
       }
     }

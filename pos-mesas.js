@@ -24,7 +24,8 @@ function promoOf(d) {
   return best;
 }
 function promoTxt(p) { return p ? p.name + " -" + nf2.format(num(p.percent)).replace(/,00$/, "") + " %" : ""; }
-function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(base * (1 - num(p.percent) / 100) * 100) / 100 : base; }
+// El mismo redondeo que el servidor (round de Postgres): en centavos enteros, sin errores de coma flotante (1,50 −15 % = 1,28, no 1,27)
+function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(Math.round(base * 100) * Math.round((100 - num(p.percent)) * 100) / 10000) / 100 : base; }
 function priceOf(d, v) { var vs = variantsOf(d), x = vs && vs.find(function (y) { return y.label === v; }); return promoPrice(d, x ? num(x.price) : num(d.price)); }
 function minPrice(d) { var vs = variantsOf(d); return promoPrice(d, vs ? Math.min.apply(null, vs.map(function (v) { return num(v.price); })) : num(d.price)); }
 function loadPromos() { q(sb.rpc("menu_promos")).then(function (l) { PROMOS = l || []; if (cur.order) { drawMenu(); drawTicket(); } }).catch(function () { /* sin promociones: precios normales */ }); }

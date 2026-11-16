@@ -50,6 +50,7 @@ create or replace function public.pos_offline_sync(p_entry jsonb) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare e jsonb := p_entry; o jsonb := p_entry -> 'order'; uid text := p_entry ->> 'uuid'; tmp text := coalesce(p_entry -> 'order' ->> 'tmp', '');
   oid bigint; iid bigint; emp bigint; pin_ok boolean; at timestamptz; it record; d record; price numeric; n int := 0; svc numeric; note text := ''; done record;
+  pid bigint; pname text; ppct numeric;
 begin
   if coalesce(public.staff_role(), '') not in ('impresora', 'dueño', 'admin') then raise exception 'Sin permiso'; end if;
   select * into done from public.pos_offline_entries where uuid = uid;
@@ -79,13 +80,14 @@ begin
     end if;
   end if;
   if oid is null then
-    insert into public.pos_orders (kind, label, phone, address, service_pct, opened_by, opened_at, day_number)
+    insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by, opened_at, day_number)
     values (case when o ->> 'kind' = 'delivery' then 'delivery' else 'llevar' end,
             left(coalesce(nullif(trim(o ->> 'label'), ''), 'Sin internet'), 40), left(coalesce(o ->> 'phone', ''), 30), left(coalesce(o ->> 'address', ''), 200),
+            case when o ->> 'kind' = 'delivery' and coalesce(o ->> 'delivery_fee', '') ~ '^[0-9]+(\.[0-9]+)?$' then least((o ->> 'delivery_fee')::numeric, 100) else 0 end,
             0, emp, at, public.pos_next_number()) returning id into oid;
   end if;
 
-  -- 2) Los platos ya salieron en cocina: entran como enviados, con el precio de la carta
+  -- 2) Los platos ya salieron en cocina: entran como enviados, con el precio de la carta y la promoción que valía a esa hora (como con internet)
   for it in select * from jsonb_to_recordset(coalesce(e -> 'items', '[]'::jsonb)) as x(dish_id bigint, variant text, option text, notes text, qty numeric) loop
     select * into d from public.dishes where id = it.dish_id;
     if d.id is null or coalesce(it.qty, 0) <= 0 or it.qty > 99 then continue; end if;
@@ -94,8 +96,11 @@ begin
       select (v ->> 'price')::numeric into price from jsonb_array_elements(d.variants) v where v ->> 'label' = coalesce(it.variant, '');
       price := coalesce(price, d.price);
     end if;
-    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, created_at, status, sent_at)
-    values (oid, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty, price, emp, at, 'enviado', at)
+    pid := null; select x.id, x.name, x.percent into pid, pname, ppct from public.promo_de(d.id, at) x;
+    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, created_at, status, sent_at, promo, list_price)
+    values (oid, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty,
+            case when pid is null then price else round(price * (1 - ppct / 100), 2) end, emp, at, 'enviado', at,
+            case when pid is null then '' else pname || ' -' || replace(trim_scale(ppct)::text, '.', ',') || ' %' end, price)
     returning id into iid;
     perform public.inv_consume_item(iid, -1);
     n := n + 1;
