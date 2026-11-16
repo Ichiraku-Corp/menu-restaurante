@@ -10,13 +10,13 @@ create or replace function public.gestion_ventas_hora(p_weeks integer default 8)
 language plpgsql stable security definer set search_path = public as $$
 declare
   semanas int := greatest(1, least(coalesce(p_weeks, 8), 52));
-  hasta date := (now() at time zone 'America/Caracas')::date;
+  hasta date := (now() at time zone 'America/Caracas')::date - 1;   -- hasta ayer: hoy es un día a medias
   desde date := hasta - semanas * 7 + 1;
   r jsonb;
 begin
   if not public.can_manage() then raise exception 'Sin permiso'; end if;
   with o as (
-    select (o.opened_at at time zone 'America/Caracas') t, tt.total - tt.delivery as venta
+    select (o.opened_at at time zone 'America/Caracas') t, tt.subtotal - tt.discount + tt.delivery as venta   -- sin el servicio, como Ventas, Inicio y la meta
     from public.pos_orders o cross join lateral public.pos_totals(o.id) tt
     where o.status = 'cobrada' and (o.opened_at at time zone 'America/Caracas')::date between desde and hasta
   ), dias as (

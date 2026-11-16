@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-A9LJnjodMrfSlf4O/s5ihcygXg45Vvl0kWsQVKE88Zc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-PgWd/+AavqdjTPLf6ZIUnHJUuykKm8KHMnp67SYsSX0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -2251,7 +2251,7 @@
     function tipOf(c, dow, h) {
       var n = num(dias[dow]), dn = DOW[dow - 1].toLowerCase();
       return "<b>" + DOW[dow - 1] + " " + hh(h) + " a " + hh(h + 1) + "</b><br>" + (c ? money(num(c.ventas)) + " de promedio · " + nf3.format(num(c.pedidos)) + " pedidos" : "Sin ventas a esta hora") +
-        "<br>" + (n ? n + " " + dn + (n === 1 ? "" : "s") + " con ventas" : "Ningún " + dn + " con ventas");
+        "<br>" + (n ? n + " " + dn + (n === 1 || /s$/.test(dn) ? "" : "s") + " con ventas" : "Ningún " + dn + " con ventas");   // «8 lunes», «8 sábados»
     }
     var g = '<div class="vh-grid" style="--cols:' + hours.length + '"><span></span>' + hours.map(function (h) { return '<span class="hd">' + h + "</span>"; }).join("");
     for (var dow = 1; dow <= 7; dow++) {
