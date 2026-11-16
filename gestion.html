@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-OtO/UHqefSYS2sSf8nQ8DIrhuS4FrIZS/LsyZAkHR60='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-z2uRv/x6JNKNI8+3pLVt2OlfXnXC4MAZl+LQp1P7SrA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1785,7 +1785,7 @@
     var cobros = [[B("Fecha")].concat(MET_XL.map(function (m) { return B(m[1] + " (Ref)"); }), [B("Cobrado en divisas Ref (base IGTF)"), B("IGTF 3 % Ref (si aplica)")])];
     (c.dias || []).forEach(function (d) {
       var t = num(d.tasa), v = r2(d.ventas), base = r2(v / fac), iv = r2(v - base), s = r2(d.servicio), de = r2(d.delivery), tot = r2(v + s + de), bs = function (n) { return t ? r2(n * t) : ""; };
-      ventas.push([fechaXl(d.fecha), d.fuente === "pos" ? "Sistema" : "Syth", t ? { v: t, s: 4 } : "", { v: num(d.tickets), s: 5 }, v, base, iv, s, de, tot, bs(v), bs(base), bs(iv), bs(s), bs(tot)]);
+      ventas.push([fechaXl(d.fecha), d.fuente === "pos" ? "Sistema" : "Syth", t ? { v: t, s: 4 } : "", d.fuente === "pos" || num(d.tickets) ? { v: num(d.tickets), s: 5 } : "", v, base, iv, s, de, tot, bs(v), bs(base), bs(iv), bs(s), bs(tot)]);
       T.v += v; T.base += base; T.iv += iv; T.s += s; T.de += de; T.tot += tot; T.n += num(d.tickets);
       if (t) { T.vBs += v * t; T.baseBs += base * t; T.ivBs += iv * t; T.sBs += s * t; T.deBs += de * t; T.totBs += tot * t; } else T.sinTasa++;
       if (d.fuente !== "pos") { T.syth++; return; }
@@ -1797,7 +1797,10 @@
       }));
       T.div += div; cobros.push(row.concat([r2(div), r2(div * 0.03)]));
     });
-    ventas.push([B("Total"), "", "", { v: T.n, s: 5 }, N(T.v), N(T.base), N(T.iv), N(T.s), N(T.de), N(T.tot), N(T.vBs), N(T.baseBs), N(T.ivBs), N(T.sBs), N(T.totBs)]);
+    // Si ningún día tiene tasa (o todos son de Syth), los totales en Bs (o de pedidos) quedan en blanco en vez de 0
+    var nd = (c.dias || []).length, sinBs = nd > 0 && T.sinTasa === nd, sinN = nd > 0 && T.syth === nd;
+    var NB = function (x) { return sinBs ? "" : N(x); }, RB = function (x) { return sinBs ? "" : r2(x); }, PED = sinN ? "" : { v: T.n, s: 5 };
+    ventas.push([B("Total"), "", "", PED, N(T.v), N(T.base), N(T.iv), N(T.s), N(T.de), N(T.tot), NB(T.vBs), NB(T.baseBs), NB(T.ivBs), NB(T.sBs), NB(T.totBs)]);
     cobros.push([B("Total")].concat(MET_XL.map(function (m) { return T.met[m[0]] ? N(T.met[m[0]].ref) : ""; }), [N(T.div), N(T.div * 0.03)]));
     var gastos = [[B("Fecha"), B("Concepto"), B("Tipo"), B("Monto Ref"), B("Foto de la factura")]], tg = 0;
     (c.gastos || []).forEach(function (g) { tg += num(g.monto); gastos.push([fechaXl(g.fecha), g.concepto, g.tipo, r2(g.monto), g.factura ? "Sí (en Gestión › Gastos)" : ""]); });
@@ -1810,14 +1813,14 @@
     if (nomina.length === 1) nomina.push(["Sin pagos marcados como «Pagado» en Gestión › Personal › Nómina este mes."]); else nomina.push([B("Total"), "", N(tnr), "", N(tnb), ""]);
     var res = [[B("Ichiraku Ramen · resumen de " + mes)],
       ["Del " + fechaXl(c.mes) + " al " + fechaXl(c.hasta) + ". Precios con IVA " + iva + " % incluido. Ref = euro BCV; los Bs van a la tasa BCV de cada día."], [],
-      [B("Ventas"), B("Ref"), B("Bs")],
-      ["Ventas (IVA incluido, sin servicio ni delivery)", r2(T.v), r2(T.vBs)], ["   Base imponible", r2(T.base), r2(T.baseBs)], ["   IVA " + iva + " %", r2(T.iv), r2(T.ivBs)],
-      ["Servicio 10 % (para el personal)", r2(T.s), r2(T.sBs)], ["Delivery", r2(T.de), r2(T.deBs)], [B("Total cobrado"), N(T.tot), N(T.totBs)], ["Pedidos", { v: T.n, s: 5 }], [],
+      [B("Ventas"), B("Ref"), B(sinBs ? "Bs (sin tasa registrada)" : T.sinTasa ? "Bs (solo días con tasa)" : "Bs")],
+      ["Ventas (IVA incluido, sin servicio ni delivery)", r2(T.v), RB(T.vBs)], ["   Base imponible", r2(T.base), RB(T.baseBs)], ["   IVA " + iva + " %", r2(T.iv), RB(T.ivBs)],
+      ["Servicio 10 % (para el personal)", r2(T.s), RB(T.sBs)], ["Delivery", r2(T.de), RB(T.deBs)], [B("Total cobrado"), N(T.tot), NB(T.totBs)], [T.syth ? "Pedidos (los días de Syth no traen el número)" : "Pedidos", PED], [],
       [B("Cobros por método (sistema propio)"), B("Ref"), B("En su moneda"), B("Moneda")]];
     MET_XL.forEach(function (m) { var x = T.met[m[0]]; if (x) res.push([m[1], r2(x.ref), r2(x.monto), m[2]]); });
     res.push(["Cobrado en divisas (efectivo $, Zelle, Binance, PayPal): base del IGTF", r2(T.div)], ["IGTF 3 % (si aplica; confírmalo con el contador)", r2(T.div * 0.03)], [],
       [B("Gastos del mes (fijos, del mes y salidas de caja)"), N(tg)], [B("Nómina pagada (marcada en Gestión)"), N(tnr), N(tnb)], []);
-    if (T.syth) res.push([T.syth + (T.syth === 1 ? " día viene" : " días vienen") + " de Syth: tienen el total y el servicio, sin el detalle por método de pago."]);
+    if (T.syth) res.push([T.syth + (T.syth === 1 ? " día viene" : " días vienen") + " de Syth: tienen el total y el servicio, sin el detalle por método de pago ni el número de pedidos."]);
     if (T.sinTasa) res.push([T.sinTasa + (T.sinTasa === 1 ? " día no tiene" : " días no tienen") + " tasa BCV registrada: sus Bs quedan en blanco."]);
     return XL.book([{ name: "Resumen", rows: res, widths: [58, 16, 16, 10] },
       { name: "Ventas por día", rows: ventas, widths: [12, 9, 12, 9, 16, 16, 14, 13, 13, 16, 16, 16, 14, 14, 16] },
