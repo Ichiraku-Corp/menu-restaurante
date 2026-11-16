@@ -44,6 +44,29 @@ select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_kitchen(:
   '«Listos» y el promedio de hoy son de cada estación');
 select prueba.falla('insert into public.kitchen_stations (name) values (''Hack'')', 'row-level security', 'una tablet no crea estaciones');
 reset role;
+-- Envases y bolsas: no pasan por cocina ni frenan «¡Listo!»; la tarjeta los muestra para empacar
+insert into public.categories (name, no_kitchen) values ('Empaques prueba', true) returning id as cat_emp \gset
+insert into public.dishes (category_id, name, price) values (:cat_emp, 'Bolsa prueba', 0.5) returning id as bolsa \gset
+insert into public.dishes (category_id, name, price, station_id) values (:cat_emp, 'Té para llevar prueba', 2, :barra) returning id as te \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_open(:mesera, '2222', null, 'Retira con bolsa') as ol \gset
+select public.pos_add(:mesera, '2222', :ol, jsonb_build_array(jsonb_build_object('dish_id', :b, 'qty', 1), jsonb_build_object('dish_id', :bolsa, 'qty', 2), jsonb_build_object('dish_id', :te, 'qty', 1)));
+select public.pos_send(:mesera, '2222', :ol);
+select (select x from jsonb_array_elements(public.pos_kitchen(null) -> 'orders') x where (x ->> 'id')::bigint = :ol) kl \gset
+select prueba.ok(jsonb_array_length(:'kl'::jsonb -> 'items') = 2 and not exists (select 1 from jsonb_array_elements(:'kl'::jsonb -> 'items') i where i ->> 'name' = 'Bolsa prueba'),
+  'la bolsa no sale como plato por preparar (el té sí: tiene su propia estación aunque su categoría no pase por cocina)');
+select prueba.ok(:'kl'::jsonb -> 'pack' = '["2 × Bolsa prueba"]'::jsonb, 'la tarjeta dice qué empacar (2 × Bolsa)');
+reset role;
+select o.day_number nl, (select array_agg(i.id) from public.pos_items i where i.order_id = o.id and i.dish_id <> :bolsa) cocinados from public.pos_orders o where o.id = :ol \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'preparando') x where (x ->> 'n')::int = :nl), 'el pedido sale en «Preparando»');
+select public.pos_kitchen_ready(:'cocinados'::bigint[]);
+select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'listos') x where (x ->> 'n')::int = :nl),
+  'con lo que se cocina listo, pasa a «¡Listo!» aunque nadie marque la bolsa');
+reset role;
+update public.dishes set available = false where category_id = :cat_emp;
 -- Una estación apagada: sus platos van a la principal
 update public.kitchen_stations set active = false where id = :sushi;
 set role authenticated;

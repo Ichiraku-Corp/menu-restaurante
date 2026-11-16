@@ -72,6 +72,7 @@
             (i.notes ? '<span class="note">' + esc(i.notes) + "</span>" : "") + "</span></button>";
         }).join("") +
         (o.others && Object.keys(o.others).length ? '<div class="others">También lleva: ' + Object.keys(o.others).map(function (k) { return esc(k) + " <b>" + Number(o.others[k]) + "</b>"; }).join(" · ") + "</div>" : "") +
+        (o.pack && o.pack.length ? '<div class="others pack">Empacar: ' + o.pack.map(esc).join(" · ") + "</div>" : "") +
         (o.items.length > 1 ? '<button type="button" class="allready" data-all="' + o.id + '">Todo listo ✓</button>' : "") + "</section>";
     }).join("") : '<p class="empty">No hay comandas pendientes 🍜</p>';
     var t = (data && data.today) || {};

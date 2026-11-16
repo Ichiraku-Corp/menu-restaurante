@@ -80,6 +80,11 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok((await cocina.locator(".card .item").count()) === 1 && /Ramen/.test(await cocina.textContent("#stName")), "lo que no tiene estación (Entradas) va a la principal: Ramen");
     await cocina.click('#stations [data-st="0"]'); await cocina.waitForTimeout(400);
     ok((await cocina.locator(".card .item").count()) === 3 && !(await cocina.textContent("#stName")), "«Todas» muestra el pedido completo");
+    // Envases y bolsas (no pasan por cocina): la tarjeta dice qué empacar, sin botón para marcarlos
+    await cocina.evaluate(() => { window.__PACK = { 900: ["2 × Bolsa", "1 × Envase grande"] }; });
+    await cocina.click('#stations [data-st="1"]'); await cocina.waitForTimeout(400);
+    ok(/Empacar: 2 × Bolsa · 1 × Envase grande/.test(await cocina.textContent("#board")) && (await cocina.locator(".card .item").count()) === 1,
+      "la tarjeta dice qué empacar (envases y bolsas) sin pedir que se marquen");
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]); }
   ok(errores.length === 0, "sin errores de JavaScript" + (errores.length ? ": " + errores.join(" | ") : ""));
   await browser.close(); server.close();

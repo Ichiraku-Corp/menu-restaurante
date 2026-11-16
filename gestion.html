@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ea00LHNQailNt0vp+iMGygEfgWKvr/uc+quPMuJF7dQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-HiL9QM6Cnu7TUFWxzbFgyep2XuA75L/NB2Qopcfr1Po='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1138,16 +1138,18 @@
   // ---------------------------------------------------------------- Estaciones de cocina
   // Estación de cada categoría y, si hace falta, de un plato; sin estación va a la primera (la principal)
   function loadStations() {
-    return Promise.all([opt(sb.from("kitchen_stations").select("*").order("position").order("id")), opt(sb.from("categories").select("id,station_id")), opt(sb.from("dishes").select("id,station_id"))])
+    return Promise.all([opt(sb.from("kitchen_stations").select("*").order("position").order("id")), opt(sb.from("categories").select("id,station_id,no_kitchen")), opt(sb.from("dishes").select("id,station_id,no_kitchen"))])
       .then(function (r) {
         S.stations = r[0]; S.catSt = {}; S.dishSt = {};
-        (r[1] || []).forEach(function (c) { S.catSt[c.id] = c.station_id || null; }); (r[2] || []).forEach(function (d) { S.dishSt[d.id] = d.station_id || null; });
+        // "x" = no pasa por cocina (envases, bolsas…)
+        (r[1] || []).forEach(function (c) { S.catSt[c.id] = c.no_kitchen ? "x" : c.station_id || null; }); (r[2] || []).forEach(function (d) { S.dishSt[d.id] = d.no_kitchen ? "x" : d.station_id || null; });
       });
   }
   function stName(id) { var x = (S.stations || []).find(function (s) { return s.id === id; }); return x ? x.name + (x.active ? "" : " (apagada)") : ""; }
   function stOptions(sel, first) {
     return '<option value="">' + esc(first) + "</option>" + (S.stations || []).map(function (s) {
-      return '<option value="' + s.id + '"' + (s.id === sel ? " selected" : "") + ">" + esc(s.name + (s.active ? "" : " (apagada)")) + "</option>"; }).join("");
+      return '<option value="' + s.id + '"' + (s.id === sel ? " selected" : "") + ">" + esc(s.name + (s.active ? "" : " (apagada)")) + "</option>"; }).join("") +
+      '<option value="x"' + (sel === "x" ? " selected" : "") + ">No pasa por cocina (envases, bolsas…)</option>";
   }
   function renderEstaciones() {
     var on = S.stations !== null && S.stations !== undefined;
@@ -1159,6 +1161,8 @@
       return '<tr class="click' + (s.active ? "" : " off") + '" data-station="' + s.id + '"><td class="n">' + num(s.position) + "</td><td><b>" + esc(s.name) + "</b>" + (main && main.id === s.id ? ' <span class="pill">principal</span>' : "") +
         "</td><td>" + (esc(cats.join(", ")) || '<span class="muted">—</span>') + "</td><td>" + (s.active ? '<span class="pill ok">Activa</span>' : '<span class="pill">Apagada</span>') + "</td></tr>";
     }).join("") + "</tbody></table>" : '<div class="empty">Aún no hay estaciones. Pulsa «+ Estación» (por ejemplo: Ramen, Sushi, Bebidas y postres).</div>';
+    var nk = S.cats.filter(function (c) { return S.catSt[c.id] === "x"; }).map(function (c) { return c.name; });
+    if (S.stations.length && nk.length) $("stList").innerHTML += '<p class="muted" style="margin:8px 0 0">No pasan por cocina (salen en la tarjeta como «Empacar»): ' + esc(nk.join(", ")) + ".</p>";
     var def = main ? "Principal (" + main.name + ")" : "Sin estación";
     $("stCats").innerHTML = '<table class="tbl"><thead><tr><th>Categoría</th><th>Estación</th></tr></thead><tbody>' + S.cats.map(function (c) {
       return "<tr><td><b>" + esc(c.name) + '</b></td><td><select data-stcat="' + c.id + '" aria-label="Estación de ' + esc(c.name) + '"' + (S.stations.length ? "" : " disabled") + ">" + stOptions(S.catSt[c.id] || null, def) + "</select></td></tr>";
@@ -1167,7 +1171,7 @@
       var ds = S.dishes.filter(function (d) { return d.category_id === c.id; }), cs = S.catSt[c.id] || null;
       return ds.length ? '<tr><td colspan="2" style="background:var(--chip);font-weight:800">' + esc(c.name) + "</td></tr>" + ds.map(function (d) {
         return "<tr><td>" + esc(d.name) + '</td><td><select data-stdish="' + d.id + '" aria-label="Estación de ' + esc(d.name) + '"' + (S.stations.length ? "" : " disabled") + ">" +
-          stOptions(S.dishSt[d.id] || null, "Como su categoría (" + (cs ? stName(cs) : def) + ")") + "</select></td></tr>";
+          stOptions(S.dishSt[d.id] || null, "Como su categoría (" + (cs === "x" ? "no pasa por cocina" : cs ? stName(cs) : def) + ")") + "</select></td></tr>";
       }).join("") : "";
     }).join("") + "</tbody></table>";
   }
@@ -1183,9 +1187,9 @@
   $("addStation").addEventListener("click", function () { stationForm(null); });
   $("stList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-station]"); if (tr) stationForm(S.stations.find(function (x) { return x.id === Number(tr.dataset.station); })); });
   function stSave(table, id, sel, map) {
-    var v = sel.value ? Number(sel.value) : null, before = map[id];
+    var v = sel.value === "x" ? "x" : sel.value ? Number(sel.value) : null, before = map[id];
     map[id] = v;
-    q(sb.from(table).update({ station_id: v }).eq("id", id)).then(function () { toast("Guardado"); renderEstaciones(); }).catch(function (er) { map[id] = before; renderEstaciones(); fail(er); });
+    q(sb.from(table).update({ station_id: v === "x" ? null : v, no_kitchen: v === "x" }).eq("id", id)).then(function () { toast("Guardado"); renderEstaciones(); }).catch(function (er) { map[id] = before; renderEstaciones(); fail(er); });
   }
   $("stCats").addEventListener("change", function (ev) { var s = ev.target.closest("[data-stcat]"); if (s) stSave("categories", Number(s.dataset.stcat), s, S.catSt); });
   $("stDishes").addEventListener("change", function (ev) { var s = ev.target.closest("[data-stdish]"); if (s) stSave("dishes", Number(s.dataset.stdish), s, S.dishSt); });

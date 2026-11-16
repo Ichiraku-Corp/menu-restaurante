@@ -1792,6 +1792,10 @@ create policy "manage kitchen_stations" on public.kitchen_stations for all to au
 revoke all on public.kitchen_stations from anon;
 alter table public.categories add column if not exists station_id bigint references public.kitchen_stations(id) on delete set null;
 alter table public.dishes add column if not exists station_id bigint references public.kitchen_stations(id) on delete set null;
+-- Lo que no se prepara (envases, bolsas…): no sale como pendiente en las pantallas de cocina ni frena «¡Listo!»;
+-- la tarjeta lo muestra como «Empacar». Por categoría o por plato (un plato con su propia estación sí pasa por cocina).
+alter table public.categories add column if not exists no_kitchen boolean not null default false;
+alter table public.dishes add column if not exists no_kitchen boolean not null default false;
 
 drop function if exists public.pos_kitchen();
 create or replace function public.pos_kitchen(p_station bigint default null) returns jsonb
@@ -1801,15 +1805,17 @@ begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   t0 := d::timestamp at time zone 'America/Caracas';
   select id into def from public.kitchen_stations where active order by position, id limit 1;
-  with it as (   -- platos pendientes o listos hoy, cada uno con su estación
-    select i.*, coalesce(sd.id, sc.id, def) st
+  with it0 as (   -- platos pendientes o listos hoy, cada uno con su estación (y si se prepara o no)
+    select i.*, coalesce(sd.id, sc.id, def) st,
+           coalesce(dd.no_kitchen, false) or (dd.station_id is null and coalesce(cc.no_kitchen, false)) as skip
     from public.pos_items i
     left join public.dishes dd on dd.id = i.dish_id
     left join public.kitchen_stations sd on sd.id = dd.station_id and sd.active
     left join public.categories cc on cc.id = dd.category_id
     left join public.kitchen_stations sc on sc.id = cc.station_id and sc.active
     where (i.status = 'enviado' and i.ready_at is null and i.sent_at > now() - interval '12 hours') or i.ready_at >= t0
-  ), pend as (
+  ), it as (select * from it0 where not it0.skip),
+  pend as (
     select it.* from it join public.pos_orders o on o.id = it.order_id
     where it.status = 'enviado' and it.ready_at is null and it.sent_at > now() - interval '12 hours' and o.status <> 'anulada'
   )
@@ -1825,7 +1831,10 @@ begin
                -- Lo que el mismo pedido tiene pendiente en otras estaciones (para coordinar la salida)
                'others', (select coalesce(jsonb_object_agg(s2.name, z.n), '{}'::jsonb) from (
                             select p2.st, count(*) n from pend p2 where p_station is not null and p2.order_id = o.id and p2.st is distinct from p_station group by p2.st) z
-                          join public.kitchen_stations s2 on s2.id = z.st)) x
+                          join public.kitchen_stations s2 on s2.id = z.st),
+               -- Envases, bolsas…: no se marcan, solo se avisan para empacar
+               'pack', (select coalesce(jsonb_agg(trim_scale(k.qty)::text || ' × ' || k.name || case when k.variant <> '' then ' ' || k.variant else '' end order by k.id), '[]'::jsonb)
+                        from it0 k where k.skip and k.order_id = o.id and k.status = 'enviado' and k.ready_at is null)) x
       from pend p join public.pos_orders o on o.id = p.order_id
       where p_station is null or p.st = p_station
       group by o.id) q),
@@ -1864,7 +1873,9 @@ begin
     select o.id, o.day_number n, min(i.sent_at) enviado, max(i.sent_at) ultimo,
            count(*) filter (where i.ready_at is null) falta, count(*) filter (where i.ready_at is not null and i.served_at is null) por_entregar, max(i.ready_at) listo_at
     from public.pos_orders o join public.pos_items i on i.order_id = o.id and i.status = 'enviado'
+    left join public.dishes dd on dd.id = i.dish_id left join public.categories cc on cc.id = dd.category_id
     where o.kind = 'llevar' and o.status <> 'anulada' and o.opened_at > now() - interval '12 hours' and o.day_number is not null
+      and not (coalesce(dd.no_kitchen, false) or (dd.station_id is null and coalesce(cc.no_kitchen, false)))   -- envases y bolsas no frenan «¡Listo!»
     group by o.id, o.day_number
   )
   select jsonb_build_object('now', now(),

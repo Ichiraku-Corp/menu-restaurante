@@ -115,6 +115,13 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click("#stDishes >> xpath=.."); const dishId = await page.evaluate(() => window.__MENU.dishes[0].id);
     await page.selectOption(`#stDishes [data-stdish="${dishId}"]`, String(sts[1].id)); await page.waitForTimeout(300);
     ok(await page.evaluate((id) => window.__G.calls.some((c) => c.table === "dishes" && c.op === "update" && c.value.station_id === id), sts[1].id), "un plato puede ir a otra estación que su categoría");
+    const catPost = await page.evaluate(() => (window.__MENU.categories.find((c) => c.name === "Postres") || {}).id);
+    await page.selectOption(`#stCats [data-stcat="${catPost}"]`, "x"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "categories" && c.op === "update" && c.value.station_id === null && c.value.no_kitchen === true)) &&
+       /No pasan por cocina[\s\S]*Postres/.test(await page.textContent("#stList")), "una categoría puede marcarse «No pasa por cocina» (envases, bolsas…)");
+    await page.selectOption(`#stCats [data-stcat="${catPost}"]`, ""); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "categories" && c.op === "update" && c.value.station_id === null && c.value.no_kitchen === false)) &&
+       !/No pasan por cocina/.test(await page.textContent("#stList")), "y volver a la principal");
     // Nómina: tasa euro del día, faltas y descuentos de la quincena, a pagar en Bs y la casilla de pagado
     await page.click('#secs [data-sec="personal"]'); await page.click('#tabs [data-tab="nomina"]'); await page.waitForTimeout(300);
     const tasa = await page.textContent("#nomTasa");
