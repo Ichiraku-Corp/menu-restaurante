@@ -16,3 +16,5 @@ grant usage on schema public, auth, extensions to anon, authenticated, service_r
 grant execute on all functions in schema auth to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+-- Igual que Supabase: cada función nueva del esquema public nace ejecutable por anon (revocar solo «from public» no basta)
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;

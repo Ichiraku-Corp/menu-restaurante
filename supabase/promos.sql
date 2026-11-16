@@ -56,7 +56,7 @@ language sql stable security definer set search_path = public as $$
     and (p.date_from is null or (now() at time zone 'America/Caracas')::date >= p.date_from)
     and (p.date_to is null or (now() at time zone 'America/Caracas')::date <= p.date_to)
 $$;
-revoke execute on function public.promos_de_hoy() from public;
+revoke execute on function public.promos_de_hoy() from anon, authenticated, public;
 -- La carta (público) y la caja (tablets) las ven; solo lo de hoy, sin nada más
 create or replace function public.menu_promos() returns jsonb
 language sql stable security definer set search_path = public as $$ select public.promos_de_hoy() $$;
