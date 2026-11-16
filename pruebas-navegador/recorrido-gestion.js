@@ -95,6 +95,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/^ichiraku-contador-\d{4}-\d{2}\.xlsx$/.test(dlx.suggestedFilename()) && ["Resumen", "Ventas por día", "Cobros por día", "Gastos", "Nómina"].every((n) => X["xl/workbook.xml"].includes('name="' + n + '"')) && !malos,
       "descarga el Excel del mes con sus 5 hojas (XML válido)");
     const r1 = X["xl/worksheets/sheet1.xml"];
+    ok(/<v>1544005.51<\/v>/.test(X["xl/worksheets/sheet2.xml"]) && /<v>1690930.85<\/v>/.test(X["xl/worksheets/sheet2.xml"]),
+      "en Bs, los totales suman las casillas de cada día (sin diferencias de un céntimo)");
     ok(/IVA 16 %/.test(r1) && /<v>1535.79<\/v>/.test(r1) && /<v>1323.96<\/v>/.test(r1) && /<v>211.83<\/v>/.test(r1), "el resumen trae ventas, base imponible e IVA del mes (Ref 1.535,79 = 1.323,96 + 211,83)");
     ok(/base del IGTF/.test(r1) && /<v>588<\/v>/.test(r1) && /<v>17.64<\/v>/.test(r1) && /1 día viene de Syth/.test(r1), "suma lo cobrado en divisas (base del IGTF) y avisa los días de Syth sin métodos");
     ok(/Compra de hielo &amp; agua &lt;2&gt;/.test(X["xl/worksheets/sheet4.xml"]) && /<v>905<\/v>/.test(X["xl/worksheets/sheet4.xml"]) && /Ana Pérez/.test(X["xl/worksheets/sheet5.xml"]) && /<v>121120.96<\/v>/.test(X["xl/worksheets/sheet5.xml"]),

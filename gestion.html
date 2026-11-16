@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-4SMn2VtgopmYwBg7/wkqWFS/mKsUUzAYN/YdEg+ylUc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-nh9jcbsOjxDGQShUeHaCc5to567f59PpRmX+pRYLZcw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1785,10 +1785,13 @@
       B("Ventas Bs"), B("Base imponible Bs"), B("IVA Bs"), B("Servicio Bs"), B("Total cobrado Bs")]];
     var cobros = [[B("Fecha")].concat(MET_XL.map(function (m) { return B(m[1] + " (Ref)"); }), [B("Cobrado en divisas Ref (base IGTF)"), B("IGTF 3 % Ref (si aplica)")])];
     (c.dias || []).forEach(function (d) {
-      var t = num(d.tasa), v = r2(d.ventas), base = r2(v / fac), iv = r2(v - base), s = r2(d.servicio), de = r2(d.delivery), tot = r2(v + s + de), bs = function (n) { return t ? r2(n * t) : ""; };
-      ventas.push([fechaXl(d.fecha), d.fuente === "pos" ? "Sistema" : "Syth", t ? { v: t, s: 4 } : "", d.fuente === "pos" || num(d.tickets) ? { v: num(d.tickets), s: 5 } : "", v, base, iv, s, de, tot, bs(v), bs(base), bs(iv), bs(s), bs(tot)]);
+      var t = num(d.tasa), v = r2(d.ventas), base = r2(v / fac), iv = r2(v - base), s = r2(d.servicio), de = r2(d.delivery), tot = r2(v + s + de);
+      // En Bs cada casilla va redondeada y los totales suman esas casillas (base + IVA = ventas; el total, la suma de la fila)
+      var vB = t ? r2(v * t) : 0, baseB = t ? r2(base * t) : 0, ivB = t ? r2(vB - baseB) : 0, sB = t ? r2(s * t) : 0, deB = t ? r2(de * t) : 0, totB = t ? r2(vB + sB + deB) : 0;
+      ventas.push([fechaXl(d.fecha), d.fuente === "pos" ? "Sistema" : "Syth", t ? { v: t, s: 4 } : "", d.fuente === "pos" || num(d.tickets) ? { v: num(d.tickets), s: 5 } : "", v, base, iv, s, de, tot,
+        t ? vB : "", t ? baseB : "", t ? ivB : "", t ? sB : "", t ? totB : ""]);
       T.v += v; T.base += base; T.iv += iv; T.s += s; T.de += de; T.tot += tot; T.n += num(d.tickets);
-      if (t) { T.vBs += v * t; T.baseBs += base * t; T.ivBs += iv * t; T.sBs += s * t; T.deBs += de * t; T.totBs += tot * t; } else T.sinTasa++;
+      if (t) { T.vBs += vB; T.baseBs += baseB; T.ivBs += ivB; T.sBs += sB; T.deBs += deB; T.totBs += totB; } else T.sinTasa++;
       if (d.fuente !== "pos") { T.syth++; return; }
       var div = 0, row = [fechaXl(d.fecha)].concat(MET_XL.map(function (m) {
         var x = (d.metodos || {})[m[0]]; if (!x) return "";
