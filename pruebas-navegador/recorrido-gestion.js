@@ -106,6 +106,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/Falta por pagar: Ref 173,00/.test(await page.textContent("#nomCosto")) && /1 de 2 pagados/.test(await fila("Total").textContent()), "dice cuánto falta por pagar y cuántos van pagados (los inactivos no cuentan)");
     ok(/sin pago por quincena/.test(await fila("Marta Socia").textContent()) && !(await fila("Marta Socia").locator(".paychk").count()),
       "quien no cobra por quincena (una socia con pago 0) no tiene casilla ni cuenta como «por pagar»");
+    ok(/debe \(sin quincena\): Ref 12,00/.test(await fila("Rosa Díaz").textContent()) && !(await fila("Rosa Díaz").locator(".paychk").count()),
+      "a una persona inactiva con una cuenta pendiente se le muestra lo que debe, sin casilla ni quincena por pagar");
     await fila("Ana Pérez").locator(".paychk").uncheck(); await page.waitForTimeout(400);
     ok(await page.evaluate(() => window.__G.tables.payroll_payments.length === 0) && !(await fila("Ana Pérez").locator(".paychk").isChecked()), "desmarcar la casilla (con confirmación) borra el pago");
     await fila("Ana Pérez").locator(".adjcol [data-adj]").click(); await page.waitForSelector("#dlg[open]");

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-p/YrotOaTKXvDnTTj/JRDujjUiAtgHbpTyvCbljHJTs='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-A9LJnjodMrfSlf4O/s5ihcygXg45Vvl0kWsQVKE88Zc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1096,7 +1096,9 @@
     });
   });
   function saver(table, id) { return function (v) { return q(id ? sb.from(table).update(v).eq("id", id) : sb.from(table).insert(v)); }; }
-  function deleter(table, id) { return function () { return q(sb.from(table).delete().eq("id", id)); }; }
+  function deleter(table, id, fkMsg) {
+    return function () { return q(sb.from(table).delete().eq("id", id)).catch(function (er) { if (fkMsg && /foreign key|violates/i.test((er && er.message) || "")) throw new Error(fkMsg); throw er; }); };
+  }
 
   // ---------------------------------------------------------------- Nómina
   // Quincena elegida, sus faltas y descuentos, lo que pasan las cuentas de empleados y lo ya pagado (gestion_nomina)
@@ -1104,7 +1106,8 @@
     var ym = $("nomMonth").value || ymNow(), b = monthBounds(ym), half = $("nomHalf").value;
     return half === "1" ? { from: ym + "-01", to: ym + "-15" } : { from: ym + "-16", to: b.to };
   }
-  function loadNomina() { return opt(sb.rpc("gestion_nomina", { p_desde: nomPeriod().from })).then(function (d) { S.nom = d; }); }
+  var NOM_SEQ = 0;   // solo vale la respuesta de la última consulta (al cambiar rápido de quincena)
+  function loadNomina() { var my = ++NOM_SEQ; return opt(sb.rpc("gestion_nomina", { p_desde: nomPeriod().from })).then(function (d) { if (my === NOM_SEQ) S.nom = d; }); }
   function reloadNomina() { return loadNomina().then(renderNomina).catch(fail); }
   var DOW3 = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
   function diaCorto(d) { var x = new Date(String(d).slice(0, 10) + "T12:00:00"); return DOW3[x.getDay()] + " " + String(d).slice(8, 10) + "/" + String(d).slice(5, 7); }
@@ -1115,11 +1118,12 @@
   function nomOf(e) {
     var N = S.nom || {}, adj = (N.ajustes || []).filter(function (a) { return a.employee_id === e.id; }), acc = (N.cuentas || []).filter(function (c) { return c.employee_id === e.id; });
     var ded = adj.concat(acc).reduce(function (t, a) { return t + num(a.amount); }, 0);
-    var pay = (N.pagos || []).find(function (p) { return p.employee_id === e.id; }) || null;
-    return { adj: adj, acc: acc, pay: pay, ded: Math.round(ded * 100) / 100, net: Math.round((num(e.pay_quincena) - ded) * 100) / 100,
+    var pay = (N.pagos || []).find(function (p) { return p.employee_id === e.id; }) || null, base = e.active ? num(e.pay_quincena) : 0;
+    return { adj: adj, acc: acc, pay: pay, base: base, ded: Math.round(ded * 100) / 100, net: Math.round((base - ded) * 100) / 100, debe: !!(adj.length || acc.length),
              faltas: adj.filter(function (a) { return a.kind === "falta"; }).reduce(function (t, a) { return t + num(a.days); }, 0),
-             // Cuenta en la quincena quien cobra por quincena (los socios con pago 0 no), o si tiene descuentos, cuenta o pago anotado
-             desc: adj.filter(function (a) { return a.kind === "descuento"; }).length, cuenta: (e.active && num(e.pay_quincena) > 0) || adj.length || acc.length || !!pay };
+             // Cuenta en la quincena quien cobra por quincena (no los socios con pago 0 ni los inactivos), o si ya tiene un pago anotado;
+             // a los demás se les muestra lo que deben (p. ej. la cuenta de alguien que ya no trabaja), sin casilla
+             desc: adj.filter(function (a) { return a.kind === "descuento"; }).length, cuenta: (e.active && num(e.pay_quincena) > 0) || !!pay };
   }
   function renderNomina() {
     var N = S.nom, t = N && N.tasa, nx = N && N.proxima;
@@ -1137,19 +1141,19 @@
       list.forEach(function (e) {
         var R = nomOf(e), net = Math.max(R.net, 0), parts = [];
         G.m += empMonthly(e);
-        if (R.cuenta) { G.q += num(e.pay_quincena); G.ded += R.ded; G.net += net; G.n++; if (R.pay) G.paid++; else G.rest += net; }
+        if (R.cuenta) { G.q += R.base; G.ded += R.ded; G.net += net; G.n++; if (R.pay) G.paid++; else G.rest += net; }
         if (R.faltas) parts.push(diasTxt(R.faltas) + " de falta");
         if (R.desc) parts.push(R.desc + (R.desc === 1 ? " descuento" : " descuentos"));
         if (R.acc.length) parts.push("cuenta");
         var adjBtn = '<button type="button" class="adjbtn" data-adj="' + e.id + '">' + (R.ded ? "−" + money(R.ded) + "<small>" + esc(parts.join(" · ")) + "</small>" : '<span class="muted">+ Agregar</span>') + "</button>";
-        var payInfo = R.pay ? '<div class="muted okc">Pagado ' + esc(R.pay.at.slice(8, 10) + "/" + R.pay.at.slice(5, 7)) + "</div>" + (R.pay.bs != null ? '<div class="muted okc">Bs ' + nf2.format(num(R.pay.bs)) + "</div>" : "") +
+        var payInfo = R.pay ? '<div class="muted okc">Pagado ' + esc(new Date(R.pay.at).toLocaleDateString("es-VE", { timeZone: "America/Caracas", day: "2-digit", month: "2-digit" })) + "</div>" + (R.pay.bs != null ? '<div class="muted okc">Bs ' + nf2.format(num(R.pay.bs)) + "</div>" : "") +
             (Math.abs(num(R.pay.amount) - net) > 0.009 ? '<span class="pill warn">cambió: ahora ' + money(net) + "</span>" : "")
           : R.cuenta && t ? '<div class="muted">' + bsNom(net) + "</div>" : "";
         html += '<tr class="click' + (e.active ? "" : " off") + (R.pay ? " paid" : "") + '" data-emp="' + e.id + '"><td class="paycol">' +
           (R.cuenta && N ? '<input type="checkbox" class="paychk" data-pay="' + e.id + '"' + (R.pay ? " checked" : "") + ' aria-label="Pagado: ' + esc(e.name) + '">' : "") + "</td>" +
-          "<td><b>" + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? (num(e.pay_quincena) > 0 ? "" : " · sin pago por quincena") : " · inactivo") + "</div>" + (N && R.cuenta ? '<div class="show-sm adjsm">' + adjBtn + "</div>" : "") + "</td>" +
-          '<td class="n hide-sm">' + money(e.pay_quincena) + '</td><td class="n hide-sm adjcol">' + (N && R.cuenta ? adjBtn : "—") + '</td><td class="n"><b' + (R.net < 0 ? ' style="color:var(--danger)"' : "") + ">" + (R.cuenta ? money(net) : "—") + "</b>" +
-          (R.net < 0 ? '<div class="muted">descuentos de más: ' + money(-R.net) + "</div>" : "") + payInfo + '</td><td class="n hide-sm">' + money(empMonthly(e)) + "</td></tr>";
+          "<td><b>" + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? (num(e.pay_quincena) > 0 ? "" : " · sin pago por quincena") : " · inactivo") + "</div>" + (N && (R.cuenta || R.debe) ? '<div class="show-sm adjsm">' + adjBtn + "</div>" : "") + "</td>" +
+          '<td class="n hide-sm">' + (e.active ? money(e.pay_quincena) : "—") + '</td><td class="n hide-sm adjcol">' + (N && (R.cuenta || R.debe) ? adjBtn : "—") + '</td><td class="n"><b' + (R.net < 0 ? ' style="color:var(--danger)"' : "") + ">" + (R.cuenta ? money(net) : "—") + "</b>" +
+          (R.net < 0 ? '<div class="muted">' + (R.cuenta ? "descuentos de más: " : "debe (sin quincena): ") + money(-R.net) + "</div>" : "") + payInfo + '</td><td class="n hide-sm">' + money(empMonthly(e)) + "</td></tr>";
       });
     });
     html += '<tr class="total"><td></td><td>Total<div class="muted">' + G.paid + " de " + G.n + ' pagados</div></td><td class="n hide-sm">' + money(G.q) + '</td><td class="n hide-sm">' + (G.ded ? "−" + money(G.ded) : "—") +
@@ -1160,16 +1164,25 @@
   }
   // Pagado: guarda lo que se pagó, la tasa de hoy y los Bs; desmarcar lo borra
   function markPaid(id, on, el) {
-    var e = S.employees.find(function (x) { return x.id === id; }), R = nomOf(e), P = nomPeriod(), net = Math.max(R.net, 0), rate = tasaNom();
+    // La quincena es la que se está viendo (S.nom), no la de los selectores (pueden ir por delante mientras carga)
+    var e = S.employees.find(function (x) { return x.id === id; }), P = S.nom && S.nom.desde ? String(S.nom.desde).slice(0, 10) : nomPeriod().from;
     if (!on) {
       if (!confirm("¿Desmarcar el pago de " + e.name + "?")) { el.checked = true; return; }
-      q(sb.from("payroll_payments").delete().eq("employee_id", id).eq("period", P.from)).then(function () { toast("Pago desmarcado"); return reloadNomina(); })
+      q(sb.from("payroll_payments").delete().eq("employee_id", id).eq("period", P)).then(function () { toast("Pago desmarcado"); return reloadNomina(); })
         .catch(function (er) { el.checked = true; fail(er); });
       return;
     }
-    q(sb.from("payroll_payments").insert({ employee_id: id, period: P.from, amount_ref: net, rate: rate || null, amount_bs: rate ? Math.round(net * rate * 100) / 100 : null }))
-      .then(function () { toast("Pagado: " + e.name + " · " + money(net) + (rate ? " · " + bsNom(net) : "")); return reloadNomina(); })
-      .catch(function (er) { el.checked = false; fail(er); });
+    // Antes de guardar vuelve a pedir la quincena (la tasa de hoy, algún descuento nuevo) y guarda solo si el monto es el que se ve
+    var visto = Math.max(nomOf(e).net, 0);
+    el.disabled = true;
+    loadNomina().then(function () {
+      var R = nomOf(e), net = Math.max(R.net, 0), rate = tasaNom();
+      if (!S.nom || String(S.nom.desde).slice(0, 10) !== P || !R.cuenta || Math.abs(net - visto) > 0.009) {
+        renderNomina(); notice("La quincena cambió mientras tanto: revisa el monto de " + e.name + " y vuelve a marcar."); return;
+      }
+      return q(sb.from("payroll_payments").insert({ employee_id: id, period: P, amount_ref: net, rate: rate || null, amount_bs: rate ? Math.round(net * rate * 100) / 100 : null }))
+        .then(function () { toast("Pagado: " + e.name + " · " + money(net) + (rate ? " · " + bsNom(net) : "")); return reloadNomina(); });
+    }).catch(function (er) { el.checked = false; fail(er); }).then(function () { el.disabled = false; });
   }
   // Faltas y descuentos de una persona en la quincena (se pueden borrar los mal anotados)
   var ADJ_EMP = null;
@@ -1257,7 +1270,7 @@
           if (!pin || !id) return;
           return q(sb.rpc("pos_set_pin", { p_emp: id, p_pin: pin.toLowerCase() === "borrar" ? "" : pin }));
         });
-      }, onDelete: e && deleter("employees", e.id) });
+      }, onDelete: e && deleter("employees", e.id, "No se puede eliminar: tiene pagos de nómina guardados. Desactívalo (quita «Activo») en vez de eliminarlo.") });
   }
   $("addEmp").addEventListener("click", function () { empForm(null); });
   $("empList").addEventListener("click", function (ev) {
