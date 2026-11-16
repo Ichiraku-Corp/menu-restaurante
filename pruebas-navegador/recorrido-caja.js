@@ -212,6 +212,17 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click("#doClose"); await page.waitForSelector("#repDlg[open]", { timeout: 5000 });
     ok(true, "con la nota escrita, el cierre avanza a la revisión");
     ok(/Vuelto dado por pago móvil · Conteo antes de ver lo esperado: efectivo \$ 15,00/.test(await page.textContent("#repBody")), "la nota del cierre lleva el primer conteo (15) porque se cambió después de ver lo esperado");
+    // Al día siguiente (sin recargar la página) el cierre vuelve a empezar ciego, desde el efectivo
+    await page.click("#repSend"); await page.waitForTimeout(500);
+    ok(await S(() => !!window.__closed), "cierra la caja");
+    if (await page.isVisible("#cashDlg[open]")) await page.keyboard.press("Escape");
+    await page.click("#btnCaja"); await page.waitForTimeout(300);
+    await page.click("#openCash"); await page.waitForTimeout(1500);
+    if (!(await page.isVisible('#cashBody [data-ctab="cierre"]'))) { await page.click("#btnCaja"); await page.waitForTimeout(300); }
+    await page.click('#cashBody [data-ctab="cierre"]');
+    const dia2 = await S(() => { const fila = document.querySelector('#cashBody tr[data-row="efectivo_usd"]'), vis = (el) => !!el && getComputedStyle(el).display !== "none" && el.offsetParent !== null;
+      return { esperado: vis(fila && fila.querySelector(".ev")), efectivo: vis(document.querySelector('#cashBody .cnt[data-m="efectivo_usd"]')), banco: vis(document.querySelector('#cashBody .cnt[data-m="pago_movil"]')) }; });
+    ok(!dia2.esperado && dia2.efectivo && !dia2.banco, "al día siguiente el cierre vuelve a empezar ciego y por el efectivo");
   } catch (e) {
     fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
   }
