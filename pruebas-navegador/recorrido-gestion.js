@@ -95,6 +95,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/^ichiraku-contador-\d{4}-\d{2}\.xlsx$/.test(dlx.suggestedFilename()) && ["Resumen", "Ventas por día", "Cobros por día", "Gastos", "Nómina"].every((n) => X["xl/workbook.xml"].includes('name="' + n + '"')) && !malos,
       "descarga el Excel del mes con sus 5 hojas (XML válido)");
     const r1 = X["xl/worksheets/sheet1.xml"];
+    ok(/<v>1544005.51<\/v>/.test(X["xl/worksheets/sheet2.xml"]) && /<v>1690930.85<\/v>/.test(X["xl/worksheets/sheet2.xml"]),
+      "en Bs, los totales suman las casillas de cada día (sin diferencias de un céntimo)");
     ok(/IVA 16 %/.test(r1) && /<v>1535.79<\/v>/.test(r1) && /<v>1323.96<\/v>/.test(r1) && /<v>211.83<\/v>/.test(r1), "el resumen trae ventas, base imponible e IVA del mes (Ref 1.535,79 = 1.323,96 + 211,83)");
     ok(/base del IGTF/.test(r1) && /<v>588<\/v>/.test(r1) && /<v>17.64<\/v>/.test(r1) && /1 día viene de Syth/.test(r1), "suma lo cobrado en divisas (base del IGTF) y avisa los días de Syth sin métodos");
     ok(/Compra de hielo &amp; agua &lt;2&gt;/.test(X["xl/worksheets/sheet4.xml"]) && /<v>905<\/v>/.test(X["xl/worksheets/sheet4.xml"]) && /Ana Pérez/.test(X["xl/worksheets/sheet5.xml"]) && /<v>121120.96<\/v>/.test(X["xl/worksheets/sheet5.xml"]),
@@ -151,6 +153,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/Falta por pagar: Ref 173,00/.test(await page.textContent("#nomCosto")) && /1 de 2 pagados/.test(await fila("Total").textContent()), "dice cuánto falta por pagar y cuántos van pagados (los inactivos no cuentan)");
     ok(/sin pago por quincena/.test(await fila("Marta Socia").textContent()) && !(await fila("Marta Socia").locator(".paychk").count()),
       "quien no cobra por quincena (una socia con pago 0) no tiene casilla ni cuenta como «por pagar»");
+    ok(/debe \(sin quincena\): Ref 12,00/.test(await fila("Rosa Díaz").textContent()) && !(await fila("Rosa Díaz").locator(".paychk").count()),
+      "a una persona inactiva con una cuenta pendiente se le muestra lo que debe, sin casilla ni quincena por pagar");
     await fila("Ana Pérez").locator(".paychk").uncheck(); await page.waitForTimeout(400);
     ok(await page.evaluate(() => window.__G.tables.payroll_payments.length === 0) && !(await fila("Ana Pérez").locator(".paychk").isChecked()), "desmarcar la casilla (con confirmación) borra el pago");
     await fila("Ana Pérez").locator(".adjcol [data-adj]").click(); await page.waitForSelector("#dlg[open]");

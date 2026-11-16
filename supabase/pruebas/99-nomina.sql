@@ -48,6 +48,7 @@ delete from public.payroll_payments;  -- sin permiso no borra nada
 
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"dueno@prueba.test","aal":"aal2"}', false);
 select prueba.ok(exists (select 1 from public.payroll_payments where employee_id = :mesera), 'una tablet no puede desmarcar un pago');
+select prueba.falla(format('delete from public.employees where id = %s', :mesera), 'foreign key', 'no se puede eliminar a alguien con pagos de nómina guardados (se desactiva)');
 delete from public.payroll_adjustments where reason = 'Adelanto';
 delete from public.payroll_payments where employee_id = :mesera and period = :'q0';
 select prueba.ok(not exists (select 1 from public.payroll_payments), 'desmarcar el pago lo borra (y queda en la auditoría)');

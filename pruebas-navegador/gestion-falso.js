@@ -61,7 +61,8 @@
       return { desde: d, hasta: hasta, tasa: { fecha: hoy, eur: 1009.3413 }, proxima: { fecha: man, eur: 1010.5608 },
         ajustes: G.tables.payroll_adjustments.filter(function (x) { return x.period === d; }).map(function (x) {
           return { id: x.id, employee_id: x.employee_id, kind: x.kind, days: x.days, amount: x.amount_ref, reason: x.reason, source: "manual", por: "dueno@ejemplo.test", at: x.created_at }; }),
-        cuentas: [{ employee_id: 12, amount: 7, note: "Pasa a la quincena (excede Ref 40)", at: new Date().toISOString() }],
+        cuentas: [{ employee_id: 12, amount: 7, note: "Pasa a la quincena (excede Ref 40)", at: new Date().toISOString() },
+                  { employee_id: 13, amount: 12, note: "Pasa a la quincena (ya no trabaja)", at: new Date().toISOString() }],
         pagos: G.tables.payroll_payments.filter(function (x) { return x.period === d; }).map(function (x) {
           return { employee_id: x.employee_id, amount: x.amount_ref, rate: x.rate, bs: x.amount_bs, por: "dueno@ejemplo.test", at: x.created_at }; }) };
     },

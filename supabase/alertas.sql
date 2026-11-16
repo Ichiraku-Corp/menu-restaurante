@@ -85,7 +85,7 @@ begin
                              || ' (' || coalesce(public.pos_emp_name(i.voided_by), '—') || ')' order by i.voided_at)
     into n, lista
   from public.pos_items i where i.status = 'anulado' and i.sent_at is not null and (coalesce(i.voided_at, now()) at time zone 'America/Caracas')::date = hoy;
-  if n = 3 then
+  if n >= 3 then   -- al cancelar un pedido entero se anulan varios a la vez (la misma alerta no se repite en 12 horas)
     perform public.pos_alerta('anulados-' || hoy, 'Ya van 3 platos anulados hoy después de ir a cocina', lista);
   end if;
   return null;

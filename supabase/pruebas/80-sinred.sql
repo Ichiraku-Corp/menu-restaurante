@@ -73,4 +73,50 @@ select prueba.ok(:'p4'::jsonb ->> 'nota' like '%quedan Ref%' and (select status 
   and (select count(*) from public.pos_payments where order_id = :o4 and reference = '1234') = 1, 'si se cobró de menos, el pago queda anotado y el pedido abierto');
 select prueba.ok((select count(*) from public.pos_offline_entries where kind = 'pago') = 3 and (select count(*) from public.pos_print_jobs) = :jobs0,
   'los cobros quedan registrados y no se vuelve a imprimir el recibo (ya salió en la laptop)');
+-- ---------------------------------------------------------------- Lo que encontró la revisión del 16/11
+reset role;
+select ((now() at time zone 'America/Caracas')::date - 40) dia_viejo \gset
+insert into public.promos (name, percent, days, start_time, end_time, dish_ids, active)
+  values ('Promo sin internet', 20, array[1,2,3,4,5,6,7], '00:00', '23:59:59', array[:plato]::bigint[], true) returning id as promo_id \gset
+select price as precio_plato from public.dishes where id = :plato \gset
+insert into public.pos_rates (rate_date, eur, source) values (:'dia_viejo', 95, 'prueba') on conflict (rate_date) do update set eur = 95;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
+-- Lo pedido sin internet entra con la promoción que valía a esa hora, como con internet
+select public.pos_offline_sync(jsonb_build_object('uuid', 'prueba-sinred-promo', 'at', (:'dia_viejo'::date + time '20:50') at time zone 'America/Caracas', 'emp', :mesera, 'pin', '2222',
+  'order', jsonb_build_object('tmp', 'sr-promo1', 'kind', 'llevar', 'label', 'Promo'), 'items', jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)))) as rp \gset
+-- Un delivery abierto sin internet guarda lo que cobra el delivery
+select public.pos_offline_sync(jsonb_build_object('uuid', 'prueba-sinred-deliv', 'emp', :mesera, 'pin', '2222',
+  'order', jsonb_build_object('tmp', 'sr-deliv1', 'kind', 'delivery', 'label', 'Delivery: Ana', 'delivery_fee', 3), 'items', jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)))) as rd \gset
+reset role;
+select prueba.ok((select unit_price = round(:precio_plato * 0.8, 2) and promo like 'Promo sin internet -20 %' and list_price = :precio_plato
+                  from public.pos_items where order_id = (:'rp'::jsonb ->> 'order_id')::bigint), 'lo pedido sin internet entra con la promoción de esa hora (como con internet)');
+select prueba.ok((select delivery_fee from public.pos_orders where id = (:'rd'::jsonb ->> 'order_id')::bigint) = 3, 'un delivery abierto sin internet guarda lo que cobra el delivery');
+-- Un cobro en Bs hecho sin internet vale a la tasa del día en que se cobró, no a la de cuando se sube
+select (select total from public.pos_totals((:'rp'::jsonb ->> 'order_id')::bigint)) as tp \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
+select public.pos_offline_pay(jsonb_build_object('uuid', 'prueba-pago-tasa', 'at', (:'dia_viejo'::date + time '21:00') at time zone 'America/Caracas', 'emp', :caja, 'pin', '1111',
+  'order', jsonb_build_object('tmp', 'sr-promo1', 'label', 'Promo'), 'lines', jsonb_build_array(jsonb_build_object('method', 'pago_movil', 'amount', round(:tp * 95, 2), 'reference', '9595')))) as pt \gset
+reset role;
+select prueba.ok(:'pt'::jsonb ->> 'nota' = '' and (select rate = 95 and amount_ref = :tp from public.pos_payments where reference = '9595'),
+  'un cobro en Bs hecho sin internet vale a la tasa del día en que se cobró');
+-- Se cayó internet con un plato agregado sin enviar: el cobro igual queda anotado (el pedido sigue abierto y avisa)
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_open(:mesera, '2222', null, 'Con algo sin enviar') as op \gset
+select public.pos_add(:mesera, '2222', :op, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select public.pos_send(:mesera, '2222', :op);
+reset role;
+select (select total from public.pos_totals(:op)) as t_env \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_add(:mesera, '2222', :op, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
+select public.pos_offline_pay(jsonb_build_object('uuid', 'prueba-pago-pend', 'emp', :caja, 'pin', '1111', 'order', jsonb_build_object('id', :op, 'label', 'Con algo sin enviar'),
+  'lines', jsonb_build_array(jsonb_build_object('method', 'efectivo_usd', 'amount', :t_env)))) as pp \gset
+reset role;
+select prueba.ok((select count(*) from public.pos_payments where order_id = :op) = 1 and :'pp'::jsonb ->> 'nota' like '%quedan Ref%',
+  'un cobro sin internet se anota aunque el pedido tenga algo sin enviar (queda abierto y con aviso)');
+delete from public.promos where id = :promo_id;
 \echo 'TODAS LAS PRUEBAS SIN INTERNET PASARON'

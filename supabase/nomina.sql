@@ -55,7 +55,7 @@ end $$;
 
 -- Pagos de la quincena: uno por persona; desmarcar el pago lo borra
 create table if not exists public.payroll_payments (
-  employee_id bigint not null references public.employees(id) on delete cascade,
+  employee_id bigint not null references public.employees(id) on delete restrict,   -- un pago hecho no se borra con la ficha
   period      date not null check (extract(day from period) in (1, 16)),
   amount_ref  numeric(12,2) not null check (amount_ref >= 0 and amount_ref < 100000),
   rate        numeric(14,4) check (rate > 0),

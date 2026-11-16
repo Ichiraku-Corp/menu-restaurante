@@ -63,7 +63,8 @@ function openCash() {
       h = '<div class="ctabs" role="tablist"><button type="button" data-ctab="res">Resumen</button><button type="button" data-ctab="cierre">Cerrar caja</button><button type="button" data-ctab="tools">Herramientas</button></div>' +
         '<div data-cpanel="res">' + h + res + '</div><div data-cpanel="cierre">' + cie + '</div><div data-cpanel="tools">' + tools + "</div>";
       $("cashBody").innerHTML = h;
-      BLIND.session !== sm.id && (BLIND = { session: sm.id, revealed: false, first: null });
+      // Caja nueva (otro día, sin recargar la página): el cierre vuelve a empezar ciego, desde el efectivo
+      if (BLIND.session !== sm.id) { BLIND = { session: sm.id, revealed: false, first: null }; CSTEP = 1; CASHTAB = "res"; }
       cashTab(CASHTAB || "res"); cashStep(CSTEP || 1); cashDiff();
       if (!$("cashDlg").open) $("cashDlg").showModal();
       return;
