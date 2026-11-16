@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-z2uRv/x6JNKNI8+3pLVt2OlfXnXC4MAZl+LQp1P7SrA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-4SMn2VtgopmYwBg7/wkqWFS/mKsUUzAYN/YdEg+ylUc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1139,7 +1139,8 @@
     var pay = (N.pagos || []).find(function (p) { return p.employee_id === e.id; }) || null;
     return { adj: adj, acc: acc, pay: pay, ded: Math.round(ded * 100) / 100, net: Math.round((num(e.pay_quincena) - ded) * 100) / 100,
              faltas: adj.filter(function (a) { return a.kind === "falta"; }).reduce(function (t, a) { return t + num(a.days); }, 0),
-             desc: adj.filter(function (a) { return a.kind === "descuento"; }).length, cuenta: e.active || adj.length || acc.length || !!pay };
+             // Cuenta en la quincena quien cobra por quincena (los socios con pago 0 no), o si tiene descuentos, cuenta o pago anotado
+             desc: adj.filter(function (a) { return a.kind === "descuento"; }).length, cuenta: (e.active && num(e.pay_quincena) > 0) || adj.length || acc.length || !!pay };
   }
   function renderNomina() {
     var N = S.nom, t = N && N.tasa, nx = N && N.proxima;
@@ -1167,7 +1168,7 @@
           : R.cuenta && t ? '<div class="muted">' + bsNom(net) + "</div>" : "";
         html += '<tr class="click' + (e.active ? "" : " off") + (R.pay ? " paid" : "") + '" data-emp="' + e.id + '"><td class="paycol">' +
           (R.cuenta && N ? '<input type="checkbox" class="paychk" data-pay="' + e.id + '"' + (R.pay ? " checked" : "") + ' aria-label="Pagado: ' + esc(e.name) + '">' : "") + "</td>" +
-          "<td><b>" + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? "" : " · inactivo") + "</div>" + (N && R.cuenta ? '<div class="show-sm adjsm">' + adjBtn + "</div>" : "") + "</td>" +
+          "<td><b>" + esc(e.name) + '</b><div class="muted">' + esc(e.job_title || "") + (e.active ? (num(e.pay_quincena) > 0 ? "" : " · sin pago por quincena") : " · inactivo") + "</div>" + (N && R.cuenta ? '<div class="show-sm adjsm">' + adjBtn + "</div>" : "") + "</td>" +
           '<td class="n hide-sm">' + money(e.pay_quincena) + '</td><td class="n hide-sm adjcol">' + (N && R.cuenta ? adjBtn : "—") + '</td><td class="n"><b' + (R.net < 0 ? ' style="color:var(--danger)"' : "") + ">" + (R.cuenta ? money(net) : "—") + "</b>" +
           (R.net < 0 ? '<div class="muted">descuentos de más: ' + money(-R.net) + "</div>" : "") + payInfo + '</td><td class="n hide-sm">' + money(empMonthly(e)) + "</td></tr>";
       });
