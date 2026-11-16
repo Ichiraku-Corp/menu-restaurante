@@ -28,6 +28,8 @@ select prueba.ok((public.gestion_meta() ->> 'meta')::numeric = 550, 'con «prome
 update public.gestion_settings set meta_pct = 3;
 select prueba.ok((public.gestion_meta() ->> 'meta')::numeric = 515, 'redondea hacia arriba a Ref 5 (Ref 515 con 3 %)');
 select prueba.falla('update public.gestion_settings set meta_pct = 500', 'meta_pct_check', 'el % de la meta tiene un límite razonable');
+select prueba.ok((public.gestion_inicio() ->> 'ventas')::numeric = (public.gestion_meta() ->> 'vendido')::numeric,
+  'Inicio y la meta muestran la misma venta de hoy (sin el servicio)');
 update public.gestion_settings set meta_pct = 0;
 reset role;
 set role anon;
