@@ -1,6 +1,7 @@
 -- ============================================================================
 -- Gestión → Inicio: lo del día en una sola consulta (Ichiraku)
 --  · Ventas de hoy contra el mismo día de la semana pasada, pedidos, ticket promedio y mesas abiertas.
+--    Ventas = lo cobrado sin el servicio (con el delivery): la misma cifra de Ventas y de la meta del día.
 --  · Estado: caja, laptop de caja, impresora y el último cierre (si su correo salió).
 --  · Alertas: lo que queda poco afuera, precios por aprobar y pagos por comprobar.
 -- Solo dueño/admin con 2FA. Se ejecuta después de pos.sql y gestion.sql. Se puede volver a ejecutar.
@@ -12,7 +13,7 @@ declare hoy date := (now() at time zone 'America/Caracas')::date; r jsonb;
 begin
   if not public.can_manage() then raise exception 'Sin permiso'; end if;
   with dia as (
-    select d, (select coalesce(sum(t.total - t.delivery), 0) from public.pos_orders o cross join lateral public.pos_totals(o.id) t
+    select d, (select coalesce(sum(t.subtotal - t.discount + t.delivery), 0) from public.pos_orders o cross join lateral public.pos_totals(o.id) t
                where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date = d) as ventas,
               (select count(*) from public.pos_orders o where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date = d) as pedidos
     from (values (hoy), (hoy - 7)) v(d)
