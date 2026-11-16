@@ -70,6 +70,16 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await S(() => !!window.__S.session), "abre la caja");
     await page.click("#cashClose").catch(() => {});
 
+    // Para llevar ya cobrado y listo en cocina: la caja lo ve en «Listos para entregar» y lo marca entregado
+    await S(() => { const s = window.__S, ahora = new Date().toISOString();
+      s.orders.push({ id: 960, kind: "llevar", status: "cobrada", day_number: 31, label: "Para llevar: Ana", opened_at: ahora, service_pct: 0 });
+      s.items.push({ id: 961, order_id: 960, dish_id: 1, name: "Gyozas", variant: "", option: "", notes: "", qty: 1, unit_price: 6, status: "enviado", sent_at: ahora, ready_at: ahora }); });
+    await S(() => refreshState()); await page.click('#areas [data-area="Para llevar"]'); await page.waitForTimeout(250);
+    ok(/Listos para entregar[\s\S]*#31 · Entregado/.test(await page.textContent("#areaBody")), "la caja ve los pedidos para llevar ya cobrados y listos en cocina");
+    await page.click('#areaBody [data-entregar="960"]'); await page.waitForTimeout(500);
+    ok(await S(() => !!window.__S.items.find((i) => i.id === 961).served_at) && !/#31 · Entregado/.test(await page.textContent("#areaBody")),
+      "al tocar «Entregado» queda entregado y sale de la lista (y de la pantalla de pedidos listos)");
+
     // Mesa: plato con nota, enviar, cobrar en efectivo
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("3")'); await page.waitForSelector("#orderView:not(.hidden)");
     ok(await page.locator('#cats [data-cat="top"].on').count() === 1 && /Gyozas/.test(await page.textContent("#dishes")), "la carta abre en «Lo más pedido»");

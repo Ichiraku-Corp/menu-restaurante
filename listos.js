@@ -6,6 +6,7 @@
   if (!C.SUPABASE_URL) { document.body.textContent = "Falta configurar Supabase en config.js."; return; }
   var sb = window.supabase.createClient(C.SUPABASE_URL, C.SUPABASE_ANON_KEY);
   var POLL_MS = 4000, NEW_MS = 60000, skew = 0, timer = null, soundOn = false, audio = null, seen = null, nuevos = {};
+  var seq = 0, applied = 0;   // una respuesta lenta y vieja no pisa a una más nueva (ni vuelve a sonar)
   function q(p) { return p.then(function (r) { if (r.error) throw r.error; return r.data; }); }
 
   // ---------------------------------------------------------------- Entrar (cuenta de sala, una sola vez)
@@ -21,7 +22,9 @@
 
   // ---------------------------------------------------------------- Datos
   function load() {
+    var my = ++seq;
     return q(sb.rpc("pos_listos")).then(function (d) {
+      if (my < applied) return; applied = my;
       $("net").classList.add("hidden");
       skew = new Date(d.now).getTime() - Date.now();
       var ready = (d.listos || []).map(function (x) { return Number(x.n); });

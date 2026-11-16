@@ -8,10 +8,11 @@
   var WARN_MIN = 10, BAD_MIN = 20, POLL_MS = 4000;
   var data = null, skew = 0, known = {}, first = true, timer = null, soundOn = false, audio = null;
   // Estación de esta pantalla (vacío = todas); se guarda en este equipo
-  var STATION = 0;
-  try { STATION = Number(localStorage.getItem("comandas-estacion")) || 0; } catch (e) { /* sin almacenamiento: todas */ }
+  // SAVED es la que eligió esta pantalla: si la apagan un rato se ven todas, y al volver a encenderla regresa a ella
+  var STATION = 0, SAVED = 0, seq = 0, applied = 0;
+  try { SAVED = STATION = Number(localStorage.getItem("comandas-estacion")) || 0; } catch (e) { /* sin almacenamiento: todas */ }
   function setStation(id) {
-    STATION = id || 0; known = {}; first = true;
+    STATION = SAVED = id || 0; known = {}; first = true;
     try { if (STATION) localStorage.setItem("comandas-estacion", String(STATION)); else localStorage.removeItem("comandas-estacion"); } catch (e) { /* sigue igual */ }
     load();
   }
@@ -34,11 +35,14 @@
 
   // ---------------------------------------------------------------- Datos
   function load() {
-    var st = STATION;
+    var st = STATION, my = ++seq;
     return q(sb.rpc("pos_kitchen", st ? { p_station: st } : {})).then(function (d) {
-      if (st !== STATION) return;   // cambió de estación mientras cargaba
-      // La estación elegida ya no existe (o se apagó): vuelve a «Todas»
-      if (st && !(d.stations || []).some(function (s) { return s.id === st; })) { setStation(0); return; }
+      if (st !== STATION || my < applied) return;   // cambió de estación, o llegó tarde (después de otra lectura o de un toque)
+      applied = my;
+      var has = function (id) { return (d.stations || []).some(function (s) { return s.id === id; }); };
+      // La estación de esta pantalla se apagó (o se borró): se ven todas, sin olvidarla; al volver, regresa a ella
+      if (st && !has(st)) { STATION = 0; known = {}; first = true; load(); return; }
+      if (!st && SAVED && has(SAVED)) { STATION = SAVED; known = {}; first = true; load(); return; }
       $("net").classList.add("hidden");
       skew = new Date(d.now).getTime() - Date.now();
       var fresh = (d.orders || []).some(function (o) { return o.items.some(function (i) { return !known[i.id]; }); });
@@ -53,7 +57,7 @@
   function drawStations() {
     var list = (data && data.stations) || [], el = $("stations"), cur = list.find(function (s) { return s.id === STATION; });
     el.classList.toggle("hidden", !list.length);
-    $("stName").textContent = cur ? " · " + cur.name : "";
+    $("stName").textContent = cur ? " · " + cur.name : SAVED ? " · Todas (su estación está apagada)" : "";
     var all = list.reduce(function (t, s) { return t + Number(s.pending || 0); }, 0);
     el.innerHTML = list.length ? '<button type="button" data-st="0"' + (STATION ? "" : ' class="on"') + ">Todas<b>" + all + "</b></button>" + list.map(function (s) {
       return '<button type="button" data-st="' + s.id + '"' + (s.id === STATION ? ' class="on"' : "") + ">" + esc(s.name) + "<b>" + Number(s.pending || 0) + "</b></button>";
@@ -95,6 +99,7 @@
   // ---------------------------------------------------------------- Marcar listo / deshacer
   function ready(ids, on) {
     // Se quita de la pantalla al instante; si falla, vuelve con la próxima lectura
+    applied = ++seq;   // lo que se estaba leyendo antes del toque ya no vale (si no, el plato volvería un momento)
     if (on) ids.forEach(function (id) { var b = document.querySelector('[data-item="' + id + '"]'); if (b) b.remove(); });
     document.querySelectorAll(".card").forEach(function (c) { if (!c.querySelector(".item")) c.remove(); });
     return q(sb.rpc("pos_kitchen_ready", { p_items: ids, p_ready: on })).then(load).catch(function (e) { alert("No se pudo guardar: " + (e.message || e)); load(); });

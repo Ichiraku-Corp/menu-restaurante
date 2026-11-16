@@ -44,6 +44,21 @@ update public.pos_items set sent_at = now() - interval '95 minutes' where order_
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
 select prueba.ok(not exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'preparando') x where (x ->> 'n')::int = :n), 'a los 90 minutos sin marcarlo listo sale de «Preparando»');
+-- Para llevar ya cobrado (se paga al pedir) y listo en cocina: la caja lo ve en «Listos para entregar» y al marcarlo sale de la pantalla
+reset role;
+update public.pos_items set ready_at = null, served_at = null, sent_at = now() where order_id = :o;
+update public.pos_orders set status = 'cobrada', closed_at = now() where id = :o;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select prueba.ok(not exists (select 1 from jsonb_array_elements(public.pos_state() -> 'entregar') x where (x ->> 'id')::bigint = :o), 'cobrado pero sin terminar en cocina: todavía no está para entregar');
+select public.pos_kitchen_ready(:'items'::bigint[]);
+select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_state() -> 'entregar') x where (x ->> 'id')::bigint = :o and (x ->> 'n')::int = :n)
+             and exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'listos') x where (x ->> 'n')::int = :n),
+  'un pedido para llevar ya cobrado y listo sale en «Listos para entregar» de la caja (y en «¡Listo!»)');
+select public.pos_served(:mesera, '2222', :o) as srv2 \gset
+select prueba.ok(:srv2 >= 1 and not exists (select 1 from jsonb_array_elements(public.pos_state() -> 'entregar') x where (x ->> 'id')::bigint = :o)
+             and not exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'listos') x where (x ->> 'n')::int = :n),
+  'al marcarlo «Entregado» en la caja sale de la lista y de la pantalla de pedidos listos');
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"nadie@prueba.test"}', false);
 select prueba.falla('select public.pos_listos()', 'no está autorizado', 'solo la ve un equipo del restaurante');
 reset role;

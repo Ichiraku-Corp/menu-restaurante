@@ -149,7 +149,7 @@ function drawTables() {
   if (AREAS.indexOf(cur.area) >= 0) { try { localStorage.setItem("pos-last-area", cur.area); } catch (e) {} }
   setTimeout(syncBars, 0);
   $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar", "Tops"]).map(function (a) {
-    var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length
+    var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length + (ST.entregar || []).length
       : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
       : a === "Por cobrar" ? ST.orders.length
       : a === "Tops" ? 0
@@ -161,8 +161,11 @@ function drawTables() {
   $("summary").innerHTML = '<div class="s"><span>Mesas ocupadas</span><b>' + busyT + " / " + ST.tables.length + '</b></div><div class="s"><span>Por cobrar</span><b>' + ref(due) + "</b></div>" +
     '<div class="s"><span>Pidieron la cuenta</span><b>' + asked + "</b></div>" + '<div class="s"><span>Caja</span><b style="color:' + (ST.session ? "var(--ok)" : "var(--warn)") + '">' + (ST.session ? "Abierta" : "Cerrada") + "</b></div>" + metaTile();
   if (cur.area === "Para llevar" || cur.area === "Delivery") {
-    var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; });
-    $("areaBody").innerHTML = '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="new"><span class="num">+</span><small>Nuevo ' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +
+    var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; }), ent = kind === "llevar" ? ST.entregar || [] : [];
+    // Ya cobrados y listos en cocina: al entregarlos salen de la pantalla de pedidos listos
+    $("areaBody").innerHTML = (ent.length ? '<div class="card entregar"><b>Listos para entregar</b> <span class="muted">(ya cobrados)</span><div class="row" style="margin-top:8px">' +
+      ent.map(function (x) { return '<button type="button" class="readybtn" data-entregar="' + Number(x.id) + '">🍜 #' + esc(String(x.n)) + " · Entregado ✓</button>"; }).join("") + "</div></div>" : "") +
+      '<div class="tables">' + '<button type="button" id="' + (kind === "delivery" ? "newDeliv" : "newTogo") + '" class="new"><span class="num">+</span><small>Nuevo ' + (kind === "delivery" ? "delivery" : "para llevar") + "</small></button>" +
       list.map(function (o) { return tableCard(o, esc(o.label.replace(/^(Para llevar|Delivery): /, "") || cur.area), 'data-order="' + o.id + '"'); }).join("") + "</div>";
     return;
   }
@@ -225,6 +228,12 @@ function waitInfo(o) {
   if (!o.items && minsSince(o.opened_at) >= 10) return "sin pedido hace " + minsSince(o.opened_at) + " min";
   return "";
 }
+$("areaBody").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-entregar]"); if (!b) return;
+  b.disabled = true;
+  rpc("pos_served", { p_order: Number(b.dataset.entregar) }).then(function () { toast("Entregado: sale de la pantalla de pedidos listos"); return refreshState(); })
+    .catch(function (er) { b.disabled = false; fail(er); });
+});
 $("served").addEventListener("click", function () {
   rpc("pos_served", { p_order: cur.order }).then(function (n) { toast(n ? "Listo: " + n + " servido" + (n === 1 ? "" : "s") : "Nada pendiente"); show("served", false); return refreshState(); }).catch(fail);
 });

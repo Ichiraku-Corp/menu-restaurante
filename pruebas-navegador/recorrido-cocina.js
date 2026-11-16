@@ -80,6 +80,16 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok((await cocina.locator(".card .item").count()) === 1 && /Ramen/.test(await cocina.textContent("#stName")), "lo que no tiene estación (Entradas) va a la principal: Ramen");
     await cocina.click('#stations [data-st="0"]'); await cocina.waitForTimeout(400);
     ok((await cocina.locator(".card .item").count()) === 3 && !(await cocina.textContent("#stName")), "«Todas» muestra el pedido completo");
+    // Si apagan la estación de esta pantalla, se ven todas sin olvidarla; al encenderla de nuevo, vuelve sola a ella
+    await cocina.click('#stations [data-st="2"]'); await cocina.waitForTimeout(400);
+    await cocina.evaluate(() => { window.__STATIONS = window.__STATIONS.filter((s) => s.id !== 2); });
+    for (let i = 0; i < 30 && !/apagada/.test(await cocina.textContent("#stName")); i++) await cocina.waitForTimeout(250);
+    ok(/Todas \(su estación está apagada\)/.test(await cocina.textContent("#stName")) && (await cocina.evaluate(() => localStorage.getItem("comandas-estacion"))) === "2",
+      "si apagan su estación, la pantalla muestra todas sin olvidarla");
+    await cocina.evaluate(() => { window.__STATIONS.splice(1, 0, { id: 2, name: "Sushi" }); });
+    for (let i = 0; i < 30 && !/· Sushi/.test(await cocina.textContent("#stName")); i++) await cocina.waitForTimeout(250);
+    ok(/· Sushi/.test(await cocina.textContent("#stName")), "al encenderla de nuevo, vuelve sola a su estación");
+    await cocina.click('#stations [data-st="0"]'); await cocina.waitForTimeout(400);
     // Envases y bolsas (no pasan por cocina): la tarjeta dice qué empacar, sin botón para marcarlos
     await cocina.evaluate(() => { window.__PACK = { 900: ["2 × Bolsa", "1 × Envase grande"] }; });
     await cocina.click('#stations [data-st="1"]'); await cocina.waitForTimeout(400);

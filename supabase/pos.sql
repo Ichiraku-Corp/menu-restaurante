@@ -376,10 +376,13 @@ $$;
 
 -- Siguiente número de orden del día (hora de Caracas).
 create or replace function public.pos_next_number() returns int
-language sql volatile security definer set search_path = public as $$
-  select coalesce(max(day_number), 0) + 1 from public.pos_orders
-  where (opened_at at time zone 'America/Caracas')::date = (now() at time zone 'America/Caracas')::date
-$$;
+language plpgsql volatile security definer set search_path = public as $$
+begin
+  -- Dos pedidos abiertos a la vez no se llevan el mismo número (es el que el cliente busca en la pantalla de pedidos listos)
+  perform pg_advisory_xact_lock(hashtext('pos_next_number'));
+  return (select coalesce(max(day_number), 0) + 1 from public.pos_orders
+          where (opened_at at time zone 'America/Caracas')::date = (now() at time zone 'America/Caracas')::date);
+end $$;
 
 -- ---------------------------------------------------------------- Mejores vendedores (incentivos)
 -- Cada plato cuenta para quien lo pidió en la tablet; solo pedidos cobrados y sin anulaciones.
@@ -476,6 +479,15 @@ begin
     'printer_oldest', (select min(created_at) from public.pos_print_jobs where status = 'pendiente' and created_at > now() - interval '1 day'),
     -- Para el indicador «Laptop · Impresora» de la tablet
     'bridge_seen', (select updated_at from public.pos_kv where key = 'bridge_seen'),
+    -- Para llevar ya cobrados, con todo listo en cocina y sin entregar: la caja los marca «Entregado» (salen de la pantalla de pedidos listos)
+    'entregar', (select coalesce(jsonb_agg(jsonb_build_object('id', z.id, 'n', z.n, 'label', z.label, 'at', z.listo_at) order by z.listo_at), '[]'::jsonb) from (
+        select o.id, o.day_number n, o.label, max(i.ready_at) listo_at
+        from public.pos_orders o join public.pos_items i on i.order_id = o.id and i.status = 'enviado'
+        left join public.dishes dd on dd.id = i.dish_id left join public.categories cc on cc.id = dd.category_id
+        where o.kind = 'llevar' and o.status = 'cobrada' and o.opened_at > now() - interval '12 hours'
+          and not (coalesce(dd.no_kitchen, false) or (dd.station_id is null and coalesce(cc.no_kitchen, false)))
+        group by o.id
+        having count(*) filter (where i.ready_at is null) = 0 and count(*) filter (where i.served_at is null) > 0 and max(i.ready_at) > now() - interval '30 minutes') z),
     'printer_error', (select count(*) from public.pos_print_jobs where status = 'error' and created_at > now() - interval '1 hour'),
     'printer_error_msg', (select error from public.pos_print_jobs where status = 'error' and created_at > now() - interval '1 hour' order by id desc limit 1)
   ) into r;
