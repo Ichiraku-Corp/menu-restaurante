@@ -1854,20 +1854,21 @@ end $$;
 
 -- Pantalla de pedidos para llevar (TV o tablet de cara al cliente): «Preparando» y «¡Listo! Pasa a retirar»
 -- con el número del pedido del día. Sale de «Listo» al marcarlo entregado en la caja o a los 30 minutos.
+-- Si en 90 minutos nadie lo marcó listo en la pantalla de cocina, deja de salir en «Preparando» (ya se entregó sin marcarlo).
 create or replace function public.pos_listos() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare r jsonb;
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   with o as (
-    select o.id, o.day_number n, min(i.sent_at) enviado,
+    select o.id, o.day_number n, min(i.sent_at) enviado, max(i.sent_at) ultimo,
            count(*) filter (where i.ready_at is null) falta, count(*) filter (where i.ready_at is not null and i.served_at is null) por_entregar, max(i.ready_at) listo_at
     from public.pos_orders o join public.pos_items i on i.order_id = o.id and i.status = 'enviado'
     where o.kind = 'llevar' and o.status <> 'anulada' and o.opened_at > now() - interval '12 hours' and o.day_number is not null
     group by o.id, o.day_number
   )
   select jsonb_build_object('now', now(),
-    'preparando', coalesce((select jsonb_agg(jsonb_build_object('n', n) order by enviado) from o where falta > 0), '[]'::jsonb),
+    'preparando', coalesce((select jsonb_agg(jsonb_build_object('n', n) order by enviado) from o where falta > 0 and ultimo > now() - interval '90 minutes'), '[]'::jsonb),
     'listos', coalesce((select jsonb_agg(jsonb_build_object('n', n, 'at', listo_at) order by listo_at desc)
                         from o where falta = 0 and por_entregar > 0 and listo_at > now() - interval '30 minutes'), '[]'::jsonb)) into r;
   return r;

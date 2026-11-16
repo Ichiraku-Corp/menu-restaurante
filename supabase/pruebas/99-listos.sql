@@ -33,6 +33,18 @@ set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
 select prueba.ok(not exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'listos') x where (x ->> 'n')::int = :n), 'a los 30 minutos de listo sale solo');
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"nadie@prueba.test"}', false);
+reset role;
+-- Si la cocina nunca lo marca listo, a los 90 minutos deja de salir en «Preparando»
+update public.pos_items set served_at = null, ready_at = null, sent_at = now() - interval '80 minutes' where order_id = :o;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'preparando') x where (x ->> 'n')::int = :n), 'a los 80 minutos sin marcar sigue en «Preparando»');
+reset role;
+update public.pos_items set sent_at = now() - interval '95 minutes' where order_id = :o;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select prueba.ok(not exists (select 1 from jsonb_array_elements(public.pos_listos() -> 'preparando') x where (x ->> 'n')::int = :n), 'a los 90 minutos sin marcarlo listo sale de «Preparando»');
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"nadie@prueba.test"}', false);
 select prueba.falla('select public.pos_listos()', 'no está autorizado', 'solo la ve un equipo del restaurante');
 reset role;
 set role anon;
