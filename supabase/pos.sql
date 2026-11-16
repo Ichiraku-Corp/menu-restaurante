@@ -1074,18 +1074,26 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Quien envía (el servidor con la función «correo», o la laptop como respaldo) aparta cada reporte por 5 minutos:
--- así dos no mandan el mismo correo. p_min_age: la laptop solo toma los que llevan un rato sin salir.
+-- así dos no mandan el mismo correo. p_min_age: la laptop solo toma los que llevan un rato sin salir, pero
+-- únicamente si el servidor está enviando de verdad (el último correo que salió lo envió el servidor). Si no
+-- (por ejemplo, faltan las claves del correo en Supabase), la laptop envía al momento: la cajera apaga la
+-- laptop poco después de cerrar y el cierre no puede quedarse esperando hasta el día siguiente.
 alter table public.pos_reports add column if not exists claimed_at timestamptz;
+alter table public.pos_reports add column if not exists sent_by text not null default '';   -- 'servidor' o 'laptop'
 drop function if exists public.pos_report_next();
 create or replace function public.pos_report_next(p_min_age int default 0) returns setof public.pos_reports
 language plpgsql security definer set search_path = public as $$
+declare espera int := greatest(coalesce(p_min_age, 0), 0);
 begin
   if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
+  if espera > 0 and coalesce((select sent_by from public.pos_reports where status = 'enviado' and sent_at is not null order by sent_at desc, id desc limit 1), '') <> 'servidor' then
+    espera := 0;
+  end if;
   return query update public.pos_reports r set claimed_at = now()
     where r.id in (select x.id from public.pos_reports x
                    where (x.status = 'pendiente' or (x.status = 'error' and x.attempts < 10))
                      and (x.claimed_at is null or x.claimed_at < now() - interval '5 minutes')
-                     and x.created_at <= now() - make_interval(secs => greatest(coalesce(p_min_age, 0), 0))
+                     and x.created_at <= now() - make_interval(secs => espera)
                    order by x.id limit 5 for update skip locked)
     returning r.*;
 end $$;
@@ -1094,7 +1102,9 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
   update public.pos_reports set status = case when p_ok then 'enviado' else 'error' end, attempts = attempts + 1, claimed_at = null,
-    error = case when p_ok then '' else left(coalesce(p_error, ''), 300) end, sent_at = case when p_ok then now() end where id = p_id;
+    error = case when p_ok then '' else left(coalesce(p_error, ''), 300) end, sent_at = case when p_ok then now() end,
+    sent_by = case when not p_ok then sent_by when coalesce(auth.jwt() ->> 'role', '') = 'service_role' then 'servidor' else 'laptop' end
+  where id = p_id;
 end $$;
 
 -- p_counted: {"efectivo_usd": 120, "efectivo_bs": 3500, "pago_movil": 15000, "punto_debito": 8000, ...} (en su moneda)
