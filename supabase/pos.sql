@@ -831,7 +831,8 @@ declare o record; t record; sess bigint; rt numeric; p record; cur text; ref num
 begin
   select * into o from public.pos_orders where id = p_order for update;
   if o.id is null or o.status <> 'abierta' then raise exception 'El pedido ya está cerrado'; end if;
-  if exists (select 1 from public.pos_items where order_id = p_order and status = 'pendiente') then
+  -- Sin internet el dinero ya se recibió: se anota igual (si quedó algo sin enviar, el pedido sigue abierto y se avisa)
+  if not coalesce(p_offline, false) and exists (select 1 from public.pos_items where order_id = p_order and status = 'pendiente') then
     raise exception 'Hay platos sin enviar a cocina: envíalos o quítalos antes de cobrar';
   end if;
   select id into sess from public.pos_sessions where status = 'abierta';
@@ -839,6 +840,10 @@ begin
   select * into t from public.pos_totals(p_order);
   due := round(t.total - t.paid, 2);
   rt := public.pos_rate();
+  -- Un cobro hecho sin internet vale a la tasa del día en que se cobró, no a la del día en que se sube
+  if coalesce(p_offline, false) and p_at is not null then
+    rt := coalesce((select eur from public.pos_rates where rate_date <= (p_at at time zone 'America/Caracas')::date order by rate_date desc limit 1), rt);
+  end if;
   for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text, tip boolean, tab_employee_id bigint) loop
     if coalesce(p.amount, 0) <= 0 then continue; end if;
     if p.method = 'cuenta' and coalesce(p.tip, false) then raise exception 'La propina no puede ir a cuenta'; end if;

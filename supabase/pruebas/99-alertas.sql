@@ -49,6 +49,20 @@ select prueba.ok(exists (select 1 from public.pos_reports where data ->> 'clave'
 \else
 select prueba.ok(true, 'al tercer plato anulado del día después de cocina, avisa con la lista (ya había 3 hoy)');
 \endif
+-- Al cancelar un pedido entero se anulan varios a la vez y la cuenta salta de 3: el siguiente igual avisa
+delete from public.pos_reports where data ->> 'clave' = 'anulados-' || (now() at time zone 'America/Caracas')::date;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_add(:mesera, '2222', :o, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select public.pos_send(:mesera, '2222', :o);
+reset role;
+select max(id) as otro from public.pos_items where order_id = :o and status = 'enviado' \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_void(:mesera, '2222', :otro, 'Prueba: ya iban más de 3');
+reset role;
+select prueba.ok(exists (select 1 from public.pos_reports where data ->> 'clave' = 'anulados-' || (now() at time zone 'America/Caracas')::date),
+  'si ya iban más de 3 anulados hoy (p. ej. al cancelar un pedido entero), el siguiente también avisa');
 -- Laptop sin conexión con la caja abierta: avisa una sola vez
 insert into public.pos_kv (key, value) values ('bridge_seen', '{}'::jsonb) on conflict (key) do nothing;
 update public.pos_kv set updated_at = now() - interval '20 minutes' where key = 'bridge_seen';

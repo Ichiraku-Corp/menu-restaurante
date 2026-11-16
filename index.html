@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NPj6j7b+vpOPp2DPBnIlAph14RLjR15KN8e/MzsY4Ug='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Skhs/0Ti1Ue4RZ5xNBagQRuzFjimXYk649mvgK39m9Q='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -306,7 +306,8 @@
     });
     return best;
   }
-  function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(base * (1 - Number(p.percent) / 100) * 100) / 100 : base; }
+  // El mismo redondeo que la caja y el servidor: en centavos enteros (1,50 −15 % = 1,28)
+  function promoPrice(d, base) { var p = promoOf(d); return p ? Math.round(Math.round(base * 100) * Math.round((100 - Number(p.percent)) * 100) / 10000) / 100 : base; }
   function pct(n) { return String(Math.round(Number(n) * 100) / 100).replace(".", ","); }
   function hora12(t) { var h = Number(t.slice(0, 2)); return (h % 12 || 12) + ":" + t.slice(3, 5) + (h < 12 ? " a. m." : " p. m."); }
   function showPromos(data) {

@@ -53,6 +53,8 @@ jobs:
         run: node scripts/reporte-correo.js --check
       - name: Puente sin internet (impresora simulada)
         run: node pruebas-navegador/puente-sinred.js
+      - name: "Cobrar sin internet: con qué total se cobra cada cuenta"
+        run: node pruebas-navegador/sinred-cuentas.js
       - name: Los reportes por correo se generan sin errores
         run: |
           node -e '
