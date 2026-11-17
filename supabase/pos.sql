@@ -834,6 +834,43 @@ begin
   return jsonb_build_object('currency', 'PROPINA', 'amount', p_over);
 end $$;
 
+-- Opinión del cliente: el recibo lleva un código QR con un enlace único del pedido (opinion.html?t=…) para calificar la
+-- visita. La página y la pestaña Clientes › Opiniones de Gestión usan las funciones de opiniones.sql.
+alter table public.gestion_settings add column if not exists opinion_qr boolean not null default true;      -- imprimir el QR en el recibo
+alter table public.gestion_settings add column if not exists opinion_google text not null default '';       -- enlace de reseñas de Google
+alter table public.gestion_settings add column if not exists opinion_alerta boolean not null default true;  -- 1–2 estrellas: alerta al correo
+create table if not exists public.opiniones (
+  order_id    bigint primary key references public.pos_orders(id) on delete cascade,
+  token       text not null unique,
+  created_at  timestamptz not null default now(),   -- cuando se imprimió el recibo con el QR
+  rating      int check (rating between 1 and 5),
+  comment     text not null default '' check (length(comment) <= 500),
+  name        text not null default '' check (length(name) <= 60),
+  phone       text not null default '' check (length(phone) <= 30),
+  answered_at timestamptz,
+  updated_at  timestamptz,
+  edits       int not null default 0
+);
+create index if not exists opiniones_created_idx on public.opiniones (created_at);
+alter table public.opiniones enable row level security;   -- sin políticas: solo se usa a través de las funciones
+revoke all on public.opiniones from anon, authenticated;
+
+-- Las líneas del QR para el final del recibo ('' si está apagado en Gestión, si el puente aún no sabe imprimir QR
+-- —el enlace saldría como texto— o si fue consumo de un empleado a su cuenta).
+create or replace function public.opinion_qr(p_order bigint) returns text
+language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if not coalesce((select opinion_qr from public.gestion_settings limit 1), false) then return ''; end if;
+  if coalesce((select value ->> 'qr' from public.pos_kv where key = 'bridge_status'), '') <> 'true' then return ''; end if;
+  if not exists (select 1 from public.pos_payments where order_id = p_order and method <> 'cuenta' and not is_tip) then return ''; end if;
+  insert into public.opiniones (order_id, token) values (p_order, translate(encode(extensions.gen_random_bytes(9), 'base64'), '+/', '-_'))
+  on conflict (order_id) do nothing;
+  select token into tk from public.opiniones where order_id = p_order;
+  return E'\n\n~Como te fue? Cuentanos en 1 minuto\n@qr https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || tk;
+end $$;
+revoke execute on function public.opinion_qr(bigint) from anon, public, authenticated;
+
 -- El cobro en sí. Lo usan pos_pay (la caja, con PIN) y pos_offline_pay (lo cobrado sin internet, que ya se imprimió en la
 -- laptop: p_offline no vuelve a imprimir y deja la hora real del cobro).
 create or replace function public.pos_pay_core(p_emp bigint, p_order bigint, p_payments jsonb, p_change_currency text, p_partial boolean, p_at timestamptz, p_offline boolean)
@@ -939,7 +976,7 @@ begin
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
-     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina') || E'\n\n~Gracias por tu visita!');
+     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina') || E'\n\n~Gracias por tu visita!' || public.opinion_qr(p_order));
   end if;
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, case when p_offline then 'cobrar_sin_internet' else 'cobrar' end, p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);

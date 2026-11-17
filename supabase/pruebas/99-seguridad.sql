@@ -9,15 +9,16 @@ select prueba.ok(
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
       and has_function_privilege('anon', p.oid, 'execute'))
-  = array['menu_promos()', 'menu_tasa()', 'wa_cart_create(p_items jsonb)'],
-  'el público solo puede llamar a la carta (menu_promos, menu_tasa) y al carrito de WhatsApp');
+  = array['menu_promos()', 'menu_tasa()', 'opinion_enviar(p_token text, p_rating integer, p_comment text, p_name text, p_phone text)',
+          'opinion_ver(p_token text)', 'wa_cart_create(p_items jsonb)'],
+  'el público solo puede llamar a la carta (menu_promos, menu_tasa), a la página de opinión del recibo y al carrito de WhatsApp');
 
 -- 2) Las demás, si las puede llamar una cuenta con sesión, verifican quién es (dueño, admin, tablet, PIN…)
 select prueba.ok(not exists (
   select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public' and p.prosecdef and p.prorettype <> 'trigger'::regtype
      and has_function_privilege('authenticated', p.oid, 'execute')
-     and p.proname not in ('menu_promos', 'menu_tasa', 'wa_cart_create')
+     and p.proname not in ('menu_promos', 'menu_tasa', 'wa_cart_create', 'opinion_ver', 'opinion_enviar')  -- públicas a propósito (la de opinión pide el código del recibo)
      and p.prosrc !~* '(can_manage|pos_is_device|pos_auth|staff_role|auth\.jwt|auth\.uid|Sin permiso)'),
   'toda función con permisos elevados que pueden llamar las cuentas verifica quién la llama');
 
