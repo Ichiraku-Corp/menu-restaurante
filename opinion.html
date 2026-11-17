@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ichiraku Ramen · Tu opinión</title>
+<meta name="description" content="Cuéntanos cómo te fue en Ichiraku Ramen.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#EA5BA6">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<style>
+  /* Marca Ichiraku · estilo E02 «Interfaz de juego» (encuestas): ventana de app, botones gruesos, interruptor y barra */
+  :root {
+    --noche: #1B2D6B; --rosa: #EA5BA6; --celeste: #2FB2E8; --oro: #FFC928; --crema: #FAF6F0; --blanco: #fff;
+    --texto: #1B2D6B; --suave: #5a6690; --linea: #d9dcea; --error: #b3261e;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100vh; color: var(--texto); background-color: var(--crema);
+    background-image: radial-gradient(rgba(47, 178, 232, .22) 1.6px, transparent 1.7px); background-size: 22px 22px;
+    font: 500 16px/1.45 Poppins, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  .top { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 22px 16px 6px; }
+  .top img { width: 56px; height: 56px; border-radius: 50%; background: #fff; border: 3px solid var(--noche); }
+  .marca { font-weight: 900; font-size: 22px; letter-spacing: -.01em; line-height: 1.1; }
+  .kana { font-weight: 900; font-size: 13px; color: var(--rosa); letter-spacing: .12em; }
+  main { max-width: 460px; margin: 0 auto; padding: 12px 16px 40px; }
+  .win { background: var(--blanco); border: 3px solid var(--noche); border-radius: 18px; box-shadow: 5px 6px 0 var(--noche); overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 6px; background: var(--rosa); color: #fff; border-bottom: 3px solid var(--noche);
+    padding: 7px 12px; font-weight: 800; font-size: 13px; letter-spacing: .04em; }
+  .bar span { flex: 1; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #fff; border: 2px solid var(--noche); }
+  .body { padding: 20px 18px 22px; }
+  h1 { margin: 0; font-size: 28px; font-weight: 900; line-height: 1.15; letter-spacing: -.01em; }
+  .sub { margin: 4px 0 18px; color: var(--suave); font-size: 14px; }
+  .stars { display: flex; justify-content: space-between; gap: 4px; margin: 0 -2px; }
+  .star { flex: 1; aspect-ratio: 1; max-width: 62px; padding: 4px; border: 0; background: none; cursor: pointer; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+  .star svg { width: 100%; height: 100%; display: block; transition: transform .15s; }
+  .star path { fill: #fff; stroke: var(--noche); stroke-width: 2.2; stroke-linejoin: round; }
+  .star.on path { fill: var(--oro); }
+  .star:active svg { transform: scale(.9); }
+  .star:focus-visible { outline: 3px solid var(--celeste); outline-offset: 1px; }
+  .nivel { display: flex; align-items: center; gap: 10px; margin: 12px 0 18px; font-weight: 800; font-size: 15px; min-height: 22px; }
+  .meter { flex: 0 0 96px; height: 12px; border: 2px solid var(--noche); border-radius: 99px; background: #fff; overflow: hidden; }
+  .meter b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--celeste), var(--rosa)); transition: width .3s; }
+  label.t { display: block; font-weight: 800; font-size: 14px; margin: 0 0 6px; }
+  textarea, input[type=text], input[type=tel] { width: 100%; font: inherit; font-size: 16px; color: var(--texto); background: #fff;
+    border: 2px solid var(--linea); border-radius: 12px; padding: 10px 12px; }
+  textarea { resize: vertical; min-height: 96px; }
+  textarea:focus, input:focus { outline: none; border-color: var(--celeste); box-shadow: 0 0 0 3px rgba(47, 178, 232, .25); }
+  .cuenta { text-align: right; font-size: 12px; color: var(--suave); margin-top: 2px; }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 4px; font-weight: 700; font-size: 15px; cursor: pointer; }
+  .switch input { appearance: none; -webkit-appearance: none; flex: 0 0 auto; width: 50px; height: 28px; border-radius: 99px; background: var(--linea);
+    border: 2px solid var(--noche); position: relative; cursor: pointer; transition: background .2s; margin: 0; }
+  .switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 2px solid var(--noche); transition: left .2s; }
+  .switch input:checked { background: var(--celeste); }
+  .switch input:checked::after { left: 24px; }
+  .switch input:focus-visible { outline: 3px solid var(--rosa); outline-offset: 2px; }
+  .datos { display: grid; gap: 10px; margin-top: 10px; }
+  .nota { font-size: 12.5px; color: var(--suave); margin: 2px 0 0; }
+  .nota a { color: var(--noche); }
+  .btn { display: block; width: 100%; margin-top: 20px; padding: 14px 18px; font: inherit; font-weight: 900; font-size: 18px; letter-spacing: .02em;
+    color: #fff; background: var(--rosa); border: 3px solid var(--noche); border-radius: 14px; box-shadow: 0 5px 0 var(--noche); cursor: pointer;
+    text-align: center; text-decoration: none; }
+  .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--noche); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.google { background: #fff; color: var(--noche); }
+  .btn.sec { background: #fff; color: var(--noche); font-size: 15px; padding: 10px 14px; box-shadow: 0 3px 0 var(--noche); margin-top: 14px; }
+  .error { color: var(--error); font-weight: 700; font-size: 14px; margin: 12px 0 0; }
+  .estado { text-align: center; padding: 14px 4px; }
+  .estado h1 { font-size: 24px; margin-bottom: 6px; }
+  .estado p { color: var(--suave); margin: 0; }
+  .gr { text-align: center; }
+  .gr .kana-g { font-size: 15px; color: var(--rosa); font-weight: 900; letter-spacing: .1em; }
+  .gr .tus { font-size: 26px; letter-spacing: 3px; color: var(--oro); -webkit-text-stroke: 1.2px var(--noche); margin: 6px 0 4px; }
+  .gr p { margin: 8px 0 0; }
+  .card { margin-top: 18px; padding: 14px; border: 2px dashed var(--celeste); border-radius: 14px; background: #f3fbff; text-align: center; }
+  .card p { margin: 0 0 4px; font-weight: 700; }
+  .card .btn { margin-top: 12px; }
+  .xp { margin-top: 18px; font-size: 12.5px; font-weight: 800; color: var(--suave); letter-spacing: .04em; text-transform: uppercase; }
+  footer { text-align: center; font-size: 12px; color: var(--suave); margin-top: 18px; }
+  footer a { color: var(--suave); }
+</style>
+</head>
+<body>
+<header class="top">
+  <img src="assets/logo-gato.png" alt="" width="56" height="56">
+  <div><div class="marca">Ichiraku Ramen</div><div class="kana" lang="ja">イチラク</div></div>
+</header>
+<main>
+  <section class="win" aria-labelledby="titulo">
+    <div class="bar" aria-hidden="true"><span>TU OPINIÓN ★</span><i></i><i></i><i></i></div>
+    <div class="body">
+      <div id="cargando" class="estado"><p>Cargando…</p></div>
+      <div id="aviso" class="estado" hidden><h1 id="avisoT"></h1><p id="avisoP"></p><button type="button" class="btn sec" id="reintentar" hidden>Intentar de nuevo</button></div>
+
+      <form id="form" hidden novalidate>
+        <h1 id="titulo">¿Cómo te fue?</h1>
+        <p class="sub" id="fecha"></p>
+        <div class="stars" id="stars" role="radiogroup" aria-label="Calificación de 1 a 5 estrellas"></div>
+        <div class="nivel"><span class="meter" aria-hidden="true"><b id="meter"></b></span><span id="nivel" aria-live="polite">Toca una estrella</span></div>
+        <label class="t" for="comentario" id="comentarioL">Cuéntanos (si quieres)</label>
+        <textarea id="comentario" maxlength="500" rows="4"></textarea>
+        <div class="cuenta" id="cuenta">0 / 500</div>
+        <label class="switch" for="quiero"><span id="quieroL">Quiero que me contacten</span><input type="checkbox" id="quiero" role="switch"></label>
+        <div class="datos" id="datos" hidden>
+          <div><label class="t" for="nombre">Nombre</label><input type="text" id="nombre" maxlength="60" autocomplete="name"></div>
+          <div><label class="t" for="tel">WhatsApp</label><input type="tel" id="tel" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="0414 123 4567"></div>
+          <p class="nota" id="notaDatos">Solo lo ve el equipo de Ichiraku para responderte. <a href="privacidad.html">Privacidad</a></p>
+        </div>
+        <button type="submit" class="btn" id="enviar">Enviar</button>
+        <p class="error" id="error" role="alert" hidden></p>
+      </form>
+
+      <div id="gracias" class="gr" hidden>
+        <div class="kana-g" lang="ja" id="grK">ありがとう</div>
+        <h1 tabindex="-1" id="grT">¡Arigatou!</h1>
+        <div class="tus" id="grS" role="img"></div>
+        <p id="grP"></p>
+        <div class="card" id="google" hidden>
+          <p>¿Nos ayudas con un minuto más?</p>
+          <span>Cuéntalo también en Google Maps: así más gente nos encuentra.</span>
+          <a class="btn google" id="googleA" href="#" target="_blank" rel="noopener">★ Dejar reseña en Google</a>
+        </div>
+        <button type="button" class="btn sec" id="cambiar" hidden>Cambiar mi opinión</button>
+        <div class="xp" id="grX">Misión cumplida · ánimo del equipo +1</div>
+      </div>
+    </div>
+  </section>
+  <footer>Ichiraku Ramen · <a href="./">Ver la carta</a> · <a href="privacidad.html">Privacidad</a></footer>
+</main>
+<script src="config.js"></script>
+<script src="opinion.js?v=75a1afce5c"></script>
+</body>
+</html>
