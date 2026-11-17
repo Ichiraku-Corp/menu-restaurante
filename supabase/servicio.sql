@@ -90,16 +90,17 @@ begin
       insert into public.svc_lines (month, kind, employee_id, label, pct, position)
       select m, l.kind, l.employee_id, l.label, l.pct, l.position from public.svc_lines l
       left join public.employees e on e.id = l.employee_id
-      where l.month = last and (l.kind = 'gasto' or e.active or public.pos_tab_balance(e.id) <> 0);
+      where l.month = last and (l.kind = 'gasto' or e.active);
     else
       insert into public.svc_lines (month, kind, label, pct, position) values
         (m, 'gasto', 'Alcaldía e impuestos', 20, 1), (m, 'gasto', 'Transporte', 5, 2), (m, 'gasto', 'Bolsas de comida', 10, 3),
         (m, 'gasto', 'Almuerzo', 20, 4), (m, 'gasto', 'Alquiler', 22, 5);
     end if;
-    -- toda persona activa aparece (con 0 % si es nueva)
+    -- toda persona activa aparece (con 0 % si es nueva). Quien ya no trabaja aquí no entra aunque deba: su deuda queda
+    -- en su cuenta para cobrársela (si entrara, la liquidación la pasaría a una nómina que ya no va a cobrar).
     insert into public.svc_lines (month, kind, employee_id, label, pct, position)
     select m, 'persona', e.id, e.name, 0, 100 + e.id from public.employees e
-    where (e.active or public.pos_tab_balance(e.id) <> 0) and coalesce(e.job_title, '') not ilike 'soci%' and not exists (select 1 from public.svc_lines l where l.month = m and l.employee_id = e.id);
+    where e.active and coalesce(e.job_title, '') not ilike 'soci%' and not exists (select 1 from public.svc_lines l where l.month = m and l.employee_id = e.id);
   end if;
   return jsonb_build_object(
     'month', m,
