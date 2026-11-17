@@ -33,8 +33,13 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
 - **Nómina quincenal**: empleados con su área, pago por quincena y bonos del mes.
 - **Gastos**: fijos (se repiten cada mes) y variables (con fecha).
 - **Insumos**: precio de compra, unidad y merma; calcula el costo real por kg, litro o unidad.
-- **Recetas**: ingredientes y cantidades por plato y tamaño (Peq/Gr); da el costo, la ganancia
-  y el % de costo sobre el precio de venta.
+- **Preparaciones** (salsas, masas, naruto…): lo que se hace en la cocina con varios insumos y cuánto
+  rinde. Su costo sale de sus ingredientes y se recalcula solo cuando cambia un precio.
+- **Recetas**: ingredientes (insumos o preparaciones) y cantidades por plato y tamaño (Peq/Gr); da el
+  costo, la ganancia y el % de costo sobre el precio de venta. Avisa si a un insumo le falta el precio.
+- **Rentabilidad del menú** (ingeniería de menú): cruza lo vendido con la ganancia de cada plato y lo
+  compara con los de su categoría (estrella, popular que deja poco, deja bien pero vende poco…).
+  Se puede ver con lo de la caja o con los últimos 2 años (incluye el sistema anterior).
 - **Resumen**: costo del mes por área, márgenes y punto de equilibrio estimado.
 - **Proveedores y precios automáticos**: los precios nuevos que cambian hasta un 5 % se
   aplican solos; si cambian más, esperan tu aprobación. Historial de cada cambio.
@@ -47,7 +52,8 @@ divididos por áreas: Administrativo, Cocina, Salón y barra, Seguridad y cámar
   Ver [`docs/n8n-asistencia-ventas.md`](docs/n8n-asistencia-ventas.md).
 - **Inventario**: stock y mínimo de cada insumo, compras, mermas (con quién las reporta), conteos
   físicos (detectan faltantes no registrados), lista de compras y valor del inventario. **Las ventas
-  descuentan solas** del stock los insumos de las recetas de lo vendido (con su merma).
+  descuentan solas** del stock los insumos de las recetas de lo vendido (con su merma; de una
+  preparación, sus ingredientes). Un insumo de cocina empieza a descontarse con su primera compra o conteo.
 - **Estado de resultados**: ventas − costo de lo vendido = **utilidad bruta**; − nómina, gastos,
   comisiones, mermas y faltantes + servicio del local = **utilidad neta**. Por mes y por día.
 

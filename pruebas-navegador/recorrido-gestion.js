@@ -211,10 +211,62 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.opinion_google === "https://g.page/r/abc/review"
       && c.value.opinion_alerta === false && c.value.opinion_qr === true)), "guarda el enlace de Google y apaga la alerta");
 
-    // Recetas: rentabilidad del menú
-    await page.click('#secs [data-sec="cocina"]'); await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
+    // Cocina › Insumos: preparaciones (salsas, masas…) con su costo calculado por sus ingredientes
+    await page.click('#secs [data-sec="cocina"]'); await page.click('#tabs [data-tab="insumos"]'); await page.waitForTimeout(300);
+    const il = await page.textContent("#ingList");
+    ok(!/Salsa de la casa/.test(il) && /Azúcar0 recetas · 1 preparación/.test(il) && /Cerdo molido1 receta/.test(il),
+      "la lista de insumos no trae las preparaciones y dice dónde se usa cada insumo");
+    const pl = await page.textContent("#prepList");
+    ok(/Salsa de la casa2 ingredientes · en 1 receta1,5 LRef 2,00Ref 1,33por L/.test(pl), "Preparaciones: rinde 1,5 L, cuesta Ref 2,00 y sale a Ref 1,33 el litro");
+    await page.click('#prepList [data-prep="5"]'); await page.waitForSelector("#prepDlg[open]");
+    ok((await page.$$("#prepLines .line[data-i]")).length === 2 && /Ref 2,00/.test(await page.textContent("#prepKpis")) && /Se usa en 1 receta/.test(await page.textContent("#prepUses")),
+      "el editor muestra sus 2 ingredientes, lo que cuesta y dónde se usa");
+    ok(!(await page.$eval("#prepLines .li-ing", (s) => [...s.options].some((o) => o.textContent === "Salsa de la casa"))), "una preparación no puede llevarse a sí misma");
+    await page.fill("#prepLines .line[data-i='0'] .li-qty", "800"); await page.waitForTimeout(100);
+    ok(/Ref 2,80/.test(await page.textContent("#prepKpis")) && /Cambios sin guardar/.test(await page.textContent("#prepState")), "al cambiar una cantidad recalcula al momento (Ref 2,80)");
+    await page.click("#prepSave"); await page.waitForTimeout(400);
+    const ps = await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "prep_save").pop().args);
+    ok(ps.p_id === 5 && ps.p_name === "Salsa de la casa" && ps.p_qty === 1.5 && ps.p_unit === "l" && ps.p_lines.length === 2 && ps.p_lines[0].qty === 800,
+      "guarda la preparación completa de una vez");
+    ok(/Ref 2,80/.test(await page.textContent("#prepList")) && await page.isVisible("#prepDlg[open]") && !/Cambios sin guardar/.test(await page.textContent("#prepState")),
+      "la lista muestra el costo nuevo y el editor queda abierto, ya guardado");
+    await page.click("#prepClose");
+    await page.click("#addPrep"); await page.waitForSelector("#prepDlg[open]");
+    await page.fill("#prepName", "Masa de prueba"); await page.fill("#prepQty", "10"); await page.selectOption("#prepUnit", "unidad");
+    await page.selectOption("#prepLines .line[data-i='0'] .li-ing", "1"); await page.selectOption("#prepLines .line[data-i='0'] .li-unit", "kg");
+    await page.fill("#prepLines .line[data-i='0'] .li-qty", "1"); await page.waitForTimeout(100);
+    ok(/Ref 1,50[\s\S]*10 unidades[\s\S]*Ref 0,15[\s\S]*por unidad/.test(await page.textContent("#prepKpis")), "una masa con 1 kg de harina que rinde 10 unidades sale a Ref 0,15 cada una");
+    await page.click("#prepSave"); await page.waitForTimeout(400);
+    ok(/Masa de prueba1 ingrediente · sin usar todavía10 unidadesRef 1,50/.test(await page.textContent("#prepList")), "la preparación nueva aparece en la lista");
+    await page.click("#prepClose");
+    await page.click("#addPrep"); await page.waitForSelector("#prepDlg[open]");
+    await page.fill("#prepName", "azúcar"); await page.fill("#prepQty", "1"); await page.fill("#prepLines .line[data-i='0'] .li-qty", "5");
+    await page.click("#prepSave"); await page.waitForTimeout(300);
+    ok(/Ya hay un insumo/.test(await page.textContent("#prepErr")) && await page.isVisible("#prepDlg[open]"), "si el nombre ya existe lo dice y no cierra");
+    await page.click("#prepClose");
+    await page.click('#tabs [data-tab="inventario"]'); await page.waitForTimeout(200);
+    ok(!/Salsa de la casa|Masa de prueba/.test(await page.textContent("#invStock")) && /Azúcar/.test(await page.textContent("#invStock")),
+      "el inventario no lleva preparaciones (se descuentan sus ingredientes)");
+
+    // Recetas: una receta puede usar una preparación; rentabilidad del menú
+    await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
+    await page.click('#recList tr[data-dish] >> text=Gyozas'); await page.waitForSelector("#recDlg[open]");
+    const rl = await page.evaluate(() => [...document.querySelectorAll("#recLines .line[data-i]")].map((r) => r.querySelector(".li-ing").selectedOptions[0].textContent + " " + r.querySelector(".cost").textContent));
+    ok(rl.join(" | ") === "Harina de trigo Ref 0,12 | Cerdo molido Ref 0,36 | Salsa de la casa Ref 0,06", "la receta usa la preparación con su costo (30 ml de salsa = Ref 0,06): " + rl.join(" | "));
+    ok(await page.$eval("#recLines .li-ing", (s) => [...s.querySelectorAll("optgroup")].map((g) => g.label).join(",")) === "Insumos,Preparaciones", "al elegir ingrediente, las preparaciones salen aparte");
+    await page.click("#recClose");
     ok(/Gyozas/.test(await page.textContent("#meList")) && /Ganancia de los platos/.test(await page.textContent("#meKpis")), "muestra la rentabilidad del menú con lo vendido");
-    ok(/Estrella|Popular|Deja bien|Vende poco/.test(await page.textContent("#meList")), "clasifica el plato y dice qué hacer");
+    const filaMe = async (n) => (await page.locator("#meList tr[data-dish]", { hasText: n }).first().textContent()) || "";
+    ok(/^Entradas · 50 vendidos/.test((await page.textContent("#meList tr.grp")).trim()) && /Estrella/.test(await filaMe("Gyozas")) && /Vende poco y deja poco/.test(await filaMe("Imo mochi")),
+      "compara cada plato con los de su categoría: entre las entradas, Gyozas es estrella e Imo mochi vende poco y deja poco");
+    ok(!/Agua/.test(await page.textContent("#meList")) && /30 de 80 platos/.test(await page.textContent("#meKpis")),
+      "el agua no se clasifica: le falta el precio de compra (cuenta en «sin receta o sin precio»)");
+    ok(/falta precio/.test(await page.locator("#recList tr[data-dish]", { hasText: "Agua" }).first().textContent()), "en el costo por receta, el agua dice «falta precio»");
+    await page.selectOption("#meDays", "hist"); await page.waitForTimeout(400);
+    ok(/500 platos del sistema anterior \(hasta el 06\/11\/2026\) y 80 de la caja/.test(await page.textContent("#mePeriod")) && /Gyozas540/.test(await page.textContent("#meList")),
+      "«2 años» suma lo vendido en el sistema anterior y en la caja (500 + 40 gyozas)");
+    ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "menu_sales").pop().args.p_from) === "2026-11-07",
+      "de la caja solo pide lo vendido después del último día del sistema anterior (no cuenta dos veces)");
   } catch (e) {
     fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
   }

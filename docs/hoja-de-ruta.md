@@ -39,8 +39,9 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la fact
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
 ### 📎 Para enviar
-6. Recetas correctas y actualizadas de la carta, por porción y tamaño (Peq/Gr).
-7. Lista de costos de insumos: precio y cantidad de compra; si se puede, stock actual y mínimo.
+6. ✅ (17 nov) Recetas cargadas desde la hoja «Estructura de costo nueva» (con sus preparaciones). Faltan: el tamaño
+   Gr de Pollo Kobayashi, Pollo Kyojuro y Kakashi; Roll Agatsuma, Tokyo Tiramisú, Fruit Sandu, Japan Cake y Mochi.
+7. ✅ (17 nov) Insumos con su precio de compra (agosto). Falta el precio del agua y de los envases.
 8. Receta de los fideos caseros (ingredientes por tanda y porciones).
 9. Proveedores: nombre, WhatsApp y qué vende cada uno.
 10. ✅ Autoprueba de impresoras recibida (ver «Resuelto»). Falta: el `ipconfig` de la laptop de caja.

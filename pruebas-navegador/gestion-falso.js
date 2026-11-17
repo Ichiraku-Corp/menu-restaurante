@@ -12,13 +12,35 @@
                   { id: 14, name: "Marta Socia", job_title: "Socia", area_id: null, pay_quincena: 0, monthly_extra: 0, active: true }],
       payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0, opinion_qr: true, opinion_google: "", opinion_alerta: true }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
-                    { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
+                    { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 },
+                    { id: 3, name: "Azúcar", buy_unit: "kg", buy_qty: 1, buy_price: 2, waste_pct: 0, stock_qty: 0, min_qty: 0 },
+                    { id: 4, name: "Vinagre", buy_unit: "l", buy_qty: 1, buy_price: 3, waste_pct: 0, stock_qty: 0, min_qty: 0 },
+                    // Preparación: su precio lo pone la base de datos (400 g de azúcar + 400 ml de vinagre = 2,00 por 1,5 L)
+                    { id: 5, name: "Salsa de la casa", buy_unit: "l", buy_qty: 1.5, buy_price: 2, waste_pct: 0, stock_qty: 0, min_qty: 0, is_prep: true },
+                    { id: 6, name: "Agua (botella)", buy_unit: "unidad", buy_qty: 1, buy_price: 0, waste_pct: 0, stock_qty: 0, min_qty: 6, zone: "afuera" }],
+      prep_items: [{ id: 1, prep_id: 5, ingredient_id: 3, qty: 400, unit: "g", position: 1 }, { id: 2, prep_id: 5, ingredient_id: 4, qty: 400, unit: "ml", position: 2 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
       promos: [{ id: 1, name: "Happy hour", percent: 20, days: [1, 2, 3, 4], start_time: "15:00:00", end_time: "18:00:00", date_from: null, date_to: null, dish_ids: [], category_ids: [3], active: true }]
     }
   };
   var gy = M.dishes.find(function (d) { return d.name === "Gyozas"; });
-  if (gy) G.tables.recipe_items = [{ id: 1, dish_id: gy.id, variant: "", ingredient_id: 1, qty: 80, unit: "g", position: 1 }, { id: 2, dish_id: gy.id, variant: "", ingredient_id: 2, qty: 60, unit: "g", position: 2 }];
+  if (gy) G.tables.recipe_items = [{ id: 1, dish_id: gy.id, variant: "", ingredient_id: 1, qty: 80, unit: "g", position: 1 }, { id: 2, dish_id: gy.id, variant: "", ingredient_id: 2, qty: 60, unit: "g", position: 2 },
+                                   { id: 3, dish_id: gy.id, variant: "", ingredient_id: 5, qty: 30, unit: "ml", position: 3 }];
+  // Otra entrada (para comparar dentro de la categoría) y el agua, cuyo precio de compra falta
+  var imo = M.dishes.find(function (d) { return d.name === "Imo mochi"; }), agua = M.dishes.find(function (d) { return d.name === "Agua"; });
+  if (imo) G.tables.recipe_items.push({ id: 4, dish_id: imo.id, variant: "", ingredient_id: 1, qty: 50, unit: "g", position: 1 });
+  if (agua) G.tables.recipe_items.push({ id: 5, dish_id: agua.id, variant: "", ingredient_id: 6, qty: 1, unit: "unidad", position: 1 });
+  // Ventas del sistema anterior (2 años): 500 gyozas enlazadas a la carta y un producto que ya no está
+  if (gy) G.tables.historic_product_sales = [{ id: 1, source: "syth", period_from: "2024-11-09", period_to: "2026-11-06", code: "10", name: "GYOZAS", qty: 500, net: 2155, dish_id: gy.id, variant: "" },
+                                             { id: 2, source: "syth", period_from: "2024-11-09", period_to: "2026-11-06", code: "99", name: "COMBO VIEJO", qty: 80, net: 400, dish_id: null, variant: "" }];
+  // Como la base de datos: el costo de una preparación es la suma de sus ingredientes
+  var UF = { kg: 1000, g: 1, l: 1000, ml: 1, unidad: 1 };
+  function prepCost(id) {
+    return G.tables.prep_items.filter(function (l) { return l.prep_id === id; }).reduce(function (t, l) {
+      var i = G.tables.ingredients.find(function (x) { return x.id === l.ingredient_id; });
+      return t + l.qty * UF[l.unit] / (i.buy_qty * UF[i.buy_unit]) * i.buy_price / (1 - (i.waste_pct || 0) / 100);
+    }, 0);
+  }
   function res(data) { return Promise.resolve({ data: data, error: null }); }
   // Tablas «vivas»: lo que se inserta o borra queda (para recorrer la nómina como en la base real)
   var LIVE = { payroll_adjustments: 1, payroll_payments: 1, kitchen_stations: 1 }, nextId = 100;
@@ -87,7 +109,19 @@
       caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },
       laptop: new Date().toISOString(), impresion_atrasada: 0, poco_afuera: ["Agua (botella)"], precios_por_aprobar: 2, pagos_por_comprobar: 0,
       top_hoy: [{ name: "Gyozas", qty: 9 }, { name: "Ramen Naruto", qty: 7 }, { name: "Limonada rosa", qty: 5 }] }; },
-    menu_sales: function () { return gy ? [{ dish_id: gy.id, variant: "", units: 40, revenue: 40 * gy.price }] : []; },
+    prep_save: function (a) {
+      G.calls.push({ rpc: "prep_save", args: a });
+      if (G.tables.ingredients.some(function (x) { return x.name.toLowerCase() === a.p_name.toLowerCase() && x.id !== a.p_id; })) throw new Error("Ya hay un insumo o una preparación que se llama «" + a.p_name + "»");
+      var id = a.p_id || 50 + G.tables.ingredients.length, ing = G.tables.ingredients.find(function (x) { return x.id === id; });
+      if (!ing) { ing = { id: id, waste_pct: 0, stock_qty: 0, min_qty: 0, is_prep: true }; G.tables.ingredients.push(ing); }
+      Object.assign(ing, { name: a.p_name, buy_qty: a.p_qty, buy_unit: a.p_unit });
+      G.tables.prep_items = G.tables.prep_items.filter(function (l) { return l.prep_id !== id; }).concat(a.p_lines.map(function (l, k) {
+        return { id: 100 + k + G.tables.prep_items.length, prep_id: id, ingredient_id: l.ingredient_id, qty: l.qty, unit: l.unit, position: k + 1 }; }));
+      ing.buy_price = Math.round(prepCost(id) * 100) / 100;
+      return id;
+    },
+    menu_sales: function (a) { G.calls.push({ rpc: "menu_sales", args: a });
+      return [[gy, 40], [imo, 10], [agua, 30]].filter(function (x) { return x[0]; }).map(function (x) { return { dish_id: x[0].id, variant: "", units: x[1], revenue: x[1] * x[0].price }; }); },
     import_data: function (a) {
       var rows = a.p_rows.map(function (r, i) {
         var bad = a.p_kind === "insumos" && !/^(kg|g|l|ml|unidad|kilos|litros)$/i.test(r.unidad || "");

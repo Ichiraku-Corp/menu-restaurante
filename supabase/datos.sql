@@ -86,7 +86,10 @@ begin
         select id into sid from public.suppliers where public.imp_norm(name) = public.imp_norm(r ->> 'proveedor');
         if sid is null then insert into public.suppliers (name) values (left(trim(r ->> 'proveedor'), 80)) returning id into sid; end if;
       end if;
-      select id, buy_unit into ing from public.ingredients where public.imp_norm(name) = public.imp_norm(r ->> 'nombre');
+      select id, buy_unit, is_prep into ing from public.ingredients where public.imp_norm(name) = public.imp_norm(r ->> 'nombre');
+      if ing.is_prep then
+        res := res || jsonb_build_object('n', i, 'st', 'error', 'msg', '«' || trim(r ->> 'nombre') || '» es una preparación: su costo sale de sus ingredientes (Insumos › Preparaciones)'); continue;
+      end if;
       if ing.id is null then
         insert into public.ingredients (name, buy_unit, buy_qty, buy_price, waste_pct, supplier, supplier_id, min_qty, zone)
         values (left(trim(r ->> 'nombre'), 80), u, q, pr, coalesce(public.imp_num(r ->> 'merma'), 0), coalesce(left(trim(r ->> 'proveedor'), 80), ''), sid,

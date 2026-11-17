@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-IUFmcdcko7KIyq7UpYQptRSGAl3R0HrKwc+fA5G70Pk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-AU8dMmW+oyIzFcJMS3c+nj9+M8je6SRvhNgdCZzElyw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -50,6 +50,7 @@
   .tbl td.n, .tbl th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
   .tbl tr.total td { font-weight:800; border-bottom:0; border-top:2px solid var(--text); }
   .tbl tr.click { cursor:pointer; }
+  .tbl tr.grp td { background:var(--chip); padding-top:7px; padding-bottom:7px; }
   .tbl tr.click:hover td { background:var(--chip); }
   .tbl tr.off td { opacity:.5; }
   .nomtasa { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; margin:12px 0 6px; padding:10px 14px; border-radius:12px; background:var(--chip); }
@@ -493,6 +494,11 @@
         <input id="ingSearch" type="search" placeholder="Buscar insumo…" style="margin:6px 0 4px">
         <div class="scroll" id="ingList"></div>
       </div>
+      <div class="card hidden" id="prepCard">
+        <div class="row between"><h2 style="margin:0">Preparaciones</h2><button class="primary" id="addPrep">+ Preparación</button></div>
+        <p class="muted">Lo que se hace en la cocina para usar en los platos (salsas, masas, naruto…). Su costo sale de sus ingredientes y se recalcula solo cuando cambia un precio. En las recetas se eligen como cualquier insumo.</p>
+        <div class="scroll" id="prepList"></div>
+      </div>
       <div class="card" id="supCard">
         <div class="row between"><h2 style="margin:0">Proveedores</h2><button class="primary" id="addSup">+ Proveedor</button></div>
         <p class="muted">El WhatsApp es el que usará n8n para pedirles precios.</p>
@@ -528,8 +534,9 @@
       </div>
       <div class="card">
         <div class="row between"><h2 style="margin:0">Rentabilidad del menú</h2>
-          <select id="meDays" style="width:auto" aria-label="Período"><option value="30">Últimos 30 días</option><option value="60">Últimos 60 días</option><option value="90">Últimos 90 días</option></select></div>
-        <p class="muted">Cruza lo vendido en caja con el costo de cada receta (precios sin IVA). Un plato es <b>popular</b> si vende al menos el 70 % del promedio, y <b>deja bien</b> si su ganancia por plato supera el promedio del menú.</p>
+          <select id="meDays" style="width:auto" aria-label="Período"><option value="30">Últimos 30 días</option><option value="60">Últimos 60 días</option><option value="90">Últimos 90 días</option><option value="hist">2 años (sistema anterior + caja)</option></select></div>
+        <p class="muted">Cruza lo vendido con el costo de cada receta (precios sin IVA). Cada plato se compara con los de su categoría (ramen con ramen, bebidas con bebidas): es <b>popular</b> si vende al menos el 70 % del promedio de su categoría, y <b>deja bien</b> si su ganancia por plato supera la media de su categoría. Con «2 años» se suma lo vendido en el sistema anterior.</p>
+        <p class="muted" id="mePeriod"></p>
         <div class="kpis" id="meKpis"></div>
         <div class="scroll" id="meList" style="margin-top:10px"></div>
       </div>
@@ -605,6 +612,23 @@
     <button type="button" class="primary" id="recSave">Guardar receta</button>
   </div>
 </dialog>
+<dialog id="prepDlg" style="width:min(680px, calc(100vw - 24px))">
+  <div class="row between"><h2 id="prepTitle" style="margin:0">Preparación</h2><button type="button" id="prepClose">Cerrar</button></div>
+  <div class="grid2" style="margin-top:10px">
+    <div><label for="prepName">Nombre</label><input id="prepName" maxlength="80" placeholder="Salsa agridulce" autocomplete="off"></div>
+    <div><label for="prepQty">Rinde</label><div class="row" style="flex-wrap:nowrap;margin:0"><input id="prepQty" type="number" step="0.001" min="0" inputmode="decimal" placeholder="1,5" style="flex:1"><select id="prepUnit" style="width:auto" aria-label="Unidad de lo que rinde"><option value="kg">kg</option><option value="g">g</option><option value="l">L</option><option value="ml">ml</option><option value="unidad">unidades</option></select></div></div>
+  </div>
+  <div id="prepLines"></div>
+  <div class="row" style="margin-top:10px"><button type="button" id="prepAdd">+ Ingrediente</button></div>
+  <div class="kpis" style="margin-top:14px" id="prepKpis"></div>
+  <p class="muted" id="prepUses"></p>
+  <p class="muted" id="prepErr" role="alert" style="color:var(--danger)"></p>
+  <div class="row between" style="margin-top:14px">
+    <button type="button" class="danger" id="prepDel">Eliminar</button>
+    <span class="muted" id="prepState"></span>
+    <button type="button" class="primary" id="prepSave">Guardar preparación</button>
+  </div>
+</dialog>
 <div id="toast" role="status"></div>
 
 <script>
@@ -674,6 +698,54 @@
   }
   function areaName(id) { var a = S.areas.find(function (x) { return x.id === id; }); return a ? a.name : "Sin área"; }
   function ingById(id) { return S.ingredients.find(function (x) { return x.id === id; }); }
+  // Insumos comprados y preparaciones (hechas en la cocina; su costo lo calcula la base de datos con sus ingredientes)
+  function bought() { return S.ingredients.filter(function (i) { return !i.is_prep; }); }
+  function preps() { return S.ingredients.filter(function (i) { return i.is_prep; }); }
+  function prepLines(id) { return (S.prepItems || []).filter(function (l) { return l.prep_id === id; }); }
+  // ¿La preparación «id» lleva (directa o indirectamente) a «target»?
+  function prepHas(id, target, seen) {
+    seen = seen || {}; if (seen[id]) return false; seen[id] = true;
+    return prepLines(id).some(function (l) { return l.ingredient_id === target || prepHas(l.ingredient_id, target, seen); });
+  }
+  function usesTxt(id) {
+    var r = {}, p = 0;
+    S.items.forEach(function (l) { if (l.ingredient_id === id) r[l.dish_id + "|" + l.variant] = 1; });
+    (S.prepItems || []).forEach(function (l) { if (l.ingredient_id === id) p++; });
+    var n = Object.keys(r).length;
+    return n + " receta" + (n === 1 ? "" : "s") + (p ? " · " + p + " preparaci" + (p === 1 ? "ón" : "ones") : "");
+  }
+  // Opciones de ingrediente para una línea: insumos y, aparte, preparaciones (skip: las que no se pueden elegir)
+  function ingOptions(sel, skip) {
+    function o(x) { return '<option value="' + x.id + '"' + (x.id === sel ? " selected" : "") + ">" + esc(x.name) + "</option>"; }
+    var b = bought(), p = preps().filter(function (x) { return !skip || !skip(x); });
+    return p.length ? '<optgroup label="Insumos">' + b.map(o).join("") + '</optgroup><optgroup label="Preparaciones">' + p.map(o).join("") + "</optgroup>" : b.map(o).join("");
+  }
+  // Líneas de ingredientes (recetas y preparaciones): ingrediente, cantidad, unidad y su costo
+  var LINE_HEAD = '<div class="line muted" style="font-size:12px"><span>Ingrediente</span><span>Cantidad</span><span>Unidad</span><span class="hide-sm" style="text-align:right">Costo</span><span></span></div>';
+  function lineHtml(l, i, skip) {
+    var ing = ingById(l.ingredient_id), c = lineCost(l, ing);
+    return '<div class="line' + (isNaN(c) ? " bad" : "") + '" data-i="' + i + '"><select class="li-ing" aria-label="Ingrediente">' + ingOptions(l.ingredient_id, skip) +
+      '</select><input class="li-qty" type="number" step="0.001" min="0" inputmode="decimal" value="' + (l.qty || "") + '" placeholder="0" aria-label="Cantidad"><select class="li-unit" aria-label="Unidad">' + unitOptions(ing, l.unit) +
+      '</select><span class="cost">' + (isNaN(c) ? "—" : money(c)) + '</span><button type="button" class="small danger li-del" aria-label="Quitar">×</button></div>';
+  }
+  function bindLines(box, state, redraw, retotal) {
+    $(box).addEventListener("input", function (e) {
+      var row = e.target.closest(".line[data-i]"); if (!row) return;
+      var st = state(), l = st.lines[Number(row.dataset.i)];
+      if (e.target.classList.contains("li-qty")) l.qty = num(e.target.value);
+      if (e.target.classList.contains("li-unit")) l.unit = e.target.value;
+      if (e.target.classList.contains("li-ing")) { l.ingredient_id = Number(e.target.value); var ing = ingById(l.ingredient_id); if (!sameFamily(l.unit, ing.buy_unit)) l.unit = defaultUnit(ing); }
+      st.dirty = true;
+      if (e.target.classList.contains("li-qty")) {  // no redibujar mientras se escribe
+        var c = lineCost(l, ingById(l.ingredient_id)); row.querySelector(".cost").textContent = isNaN(c) ? "—" : money(c);
+        row.classList.toggle("bad", isNaN(c)); retotal();
+      } else redraw();
+    });
+    $(box).addEventListener("click", function (e) {
+      if (!e.target.classList.contains("li-del")) return;
+      var st = state(); st.lines.splice(Number(e.target.closest(".line").dataset.i), 1); st.dirty = true; redraw();
+    });
+  }
   function variants(d) { return Array.isArray(d.variants) && d.variants.length ? d.variants : [{ label: "", price: Number(d.price) || 0 }]; }
 
   if (!C.SUPABASE_URL || !C.SUPABASE_ANON_KEY) { show("noconfig", true); return; }
@@ -726,9 +798,11 @@
       opt(sb.from("price_history").select("*").order("changed_at", { ascending: false }).limit(15)),
       opt(sb.from("attendance_events").select("id").limit(1)),
       opt(sb.from("inventory_movements").select("id").limit(1)),
-      opt(sb.from("promos").select("*").order("start_time"))
+      opt(sb.from("promos").select("*").order("start_time")),
+      opt(sb.from("prep_items").select("*").order("position"))
     ]).then(function (r) {
       S.areas = r[0]; S.employees = r[1]; S.expenses = r[2]; S.ingredients = r[3]; S.items = r[4]; S.dishes = r[5]; S.cats = r[6];
+      S.prepItems = r[14]; // null: falta ejecutar gestion.sql (sin preparaciones)
       S.pricing = r[7] !== null; S.suppliers = r[7] || []; S.settings = (r[8] || [])[0] || { auto_apply_pct: 5 };
       S.updates = r[9] || []; S.history = r[10] || [];
       S.attendance = r[11] !== null; S.inventory = r[12] !== null; S.promos = r[13];
@@ -1105,9 +1179,13 @@
   function recipeCost(dishId, variant) {
     var lines = S.items.filter(function (l) { return l.dish_id === dishId && (l.variant || "") === (variant || ""); });
     if (!lines.length) return null;
-    var total = 0, broken = false;
-    lines.forEach(function (l) { var c = lineCost(l, ingById(l.ingredient_id)); if (isNaN(c)) broken = true; else total += c; });
-    return { cost: total, lines: lines.length, broken: broken };
+    var total = 0, broken = false, missing = [];
+    lines.forEach(function (l) {
+      var ing = ingById(l.ingredient_id), c = lineCost(l, ing);
+      if (isNaN(c)) broken = true; else total += c;
+      if (ing && !(num(ing.buy_price) > 0)) missing.push(ing.name);  // insumo sin precio: el costo no está completo
+    });
+    return { cost: total, lines: lines.length, broken: broken, missing: missing.length ? missing : null };
   }
   function allRecipes() {
     var out = [];
@@ -1157,7 +1235,7 @@
       }).join("") +
       '<tr class="total"><td>Total</td><td class="n hide-sm">' + money(T.nom) + '</td><td class="n hide-sm">' + money(T.fix) + '</td><td class="n hide-sm">' + money(T.vari) + '</td><td class="n">' + money(total) + '</td><td class="hide-sm"></td></tr></tbody></table>';
 
-    var recs = allRecipes(), done = recs.filter(function (r) { return r.rc && !r.rc.broken; });
+    var recs = allRecipes(), done = recs.filter(function (r) { return r.rc && !r.rc.broken && !r.rc.missing; });
     var avgPct = done.length ? done.reduce(function (s, r) { return s + (isFinite(r.pct) ? r.pct : 0); }, 0) / done.length : NaN;
     var avgMargin = done.length ? done.reduce(function (s, r) { return s + r.margin; }, 0) / done.length : NaN;
     var worst = done.filter(function (r) { return isFinite(r.pct); }).sort(function (a, b) { return b.pct - a.pct; }).slice(0, 5);
@@ -1179,8 +1257,8 @@
         var bad = r.rc && r.rc.broken;
         return '<tr class="click" data-dish="' + r.dish.id + '" data-variant="' + esc(r.variant) + '"><td>' + esc(r.dish.name) + (r.variant ? ' <span class="muted">' + esc(r.variant) + "</span>" : "") +
           (r.rc ? ' <span class="muted">· ' + r.rc.lines + " ing.</span>" : "") + '</td><td class="n">' + money(r.price) + '</td><td class="n">' +
-          (r.rc ? (bad ? '<span class="pill bad">revisar unidades</span>' : money(r.rc.cost)) : "—") + '</td><td class="n hide-sm">' + (r.rc && !bad ? money(r.margin) : "—") +
-          '</td><td class="n">' + (bad ? "—" : pctPill(r.pct)) + "</td></tr>";
+          (r.rc ? (bad ? '<span class="pill bad">revisar unidades</span>' : money(r.rc.cost)) : "—") + '</td><td class="n hide-sm">' + (r.rc && !bad && !r.rc.missing ? money(r.margin) : "—") +
+          '</td><td class="n">' + (bad ? "—" : r.rc && r.rc.missing ? '<span class="pill warn" title="Sin precio: ' + esc(r.rc.missing.join(", ")) + '">falta precio</span>' : pctPill(r.pct)) + "</td></tr>";
       }).join("") + "</tbody></table>";
   }
 
@@ -1225,7 +1303,7 @@
   $("dlgDelete").addEventListener("click", function () {
     if (!confirm("¿Eliminar definitivamente?")) return;
     form.onDelete().then(function () { $("dlg").close(); toast("Eliminado"); return refresh(); }).catch(function (er) {
-      $("dlgErr").textContent = /foreign key|violates/i.test(er.message || "") ? "No se puede eliminar: se usa en alguna receta. Quítalo de las recetas primero." : (er.message || String(er));
+      $("dlgErr").textContent = /foreign key|violates/i.test(er.message || "") ? "No se puede eliminar: se usa en alguna receta o preparación. Quítalo de ahí primero." : (er.message || String(er));
     });
   });
   function saver(table, id) { return function (v) { return q(id ? sb.from(table).update(v).eq("id", id) : sb.from(table).insert(v)); }; }
@@ -1506,13 +1584,14 @@
 
   // ---------------------------------------------------------------- Insumos
   function renderInsumos() {
-    var s = $("ingSearch").value.trim().toLowerCase();
-    var list = S.ingredients.filter(function (i) { return !s || i.name.toLowerCase().indexOf(s) >= 0 || supName(i).toLowerCase().indexOf(s) >= 0; });
-    if (!list.length) { $("ingList").innerHTML = '<div class="empty">' + (S.ingredients.length ? "Nada con esa búsqueda." : "Aún no hay insumos. Pulsa «+ Insumo».") + "</div>"; return; }
+    renderPreps();
+    var s = $("ingSearch").value.trim().toLowerCase(), all = bought();
+    var list = all.filter(function (i) { return !s || i.name.toLowerCase().indexOf(s) >= 0 || supName(i).toLowerCase().indexOf(s) >= 0; });
+    if (!list.length) { $("ingList").innerHTML = '<div class="empty">' + (all.length ? "Nada con esa búsqueda." : "Aún no hay insumos. Pulsa «+ Insumo».") + "</div>"; return; }
     $("ingList").innerHTML = '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Compra</th><th class="n hide-sm">Merma</th><th class="n">Costo real</th></tr></thead><tbody>' +
       list.map(function (i) {
-        var fam = U[i.buy_unit][1], uses = S.items.filter(function (l) { return l.ingredient_id === i.id; }).length;
-        return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (supName(i) ? esc(supName(i)) + " · " : "") + uses + " receta" + (uses === 1 ? "" : "s") +
+        var fam = U[i.buy_unit][1];
+        return '<tr class="click" data-ing="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + (supName(i) ? esc(supName(i)) + " · " : "") + usesTxt(i.id) +
           '</div></td><td class="n">' + money(i.buy_price) + '<div class="muted">por ' + nf3.format(i.buy_qty) + " " + unitOf(i.buy_qty, i.buy_unit) + '</div></td><td class="n hide-sm">' + pct(num(i.waste_pct)) +
           '</td><td class="n"><b>' + money(costPerBig(i)) + '</b><div class="muted">por ' + BIG[fam] + "</div></td></tr>";
       }).join("") + "</tbody></table>";
@@ -1537,11 +1616,83 @@
         $("ingPreview").textContent = v.buy_qty > 0 ? "Costo real: " + money(costPerBig(v)) + " por " + BIG[U[v.buy_unit][1]] + "." : "Indica la cantidad comprada.";
       },
       validate: function (v) { if (!v.name) return "Escribe el nombre."; if (!(v.buy_qty > 0)) return "La cantidad debe ser mayor que 0."; if (v.waste_pct >= 90) return "La merma debe ser menor que 90 %.";
-        if (i && i.buy_unit !== v.buy_unit && !sameFamily(i.buy_unit, v.buy_unit) && S.items.some(function (l) { return l.ingredient_id === i.id; })) return "Este insumo se usa en recetas: no puedes cambiar de peso a volumen o unidades."; },
+        if (i && i.buy_unit !== v.buy_unit && !sameFamily(i.buy_unit, v.buy_unit) && (S.items.some(function (l) { return l.ingredient_id === i.id; }) ||
+            (S.prepItems || []).some(function (l) { return l.ingredient_id === i.id; }))) return "Este insumo se usa en recetas o preparaciones: no puedes cambiar de peso a volumen o unidades."; },
       onSave: saver("ingredients", i && i.id), onDelete: i && deleter("ingredients", i.id) });
   }
   $("addIng").addEventListener("click", function () { ingForm(null); });
   $("ingList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-ing]"); if (tr) ingForm(S.ingredients.find(function (x) { return x.id === Number(tr.dataset.ing); })); });
+
+  // ---------------------------------------------------------------- Preparaciones (subrecetas)
+  function renderPreps() {
+    show("prepCard", !!S.prepItems);
+    if (!S.prepItems) return;
+    var list = preps();
+    $("prepList").innerHTML = list.length ? '<table class="tbl"><thead><tr><th>Preparación</th><th class="n">Rinde</th><th class="n">Cuesta hacerla</th><th class="n">Costo real</th></tr></thead><tbody>' +
+      list.map(function (i) {
+        var n = prepLines(i.id).length, fam = U[i.buy_unit][1];
+        var used = usesTxt(i.id);
+        return '<tr class="click" data-prep="' + i.id + '"><td><b>' + esc(i.name) + '</b><div class="muted">' + n + " ingrediente" + (n === 1 ? "" : "s") + " · " + (used === "0 recetas" ? "sin usar todavía" : "en " + used) + "</div></td>" +
+          '<td class="n">' + qtyTxt(i.buy_qty, i.buy_unit) + '</td><td class="n">' + money(i.buy_price) + '</td><td class="n"><b>' + money(costPerBig(i)) + '</b><div class="muted">por ' + BIG[fam] + "</div></td></tr>";
+      }).join("") + "</tbody></table>"
+      : '<div class="empty">Aún no hay preparaciones. Pulsa «+ Preparación» (por ejemplo, una salsa que se hace por litros).</div>';
+  }
+  var P = null; // { id, lines: [{ingredient_id, qty, unit}], dirty }
+  function openPrep(i) {
+    P = { id: i ? i.id : null, dirty: false, lines: i ? prepLines(i.id).map(function (l) { return { ingredient_id: l.ingredient_id, qty: num(l.qty), unit: l.unit }; }) : [] };
+    $("prepTitle").textContent = i ? i.name : "Nueva preparación";
+    $("prepName").value = i ? i.name : ""; $("prepQty").value = i ? num(i.buy_qty) : ""; $("prepUnit").value = i ? i.buy_unit : "kg";
+    $("prepErr").textContent = ""; show("prepDel", !!i);
+    var b = bought(); if (!P.lines.length && b.length) P.lines.push({ ingredient_id: b[0].id, qty: 0, unit: defaultUnit(b[0]) });
+    drawPrep();
+    if (!$("prepDlg").open) $("prepDlg").showModal();
+  }
+  // No se puede elegir la misma preparación ni una que ya la lleve (sería un ciclo)
+  function prepSkip(x) { return P.id != null && (x.id === P.id || prepHas(x.id, P.id)); }
+  function drawPrep() {
+    $("prepLines").innerHTML = P.lines.length ? LINE_HEAD + P.lines.map(function (l, i) { return lineHtml(l, i, prepSkip); }).join("") : '<p class="muted">Sin ingredientes todavía.</p>';
+    drawPrepTotals();
+  }
+  function drawPrepTotals() {
+    var total = 0, ok = true;
+    P.lines.forEach(function (l) { if (!(l.qty > 0)) return; var c = lineCost(l, ingById(l.ingredient_id)); if (isNaN(c)) ok = false; else total += c; });
+    var qy = num($("prepQty").value), u = $("prepUnit").value, fam = U[u][1], per = qy > 0 ? total / (qy * U[u][0]) * (fam === "u" ? 1 : 1000) : NaN;
+    $("prepKpis").innerHTML =
+      '<div class="kpi"><span>Cuesta hacerla</span><b>' + (ok ? money(total) : '<span class="pill bad">revisar</span>') + "</b></div>" +
+      '<div class="kpi"><span>Rinde</span><b>' + (qy > 0 ? esc(qtyTxt(qy, u)) : "—") + "</b></div>" +
+      '<div class="kpi"><span>Costo real</span><b>' + (ok && isFinite(per) ? money(per) : "—") + "</b><span>por " + BIG[fam] + "</span></div>";
+    var used = P.id ? usesTxt(P.id) : "";
+    $("prepUses").textContent = !P.id ? "" : /^0 recetas$/.test(used) ? "Todavía no se usa en ninguna receta." : "Se usa en " + used + ": al guardar, sus costos se recalculan solos.";
+    $("prepState").textContent = P.dirty ? "Cambios sin guardar" : "";
+  }
+  bindLines("prepLines", function () { return P; }, drawPrep, drawPrepTotals);
+  ["prepName", "prepQty", "prepUnit"].forEach(function (id) { $(id).addEventListener("input", function () { P.dirty = true; drawPrepTotals(); }); });
+  $("addPrep").addEventListener("click", function () { if (!bought().length) return toast("Primero añade insumos"); openPrep(null); });
+  $("prepList").addEventListener("click", function (ev) { var tr = ev.target.closest("[data-prep]"); if (tr) openPrep(ingById(Number(tr.dataset.prep))); });
+  $("prepAdd").addEventListener("click", function () {
+    var ing = bought()[0]; if (!ing) return;
+    P.lines.push({ ingredient_id: ing.id, qty: 0, unit: defaultUnit(ing) }); P.dirty = true; drawPrep();
+    var qs = $("prepLines").querySelectorAll(".li-ing"); if (qs.length) qs[qs.length - 1].focus();
+  });
+  $("prepClose").addEventListener("click", function () { if (P && P.dirty && !confirm("Hay cambios sin guardar. ¿Cerrar sin guardar?")) return; $("prepDlg").close(); });
+  $("prepDlg").addEventListener("cancel", function (e) { if (P && P.dirty && !confirm("Hay cambios sin guardar. ¿Cerrar sin guardar?")) e.preventDefault(); });
+  $("prepSave").addEventListener("click", function () {
+    var name = $("prepName").value.trim(), qy = num($("prepQty").value), u = $("prepUnit").value, lines = P.lines.filter(function (l) { return l.qty > 0; });
+    $("prepErr").textContent = "";
+    if (name.length < 2) { $("prepErr").textContent = "Escribe el nombre."; return; }
+    if (!(qy > 0)) { $("prepErr").textContent = "Escribe cuánto rinde (por ejemplo 1,5 L)."; return; }
+    if (lines.some(function (l) { return isNaN(lineCost(l, ingById(l.ingredient_id))); })) { $("prepErr").textContent = "Revisa las unidades marcadas en rojo."; return; }
+    var btn = this; btn.disabled = true;
+    q(sb.rpc("prep_save", { p_id: P.id, p_name: name, p_qty: qy, p_unit: u, p_lines: lines.map(function (l) { return { ingredient_id: l.ingredient_id, qty: l.qty, unit: l.unit }; }) }))
+      .then(function (id) { P.dirty = false; toast("Preparación guardada"); return refresh().then(function () { if ($("prepDlg").open) openPrep(ingById(Number(id))); }); })
+      .catch(function (er) { $("prepErr").textContent = er.message || String(er); })
+      .then(function () { btn.disabled = false; });
+  });
+  $("prepDel").addEventListener("click", function () {
+    if (!P || !P.id || !confirm("¿Eliminar esta preparación?")) return;
+    q(sb.from("ingredients").delete().eq("id", P.id)).then(function () { P.dirty = false; $("prepDlg").close(); toast("Preparación eliminada"); return refresh(); })
+      .catch(function (er) { $("prepErr").textContent = /foreign key|violates/i.test(er.message || "") ? "No se puede eliminar: se usa en alguna receta o preparación. Quítala de ahí primero." : (er.message || String(er)); });
+  });
 
   // ---------------------------------------------------------------- Precios y proveedores
   function bigCost(perBase, unit) { return perBase * (U[unit][1] === "u" ? 1 : 1000); }
@@ -2045,8 +2196,9 @@
     show("invSetup", !S.inventory);
     if (!S.inventory) { ["invKpis", "invBuy", "invStock", "invLoss", "invMovs"].forEach(function (id) { $(id).innerHTML = ""; }); return; }
     var ym = $("invMonth").value || ymNow(), L = lossStats(ym);
-    var value = S.ingredients.reduce(function (t, i) { return t + Math.max(0, num(i.stock_qty)) * unitPrice1(i); }, 0);
-    var low = S.ingredients.filter(function (i) { return num(i.min_qty) > 0 && num(i.stock_qty) < num(i.min_qty); });
+    var stockIngs = bought(); // las preparaciones no llevan inventario: se descuentan sus ingredientes
+    var value = stockIngs.reduce(function (t, i) { return t + Math.max(0, num(i.stock_qty)) * unitPrice1(i); }, 0);
+    var low = stockIngs.filter(function (i) { return num(i.min_qty) > 0 && num(i.stock_qty) < num(i.min_qty); });
     $("invKpis").innerHTML =
       '<div class="kpi main"><span>Valor del inventario</span><b>' + money(value) + "</b></div>" +
       '<div class="kpi"><span>Bajo el mínimo</span><b>' + low.length + "</b><span>" + (low.length ? "ver lista de compras" : "todo en orden") + "</span></div>" +
@@ -2061,14 +2213,14 @@
       }).join("") + '<tr class="total"><td>Total estimado</td><td></td><td class="hide-sm"></td><td></td><td class="n">' + money(buyTotal) + "</td></tr></tbody></table>"
       : '<div class="empty">Nada por comprar. Define el stock mínimo de cada insumo en la pestaña Insumos.</div>';
     var q = $("invSearch").value.trim().toLowerCase();
-    var list = S.ingredients.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
+    var list = stockIngs.filter(function (i) { return !q || i.name.toLowerCase().indexOf(q) >= 0; });
     $("invStock").innerHTML = list.length ? '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Stock</th><th class="n hide-sm">Mínimo</th><th class="n hide-sm">Valor</th><th class="n">Estado</th></tr></thead><tbody>' +
       list.map(function (i) {
         var st = num(i.stock_qty), mn = num(i.min_qty);
         var pill = st < 0 ? '<span class="pill bad">negativo</span>' : mn > 0 && st < mn ? '<span class="pill warn">comprar</span>' : mn > 0 ? '<span class="pill ok">ok</span>' : '<span class="pill">sin mínimo</span>';
         return '<tr class="click" data-inv="' + i.id + '"><td><b>' + esc(i.name) + '</b></td><td class="n">' + qtyTxt(st, i.buy_unit) + '</td><td class="n hide-sm">' + (mn ? qtyTxt(mn, i.buy_unit) : "—") +
           '</td><td class="n hide-sm">' + money(Math.max(0, st) * unitPrice1(i)) + '</td><td class="n">' + pill + "</td></tr>";
-      }).join("") + "</tbody></table>" : '<div class="empty">' + (S.ingredients.length ? "Nada con esa búsqueda." : "Primero añade insumos en la pestaña Insumos.") + "</div>";
+      }).join("") + "</tbody></table>" : '<div class="empty">' + (stockIngs.length ? "Nada con esa búsqueda." : "Primero añade insumos en la pestaña Insumos.") + "</div>";
     var ings = Object.keys(L.byIng).sort(function (a, b) { return (L.byIng[b].merma + L.byIng[b].faltante) - (L.byIng[a].merma + L.byIng[a].faltante); });
     var emps = Object.keys(L.byEmp).sort(function (a, b) { return L.byEmp[b] - L.byEmp[a]; });
     $("invLoss").innerHTML = ings.length ? '<table class="tbl"><thead><tr><th>Insumo</th><th class="n">Mermas</th><th class="n">Faltantes</th><th class="n">Total</th></tr></thead><tbody>' +
@@ -2086,11 +2238,11 @@
   }
   $("invSearch").addEventListener("input", renderInventario);
   function movForm(ing) {
-    if (!S.ingredients.length) return toast("Primero añade insumos en la pestaña Insumos");
-    var i0 = ing || S.ingredients[0];
+    if (!bought().length) return toast("Primero añade insumos en la pestaña Insumos");
+    var i0 = ing || bought()[0];
     openForm({ title: "Movimiento de inventario", values: { ingredient_id: String(i0.id), kind: "compra", unit: i0.buy_unit, qty: "" },
       fields: [
-        { k: "ingredient_id", label: "Insumo", type: "select", full: true, options: S.ingredients.map(function (i) { return [String(i.id), i.name + " (hay " + qtyTxt(i.stock_qty, i.buy_unit) + ")"]; }) },
+        { k: "ingredient_id", label: "Insumo", type: "select", full: true, options: bought().map(function (i) { return [String(i.id), i.name + " (hay " + qtyTxt(i.stock_qty, i.buy_unit) + ")"]; }) },
         { k: "kind", label: "Tipo", type: "select", options: [["compra", "Compra (suma)"], ["merma", "Merma o pérdida (resta)"], ["conteo", "Conteo físico (fija la cantidad)"], ["ajuste", "Ajuste (+ o −)"]] },
         { k: "unit", label: "Unidad", type: "select", options: Object.keys(U).map(function (u) { return [u, UNIT_LABEL[u]]; }) },
         { k: "qty", label: "Cantidad", type: "number", step: "0.001", req: true },
@@ -2134,48 +2286,80 @@
     renderMenuEng();
   }
   // Rentabilidad del menú: popularidad × ganancia por plato
-  var ME = { days: 30, sales: null, loading: false };
+  var ME = { key: null, sales: null, loading: false };
   function renderMenuEng() {
-    var days = Number($("meDays").value) || 30;
-    if (ME.sales === null || ME.days !== days) {
-      if (ME.loading) return; ME.loading = true; ME.days = days;
-      var to = new Date(), from = new Date(Date.now() - (days - 1) * 86400000), f = function (d) { return d.toLocaleDateString("en-CA", { timeZone: TZ }); };
-      $("meList").innerHTML = '<p class="muted">Cargando ventas…</p>';
-      opt(sb.rpc("menu_sales", { p_from: f(from), p_to: f(to) })).then(function (r) { ME.loading = false; ME.sales = r || []; ME.missing = r === null; renderMenuEng(); });
+    var sel = $("meDays").value || "30", hist = sel === "hist", days = Number(sel) || 30, key = hist ? "hist" : String(days);
+    if (ME.sales === null || ME.key !== key) {
+      if (ME.loading) return; ME.loading = true; ME.key = key;
+      var f = function (d) { return d.toLocaleDateString("en-CA", { timeZone: TZ }); }, to = new Date(), from = new Date(Date.now() - (days - 1) * 86400000);
+      // «2 años»: lo vendido en el sistema anterior (por plato de la carta) y, después de su último día, lo de la caja
+      var H = { units: 0, from: null, to: null, by: {} };
+      if (hist) {
+        (S.histProducts || []).forEach(function (h) {
+          if (h.dish_id == null) return;
+          var k = h.dish_id + "|" + (h.variant || ""); H.by[k] = (H.by[k] || 0) + num(h.qty); H.units += num(h.qty);
+          if (!H.from || h.period_from < H.from) H.from = h.period_from; if (!H.to || h.period_to > H.to) H.to = h.period_to;
+        });
+        from = H.to ? new Date(Date.parse(H.to + "T12:00:00Z") + 86400000) : new Date(Date.now() - 729 * 86400000);
+      }
+      $("meList").innerHTML = '<p class="muted">Cargando ventas…</p>'; $("mePeriod").textContent = "";
+      opt(sb.rpc("menu_sales", { p_from: f(from), p_to: f(to) })).then(function (r) {
+        ME.loading = false; ME.missing = r === null; ME.sales = r || [];
+        var pos = ME.sales.reduce(function (a, s) { return a + num(s.units); }, 0);
+        if (hist) {
+          var by = {}; ME.sales.forEach(function (s) { by[s.dish_id + "|" + (s.variant || "")] = num(s.units); });
+          Object.keys(H.by).forEach(function (k) { by[k] = (by[k] || 0) + H.by[k]; });
+          ME.sales = Object.keys(by).map(function (k) { var p = k.split("|"); return { dish_id: Number(p[0]), variant: p.slice(1).join("|"), units: by[k] }; });
+        }
+        ME.period = hist && H.from ? "Del " + dmy(H.from) + " al " + dmy(f(to)) + ": " + nf3.format(Math.round(H.units)) + " platos del sistema anterior (hasta el " + dmy(H.to) + ") y " + nf3.format(pos) + " de la caja."
+          : "Del " + dmy(f(from)) + " al " + dmy(f(to)) + ": " + nf3.format(pos) + " platos cobrados en caja." + (hist ? " (No hay ventas del sistema anterior cargadas.)" : "");
+        renderMenuEng();
+      });
       return;
     }
+    $("mePeriod").textContent = ME.period || "";
     if (ME.missing) { $("meList").innerHTML = '<p class="muted">Para ver esto hay que ejecutar <code>supabase/datos.sql</code>.</p>'; $("meKpis").innerHTML = ""; return; }
     var by = {}; ME.sales.forEach(function (s) { by[s.dish_id + "|" + (s.variant || "")] = s; });
-    var rows = [], noRecUnits = 0, totUnits = 0, totCost = 0;
+    var rows = [], noRecUnits = 0, totUnits = 0, totCost = 0, fmtU = function (n) { return nf3.format(Math.round(n)); };
     allRecipes().forEach(function (r) {
       var s = by[r.dish.id + "|" + r.variant]; if (!s) return;
       var u = num(s.units);
       totUnits += u;
-      if (!r.rc || r.rc.broken) { noRecUnits += u; return; }
+      if (!r.rc || r.rc.broken || r.rc.missing) { noRecUnits += u; return; }
       totCost += u * r.rc.cost;
       rows.push({ r: r, u: u, m: r.margin, contrib: u * r.margin, pct: r.pct });
     });
     var withRec = rows.reduce(function (a, x) { return a + x.u; }, 0);
     var netRec = rows.reduce(function (a, x) { return a + x.u * x.r.price / ivaF(); }, 0);
-    var popMin = rows.length ? 0.7 * withRec / rows.length : 0, mAvg = withRec ? rows.reduce(function (a, x) { return a + x.contrib; }, 0) / withRec : 0;
     var CL = { star: ["Estrella", "ok", "Cuidar porción y calidad; destacarlo"], horse: ["Popular, deja poco", "warn", "Subir un poco el precio o bajar su costo"],
-               puzzle: ["Deja bien, vende poco", "warn", "Recomendarlo, foto o promoción"], dog: ["Vende poco y deja poco", "bad", "Cambiar la receta o sacarlo de la carta"] };
-    rows.forEach(function (x) { var p = x.u >= popMin, g = x.m >= mAvg; x.cl = p && g ? "star" : p ? "horse" : g ? "puzzle" : "dog"; });
-    rows.sort(function (a, b) { return b.contrib - a.contrib; });
+               puzzle: ["Deja bien, vende poco", "warn", "Recomendarlo, foto o promoción"], dog: ["Vende poco y deja poco", "bad", "Cambiar la receta o sacarlo de la carta"],
+               solo: ["Sin comparar", "", "Es el único de su categoría con receta y ventas"] };
+    // Cada plato se compara con los de su misma categoría (ramen con ramen, bebidas con bebidas)
+    var groups = S.cats.map(function (c) {
+      var g = rows.filter(function (x) { return x.r.cat.id === c.id; }), units = g.reduce(function (a, x) { return a + x.u; }, 0);
+      var popMin = g.length ? 0.7 * units / g.length : 0, mAvg = units ? g.reduce(function (a, x) { return a + x.contrib; }, 0) / units : 0;
+      g.forEach(function (x) { var p = x.u >= popMin, gg = x.m >= mAvg; x.cl = g.length < 2 ? "solo" : p && gg ? "star" : p ? "horse" : gg ? "puzzle" : "dog"; });
+      g.sort(function (a, b) { return b.contrib - a.contrib; });
+      return { cat: c, rows: g, units: units, mAvg: mAvg, contrib: g.reduce(function (a, x) { return a + x.contrib; }, 0) };
+    }).filter(function (g) { return g.rows.length; });
     var cnt = function (k) { return rows.filter(function (x) { return x.cl === k; }).length; };
     $("meKpis").innerHTML =
       '<div class="kpi main"><span>Ganancia de los platos</span><b>' + money(rows.reduce(function (a, x) { return a + x.contrib; }, 0)) + "</b><span>venta sin IVA menos insumos</span></div>" +
       '<div class="kpi"><span>Costo de insumos</span><b>' + (netRec ? pct(totCost / netRec * 100) : "—") + "</b><span>sobre lo vendido con receta</span></div>" +
-      '<div class="kpi"><span>Vendido sin receta</span><b>' + (totUnits ? pct(noRecUnits / totUnits * 100) : "—") + "</b><span>" + noRecUnits + " de " + totUnits + " platos</span></div>" +
+      '<div class="kpi"><span>Vendido sin receta o sin precio</span><b>' + (totUnits ? pct(noRecUnits / totUnits * 100) : "—") + "</b><span>" + fmtU(noRecUnits) + " de " + fmtU(totUnits) + " platos</span></div>" +
       '<div class="kpi"><span>Estrellas · a revisar</span><b>' + cnt("star") + " · " + (cnt("horse") + cnt("dog")) + "</b></div>";
     $("meList").innerHTML = rows.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ganancia c/u</th><th class="n hide-sm">% costo</th><th class="n">Ganancia total</th><th>Qué hacer</th></tr></thead><tbody>' +
-      rows.map(function (x) {
-        var c = CL[x.cl];
-        return '<tr class="click" data-dish="' + x.r.dish.id + '" data-variant="' + esc(x.r.variant) + '"><td><b>' + esc(x.r.dish.name) + "</b>" + (x.r.variant ? ' <span class="muted">' + esc(x.r.variant) + "</span>" : "") +
-          '</td><td class="n">' + nf3.format(x.u) + '</td><td class="n">' + money(x.m) + '</td><td class="n hide-sm">' + pctPill(x.pct) + '</td><td class="n"><b>' + money(x.contrib) + "</b></td>" +
-          '<td><span class="pill ' + c[1] + '">' + c[0] + '</span><div class="muted">' + c[2] + "</div></td></tr>";
+      groups.map(function (g) {
+        return '<tr class="grp"><td colspan="6"><b>' + esc(g.cat.name) + '</b> <span class="muted">· ' + fmtU(g.units) + " vendidos · ganancia media " + money(g.mAvg) + " por plato</span></td></tr>" +
+          g.rows.map(function (x) {
+            var c = CL[x.cl];
+            if (x.cl === "horse" && x.pct <= 30) c = [c[0], c[1], "Su costo ya está bien: subir un poco el precio"];
+            return '<tr class="click" data-dish="' + x.r.dish.id + '" data-variant="' + esc(x.r.variant) + '"><td><b>' + esc(x.r.dish.name) + "</b>" + (x.r.variant ? ' <span class="muted">' + esc(x.r.variant) + "</span>" : "") +
+              '</td><td class="n">' + fmtU(x.u) + '</td><td class="n">' + money(x.m) + '</td><td class="n hide-sm">' + pctPill(x.pct) + '</td><td class="n"><b>' + money(x.contrib) + "</b></td>" +
+              '<td><span class="pill ' + c[1] + '">' + c[0] + '</span><div class="muted">' + c[2] + "</div></td></tr>";
+          }).join("");
       }).join("") + "</tbody></table>"
-      : '<div class="empty">' + (totUnits ? "Los platos vendidos aún no tienen receta: cárgalas para ver cuánto deja cada uno." : "Sin ventas en caja en este período.") + "</div>";
+      : '<div class="empty">' + (totUnits ? "Los platos vendidos aún no tienen receta (o les falta el precio de algún insumo): cárgalas para ver cuánto deja cada uno." : "Sin ventas en este período.") + "</div>";
   }
   $("meDays").addEventListener("change", renderMenuEng);
   document.addEventListener("click", function (ev) {
@@ -2195,7 +2379,8 @@
     }).join("") : "";
     var other = vs.filter(function (v) { return v.label !== variant && recipeCost(d.id, v.label); })[0];
     show("recCopy", !!other); if (other) { $("recCopy").textContent = "Copiar de " + other.label; $("recCopy").dataset.v = other.label; }
-    if (!R.lines.length && S.ingredients.length) R.lines.push({ ingredient_id: S.ingredients[0].id, qty: 0, unit: defaultUnit(S.ingredients[0]) });
+    var first = bought()[0] || S.ingredients[0];
+    if (!R.lines.length && first) R.lines.push({ ingredient_id: first.id, qty: 0, unit: defaultUnit(first) });
     drawRecipe();
     if (!$("recDlg").open) $("recDlg").showModal();
   }
@@ -2207,14 +2392,7 @@
   function drawRecipe() {
     $("recNoIng").hidden = !!S.ingredients.length;
     $("recAdd").disabled = !S.ingredients.length;
-    $("recLines").innerHTML = R.lines.length ? '<div class="line muted" style="font-size:12px"><span>Ingrediente</span><span>Cantidad</span><span>Unidad</span><span class="hide-sm" style="text-align:right">Costo</span><span></span></div>' +
-      R.lines.map(function (l, i) {
-        var ing = ingById(l.ingredient_id), c = lineCost(l, ing);
-        return '<div class="line' + (isNaN(c) ? " bad" : "") + '" data-i="' + i + '"><select class="li-ing">' + S.ingredients.map(function (x) {
-          return '<option value="' + x.id + '"' + (x.id === l.ingredient_id ? " selected" : "") + ">" + esc(x.name) + "</option>"; }).join("") +
-          '</select><input class="li-qty" type="number" step="0.001" min="0" inputmode="decimal" value="' + (l.qty || "") + '" placeholder="0"><select class="li-unit">' + unitOptions(ing, l.unit) +
-          '</select><span class="cost">' + (isNaN(c) ? "—" : money(c)) + '</span><button type="button" class="small danger li-del" aria-label="Quitar">×</button></div>';
-      }).join("") : '<p class="muted">Sin ingredientes todavía.</p>';
+    $("recLines").innerHTML = R.lines.length ? LINE_HEAD + R.lines.map(function (l, i) { return lineHtml(l, i); }).join("") : '<p class="muted">Sin ingredientes todavía.</p>';
     drawTotals();
   }
   function drawTotals() {
@@ -2229,24 +2407,9 @@
       '<div class="kpi"><span>% costo</span><b>' + (ok ? pctPill(p) : '<span class="pill bad">revisar</span>') + "</b></div>";
     $("recState").textContent = R.dirty ? "Cambios sin guardar" : "";
   }
-  $("recLines").addEventListener("input", function (e) {
-    var row = e.target.closest(".line[data-i]"); if (!row) return;
-    var l = R.lines[Number(row.dataset.i)];
-    if (e.target.classList.contains("li-qty")) l.qty = num(e.target.value);
-    if (e.target.classList.contains("li-unit")) l.unit = e.target.value;
-    if (e.target.classList.contains("li-ing")) { l.ingredient_id = Number(e.target.value); var ing = ingById(l.ingredient_id); if (!sameFamily(l.unit, ing.buy_unit)) l.unit = defaultUnit(ing); }
-    R.dirty = true;
-    if (e.target.classList.contains("li-qty")) {  // no redibujar mientras se escribe
-      var c = lineCost(l, ingById(l.ingredient_id)); row.querySelector(".cost").textContent = isNaN(c) ? "—" : money(c);
-      row.classList.toggle("bad", isNaN(c)); drawTotals();
-    } else drawRecipe();
-  });
-  $("recLines").addEventListener("click", function (e) {
-    if (!e.target.classList.contains("li-del")) return;
-    R.lines.splice(Number(e.target.closest(".line").dataset.i), 1); R.dirty = true; drawRecipe();
-  });
+  bindLines("recLines", function () { return R; }, drawRecipe, drawTotals);
   $("recAdd").addEventListener("click", function () {
-    var ing = S.ingredients[0]; R.lines.push({ ingredient_id: ing.id, qty: 0, unit: defaultUnit(ing) }); R.dirty = true; drawRecipe();
+    var ing = bought()[0] || S.ingredients[0]; R.lines.push({ ingredient_id: ing.id, qty: 0, unit: defaultUnit(ing) }); R.dirty = true; drawRecipe();
     var qs = $("recLines").querySelectorAll(".li-ing"); if (qs.length) qs[qs.length - 1].focus();
   });
   $("recCopy").addEventListener("click", function () {

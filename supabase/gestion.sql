@@ -88,6 +88,8 @@ create table if not exists public.ingredients (
 drop trigger if exists ingredients_touch on public.ingredients;
 create trigger ingredients_touch before update on public.ingredients
   for each row execute function public.touch_updated_at();
+-- Preparación hecha en la cocina (salsa, caldo, naruto…): su costo sale de sus ingredientes (ver «Preparaciones» más abajo)
+alter table public.ingredients add column if not exists is_prep boolean not null default false;
 
 -- ---------------------------------------------------------------- Recetas
 -- Una línea por ingrediente. variant = tamaño del plato ('' si no tiene, o 'Peq' / 'Gr').
@@ -184,7 +186,8 @@ create or replace function public.unit_family(u text) returns text language sql 
 create or replace function public.log_price_change() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if (new.buy_price, new.buy_qty, new.buy_unit) is distinct from (old.buy_price, old.buy_qty, old.buy_unit) then
+  -- El costo de una preparación cambia solo (cuando cambian sus ingredientes): no se anota aquí
+  if (new.buy_price, new.buy_qty, new.buy_unit) is distinct from (old.buy_price, old.buy_qty, old.buy_unit) and not new.is_prep then
     insert into public.price_history (ingredient_id, old_price, old_qty, old_unit, new_price, new_qty, new_unit, source)
     values (new.id, old.buy_price, old.buy_qty, old.buy_unit, new.buy_price, new.buy_qty, new.buy_unit,
             coalesce(nullif(current_setting('app.price_source', true), ''), 'manual'));
@@ -218,6 +221,7 @@ begin
   if p_ingredient ~ '^\d+$' then select * into ing from public.ingredients where id = p_ingredient::bigint;
   else select * into ing from public.ingredients where lower(name) = lower(trim(p_ingredient)); end if;
   if ing.id is null then raise exception 'Insumo no encontrado: %', p_ingredient; end if;
+  if ing.is_prep then raise exception '«%» es una preparación: su costo sale de sus ingredientes', ing.name; end if;
 
   if p_supplier is not null and p_supplier <> '' then
     if p_supplier ~ '^\d+$' then select id into sup_id from public.suppliers where id = p_supplier::bigint;
@@ -446,6 +450,7 @@ begin
   if p_ingredient ~ '^\d+$' then select * into ing from public.ingredients where id = p_ingredient::bigint for update;
   else select * into ing from public.ingredients where lower(name) = lower(trim(p_ingredient)) for update; end if;
   if ing.id is null then raise exception 'Insumo no encontrado: %', p_ingredient; end if;
+  if ing.is_prep then raise exception '«%» es una preparación: el inventario se lleva en sus ingredientes', ing.name; end if;
 
   u := coalesce(nullif(p_unit, ''), ing.buy_unit);
   if u not in ('kg', 'g', 'l', 'ml', 'unidad') then raise exception 'Unidad no válida: %', u; end if;
@@ -481,6 +486,135 @@ revoke all on public.inventory_movements from anon;
 revoke execute on function public.register_movement(text, text, numeric, text, text, text, text) from anon, public;
 grant execute on function public.register_movement(text, text, numeric, text, text, text, text) to authenticated, service_role;
 
+-- ================================================================ Preparaciones (subrecetas)
+-- Una preparación es un insumo que se hace en la cocina (salsa agridulce, chop suey, naruto…). Las recetas la usan
+-- como cualquier insumo; su costo sale de sus ingredientes y se recalcula solo cuando cambia el precio de uno de ellos.
+--  · ingredients.is_prep: buy_qty + buy_unit = lo que rinde (p. ej. 1,5 L) y buy_price = lo que cuesta hacerla.
+--  · prep_items: sus ingredientes (pueden ser otras preparaciones, sin ciclos).
+--  · No lleva inventario propio: al vender, se descuentan sus ingredientes (apply_sales_consumption).
+create table if not exists public.prep_items (
+  id            bigint generated always as identity primary key,
+  prep_id       bigint not null references public.ingredients(id) on delete cascade,
+  ingredient_id bigint not null references public.ingredients(id) on delete restrict,
+  qty           numeric(12,3) not null check (qty > 0),
+  unit          text not null check (unit in ('kg', 'g', 'l', 'ml', 'unidad')),
+  position      int not null default 0,
+  check (prep_id <> ingredient_id)
+);
+create index if not exists prep_items_prep_idx on public.prep_items (prep_id, position);
+create index if not exists prep_items_ingredient_idx on public.prep_items (ingredient_id);
+alter table public.prep_items enable row level security;
+drop policy if exists "manage prep_items" on public.prep_items;
+create policy "manage prep_items" on public.prep_items for all to authenticated
+  using (public.can_manage()) with check (public.can_manage());
+revoke all on public.prep_items from anon;
+
+-- Lo que cuesta hacer una preparación completa (lo que rinde), con la merma de cada ingrediente
+create or replace function public.prep_cost(p_prep bigint) returns numeric
+language sql stable set search_path = public as $$
+  select coalesce(sum(pi.qty * public.unit_factor(pi.unit) / (i.buy_qty * public.unit_factor(i.buy_unit)) * i.buy_price
+                      / (1 - least(i.waste_pct, 89.99) / 100)), 0)
+  from public.prep_items pi join public.ingredients i on i.id = pi.ingredient_id
+  where pi.prep_id = p_prep and public.unit_family(pi.unit) = public.unit_family(i.buy_unit)
+$$;
+
+-- Una preparación siempre tiene el costo de sus ingredientes, sin merma propia (ya va en lo que rinde) y sin inventario
+create or replace function public.prep_fill() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.is_prep then
+    new.buy_price := round(public.prep_cost(new.id), 2);
+    new.waste_pct := 0; new.zone := 'cocina'; new.inv_active := false; new.min_qty := 0;
+  elsif tg_op = 'UPDATE' and old.is_prep and exists (select 1 from public.prep_items where prep_id = new.id) then
+    raise exception '«%» es una preparación con ingredientes: no puede volverse un insumo comprado', new.name;
+  end if;
+  return new;
+end $$;
+drop trigger if exists ingredients_prep_fill on public.ingredients;
+create trigger ingredients_prep_fill before insert or update on public.ingredients
+  for each row execute function public.prep_fill();
+
+-- Si cambia el precio (o lo que rinde) de algo, se recalculan las preparaciones que lo llevan… y las que llevan a esas
+create or replace function public.prep_cascade() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (new.buy_price, new.buy_qty, new.buy_unit, new.waste_pct) is distinct from (old.buy_price, old.buy_qty, old.buy_unit, old.waste_pct) then
+    update public.ingredients set buy_price = buy_price
+    where is_prep and id in (select prep_id from public.prep_items where ingredient_id = new.id);
+  end if;
+  return null;
+end $$;
+drop trigger if exists ingredients_prep_cascade on public.ingredients;
+create trigger ingredients_prep_cascade after update of buy_price, buy_qty, buy_unit, waste_pct on public.ingredients
+  for each row execute function public.prep_cascade();
+
+-- Cada ingrediente de una preparación: misma familia de unidad que su compra y sin ciclos (A lleva B y B lleva A)
+create or replace function public.prep_items_check() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare p public.ingredients; i public.ingredients;
+begin
+  select * into p from public.ingredients where id = new.prep_id;
+  select * into i from public.ingredients where id = new.ingredient_id;
+  if not coalesce(p.is_prep, false) then raise exception 'Solo una preparación lleva ingredientes'; end if;
+  if public.unit_family(new.unit) <> public.unit_family(i.buy_unit) then
+    raise exception '% se compra en %: no se puede medir en %', i.name, i.buy_unit, new.unit;
+  end if;
+  if exists (with recursive t(id) as (select new.ingredient_id union select pi.ingredient_id from public.prep_items pi join t on pi.prep_id = t.id)
+             select 1 from t where t.id = new.prep_id) then
+    raise exception '«%» no puede llevar «%», porque «%» ya lleva «%»', p.name, i.name, i.name, p.name;
+  end if;
+  return new;
+end $$;
+drop trigger if exists prep_items_check on public.prep_items;
+create trigger prep_items_check before insert or update on public.prep_items
+  for each row execute function public.prep_items_check();
+
+create or replace function public.prep_items_recalc() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.ingredients set buy_price = buy_price where is_prep and id in (new.prep_id, old.prep_id);
+  return null;
+end $$;
+drop trigger if exists prep_items_recalc on public.prep_items;
+create trigger prep_items_recalc after insert or update or delete on public.prep_items
+  for each row execute function public.prep_items_recalc();
+
+-- Guardar una preparación completa (Gestión › Insumos › Preparaciones): todo o nada.
+-- p_lines: [{"ingredient_id": 3, "qty": 400, "unit": "g"}, …]. Devuelve su id.
+create or replace function public.prep_save(p_id bigint, p_name text, p_qty numeric, p_unit text, p_lines jsonb)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare pid bigint := p_id; ln jsonb; n int := 0; nm text := left(trim(coalesce(p_name, '')), 80); cur public.ingredients;
+begin
+  if not public.can_manage() then raise exception 'Sin permiso'; end if;
+  if length(nm) < 2 then raise exception 'Escribe el nombre de la preparación'; end if;
+  if p_qty is null or p_qty <= 0 then raise exception 'Escribe cuánto rinde'; end if;
+  if p_unit is null or p_unit not in ('kg', 'g', 'l', 'ml', 'unidad') then raise exception 'Unidad no válida'; end if;
+  if exists (select 1 from public.ingredients where lower(name) = lower(nm) and id is distinct from pid) then
+    raise exception 'Ya hay un insumo o una preparación que se llama «%»', nm;
+  end if;
+  if pid is null then
+    insert into public.ingredients (name, buy_unit, buy_qty, buy_price, is_prep) values (nm, p_unit, p_qty, 0, true) returning id into pid;
+  else
+    select * into cur from public.ingredients where id = pid for update;
+    if not coalesce(cur.is_prep, false) then raise exception 'No es una preparación'; end if;
+    if public.unit_family(cur.buy_unit) <> public.unit_family(p_unit)
+       and (exists (select 1 from public.recipe_items where ingredient_id = pid) or exists (select 1 from public.prep_items where ingredient_id = pid)) then
+      raise exception '«%» se usa en recetas: lo que rinde no puede pasar de peso a volumen o a unidades', cur.name;
+    end if;
+    update public.ingredients set name = nm, buy_unit = p_unit, buy_qty = p_qty where id = pid;
+  end if;
+  delete from public.prep_items where prep_id = pid;
+  for ln in select * from jsonb_array_elements(coalesce(p_lines, '[]'::jsonb)) loop
+    n := n + 1;
+    if coalesce((ln ->> 'qty')::numeric, 0) <= 0 then raise exception 'Línea %: falta la cantidad', n; end if;
+    insert into public.prep_items (prep_id, ingredient_id, qty, unit, position)
+    values (pid, (ln ->> 'ingredient_id')::bigint, (ln ->> 'qty')::numeric, ln ->> 'unit', n);
+  end loop;
+  return pid;
+end $$;
+revoke execute on function public.prep_save(bigint, text, numeric, text, jsonb) from anon, public;
+grant execute on function public.prep_save(bigint, text, numeric, text, jsonb) to authenticated;
+
 -- ================================================================ Ventas → inventario
 -- Descuenta del stock los insumos de las recetas de lo vendido en un día
 -- (movimientos "consumo" con source = 'ventas:AAAA-MM-DD'). Si se vuelve a
@@ -499,9 +633,11 @@ begin
   end loop;
   delete from public.inventory_movements where source = tag and kind = 'consumo';
 
-  -- 2) calcular el consumo según recetas (tamaño exacto; si no hay, receta sin tamaño; si no, la primera)
+  -- 2) calcular el consumo según recetas (tamaño exacto; si no hay, receta sin tamaño; si no, la primera).
+  --    Una preparación se descuenta en sus ingredientes, en proporción a lo que rinde.
+  --    Solo se descuentan los insumos cuyo inventario se lleva (ya tuvieron una compra o un conteo).
   for r in
-    with sold as (
+    with recursive sold as (
       select si.dish_id, si.variant, sum(si.qty) as sold from public.sales_items si
       where si.sale_date = p_date and si.dish_id is not null group by si.dish_id, si.variant
     ), pick as (
@@ -511,14 +647,25 @@ begin
           (select ri.variant from public.recipe_items ri where ri.dish_id = s.dish_id and ri.variant = '' limit 1),
           (select min(ri.variant) from public.recipe_items ri where ri.dish_id = s.dish_id)) as rv
       from sold s
+    ), need(ingredient_id, q_base, depth) as (   -- cantidades en g, ml o unidades
+      select ri.ingredient_id, p.sold * ri.qty * public.unit_factor(ri.unit), 1
+      from pick p
+      join public.recipe_items ri on ri.dish_id = p.dish_id and ri.variant = p.rv
+      join public.ingredients i on i.id = ri.ingredient_id
+      where p.rv is not null and public.unit_family(ri.unit) = public.unit_family(i.buy_unit)
+      union all
+      select pi.ingredient_id, n.q_base / (pr.buy_qty * public.unit_factor(pr.buy_unit)) * pi.qty * public.unit_factor(pi.unit), n.depth + 1
+      from need n
+      join public.ingredients pr on pr.id = n.ingredient_id and pr.is_prep
+      join public.prep_items pi on pi.prep_id = pr.id
+      join public.ingredients i2 on i2.id = pi.ingredient_id
+      where n.depth < 8 and public.unit_family(pi.unit) = public.unit_family(i2.buy_unit)
     )
     select i.id as ingredient_id, i.buy_unit, i.buy_price, i.buy_qty,
-           sum(p.sold * ri.qty * public.unit_factor(ri.unit) / public.unit_factor(i.buy_unit)
-               / (1 - least(i.waste_pct, 89.99) / 100)) as q
-    from pick p
-    join public.recipe_items ri on ri.dish_id = p.dish_id and ri.variant = p.rv
-    join public.ingredients i on i.id = ri.ingredient_id
-    where p.rv is not null and public.unit_family(ri.unit) = public.unit_family(i.buy_unit)
+           sum(n.q_base / public.unit_factor(i.buy_unit) / (1 - least(i.waste_pct, 89.99) / 100)) as q
+    from need n
+    join public.ingredients i on i.id = n.ingredient_id
+    where not i.is_prep and i.inv_active
       and i.zone <> 'afuera'   -- lo de afuera ya se descontó al enviar cada pedido (pos.sql)
     group by i.id, i.buy_unit, i.buy_price, i.buy_qty
   loop
