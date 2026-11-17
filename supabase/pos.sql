@@ -441,6 +441,58 @@ begin
               else jsonb_build_object('ok', false, 'error', 'PIN incorrecto') end;
 end $$;
 
+-- ---------------------------------------------------------------- Quién está tomando el pedido
+-- La tablet que tiene abierta una mesa avisa cada 8 segundos; a los 30 sin aviso, la mesa queda libre sola (tablet apagada,
+-- sin señal). Si otra persona entra a la misma mesa, su tablet le pregunta y, si entra igual, a la primera se le cierra la
+-- mesa: lo que tenía anotado sin enviar se guarda en la mesa como «sin enviar». Sin internet no aplica.
+create table if not exists public.pos_atendiendo (
+  order_id    bigint primary key references public.pos_orders(id) on delete cascade,
+  employee_id bigint references public.employees(id) on delete cascade,
+  device      text not null default '',
+  started_at  timestamptz not null default now(),
+  seen_at     timestamptz not null default now()
+);
+alter table public.pos_atendiendo enable row level security;   -- sin políticas: solo por las funciones
+revoke all on public.pos_atendiendo from anon, authenticated;
+
+-- Abrir o seguir en una mesa. p_tomar = false: si la tiene otra persona, devuelve quién ({ok: false, por}).
+-- p_tomar = true: se la quita (queda en el registro de la caja) y devuelve a quién ({ok: true, quitada_a}).
+create or replace function public.pos_atender(p_emp bigint, p_pin text, p_order bigint, p_device text, p_tomar boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a record; dev text := left(coalesce(nullif(trim(p_device), ''), '?'), 60); fresca boolean;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if not exists (select 1 from public.pos_orders where id = p_order and status = 'abierta') then return jsonb_build_object('ok', true, 'cerrada', true); end if;
+  delete from public.pos_atendiendo where seen_at < now() - interval '12 hours';
+  select * into a from public.pos_atendiendo where order_id = p_order for update;
+  fresca := a.order_id is not null and a.seen_at > now() - interval '30 seconds';
+  if not fresca or (a.employee_id = p_emp and a.device = dev) then
+    insert into public.pos_atendiendo (order_id, employee_id, device, started_at, seen_at) values (p_order, p_emp, dev, now(), now())
+    on conflict (order_id) do update set seen_at = now(), employee_id = excluded.employee_id, device = excluded.device,
+      started_at = case when fresca then pos_atendiendo.started_at else now() end;
+    return jsonb_build_object('ok', true);
+  end if;
+  if not coalesce(p_tomar, false) then
+    return jsonb_build_object('ok', false, 'por', coalesce(public.pos_emp_name(a.employee_id), 'Otra persona'), 'desde', a.started_at);
+  end if;
+  update public.pos_atendiendo set employee_id = p_emp, device = dev, started_at = now(), seen_at = now() where order_id = p_order;
+  insert into public.pos_log (employee_id, action, order_id, detail)
+  values (p_emp, 'tomar_mesa', p_order, jsonb_build_object('a', public.pos_emp_name(a.employee_id), 'mesa', public.pos_order_label(p_order)));
+  return jsonb_build_object('ok', true, 'quitada_a', coalesce(public.pos_emp_name(a.employee_id), 'Otra persona'));
+end $$;
+
+-- Salir de la mesa (volver al mapa): queda libre de inmediato si la tenía esta tablet
+create or replace function public.pos_soltar(p_emp bigint, p_pin text, p_order bigint, p_device text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  delete from public.pos_atendiendo where order_id = p_order and employee_id = p_emp and device = left(coalesce(nullif(trim(p_device), ''), '?'), 60);
+end $$;
+revoke execute on function public.pos_atender(bigint, text, bigint, text, boolean) from anon, public;
+revoke execute on function public.pos_soltar(bigint, text, bigint, text) from anon, public;
+grant execute on function public.pos_atender(bigint, text, bigint, text, boolean) to authenticated;
+grant execute on function public.pos_soltar(bigint, text, bigint, text) to authenticated;
+
 create or replace function public.pos_state() returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare r jsonb;
@@ -462,7 +514,10 @@ begin
                  'precuenta_at', o.precuenta_at, 'phone', o.phone, 'channel', o.channel,
                  'pending', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'pendiente'),
                  'items', (select count(*) from public.pos_items i where i.order_id = o.id and i.status <> 'anulado'),
-                 'ready', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'enviado' and i.ready_at is not null and i.served_at is null)) order by o.opened_at), '[]'::jsonb)
+                 'ready', (select count(*) from public.pos_items i where i.order_id = o.id and i.status = 'enviado' and i.ready_at is not null and i.served_at is null),
+                 -- Quién está tomando el pedido ahora (avisó en los últimos 30 s)
+                 'atiende', (select jsonb_build_object('id', a.employee_id, 'name', public.pos_emp_name(a.employee_id), 'dev', a.device, 'desde', a.started_at)
+                             from public.pos_atendiendo a where a.order_id = o.id and a.seen_at > now() - interval '30 seconds')) order by o.opened_at), '[]'::jsonb)
                from public.pos_orders o cross join lateral public.pos_totals(o.id) tt where o.status = 'abierta'),
     'printer_backlog', (select count(*) from public.pos_print_jobs where status <> 'impreso' and created_at > now() - interval '1 day'),
     'unverified', (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'method', p.method, 'amount', p.amount, 'reference', p.reference,

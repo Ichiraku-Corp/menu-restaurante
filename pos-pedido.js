@@ -1,8 +1,54 @@
 // Pedido, cliente, delivery y cuenta dividida
 "use strict";
+// ---------------------------------------------------------------- Mesa ocupada
+// Quien tiene una mesa abierta queda «tomando el pedido» (el mapa lo muestra en las demás tablets). Si otra persona entra,
+// se le pregunta; si entra igual, a la primera se le cierra la mesa y lo que tenía anotado queda en la mesa «sin enviar».
+var ATT_ID = (function () {
+  try { var k = sessionStorage.getItem("pos-att"); if (!k) { k = Math.random().toString(36).slice(2, 10); sessionStorage.setItem("pos-att", k); } return k; }
+  catch (e) { return Math.random().toString(36).slice(2, 10); }
+})();
+function attDev() { return ((devName() || "Tablet") + " #" + ATT_ID).slice(0, 60); }
+function attOff() { return typeof SR !== "undefined" && SR.on; }  // sin internet no aplica
+function attMine(a) { return !!a && !!U && a.id === U.id && a.dev === attDev(); }
+function attCall(id, tomar) { return attOff() || !U ? Promise.resolve({ ok: true }) : rpc("pos_atender", { p_order: id, p_device: attDev(), p_tomar: !!tomar }); }
+function cartItems() { return cur.cart.map(function (c) { return { dish_id: c.dish.id, variant: c.variant, option: c.option, notes: c.notes, qty: c.qty }; }); }
+var attLost = null;
+function attBeat() {
+  if (!U || !cur.order || document.hidden || attOff()) return;
+  if (attLost) { attClose(); return; }
+  var id = cur.order;
+  attCall(id, false).then(function (r) { if (r && r.ok === false && cur.order === id) { attLost = r; attClose(); } }).catch(function () { /* sin señal: se reintenta */ });
+}
+function attClose() {
+  if (!attLost || !cur.order) { attLost = null; return; }
+  if (anyDialogOpen()) return;  // en medio de un cobro o una anulación: se cierra al terminar
+  var r = attLost, id = cur.order, lugar = cur.data ? cur.data.label : "la mesa", items = cartItems(), n = items.reduce(function (s2, i) { return s2 + num(i.qty); }, 0);
+  attLost = null; cur.cart = [];
+  (items.length ? rpc("pos_add", { p_order: id, p_items: items }).catch(function () {}) : Promise.resolve()).then(function () {
+    goTables(true);
+    notice(r.por + " entró a " + lugar + " y se te cerró la mesa." + (items.length ? " Lo que tenías anotado (" + fmtQ(n) + (n === 1 ? " plato" : " platos") + ") quedó guardado en la mesa como «sin enviar»." : ""), "err");
+  });
+}
+setInterval(attBeat, 8000);
+document.addEventListener("visibilitychange", function () { if (!document.hidden) attBeat(); });
+
 // ---------------------------------------------------------------- Pedido
 function openOrder(id) {
-  cur.order = id; cur.cart = []; $("search").value = ""; moreOpen(false);
+  // Si la está atendiendo otra persona, se pregunta antes de entrar (si la función o la red fallan, se entra igual)
+  return attCall(id, false).catch(function () { return { ok: true }; }).then(function (r) {
+    if (!r || r.ok !== false) return showOrder(id);
+    var o = ST && ST.orders.find(function (x) { return x.id === id; }), lugar = o ? o.label : "esta mesa";
+    if (!confirm(r.por + " está tomando el pedido en " + lugar + ".\n\n¿Entrar igual? A " + r.por + " se le cerrará la mesa en su tablet; lo que anotó sin enviar queda guardado en la mesa.")) {
+      refreshState().catch(function () {}); return null;
+    }
+    return attCall(id, true).catch(function () { return {}; }).then(function (r2) {
+      if (r2 && r2.quitada_a) toast("Entraste a " + lugar + ": a " + r2.quitada_a + " se le cerró la mesa");
+      return showOrder(id);
+    });
+  });
+}
+function showOrder(id) {
+  cur.order = id; cur.cart = []; attLost = null; $("search").value = ""; moreOpen(false);
   if (MENU.top && MENU.top.length) cur.cat = "top";
   show("tablesView", false); show("orderView", true); syncBars(); $("orderGrid").classList.remove("show-menu");
   if (window.innerWidth <= 820) $("orderGrid").classList.add("show-menu");
@@ -201,7 +247,7 @@ $("lines").addEventListener("click", function (e) {
 var sending = false;
 $("send").addEventListener("click", function () {
   if (sending) return; sending = true; $("send").disabled = true;
-  var items = cur.cart.map(function (c) { return { dish_id: c.dish.id, variant: c.variant, option: c.option, notes: c.notes, qty: c.qty }; });
+  var items = cartItems();
   (items.length ? rpc("pos_add", { p_order: cur.order, p_items: items }) : Promise.resolve())
     .then(function () { cur.cart = []; return rpc("pos_send", { p_order: cur.order }); })
     .then(function (n) { toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar"); return loadOrder(); })

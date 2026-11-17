@@ -24,7 +24,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
   const page = await (await browser.newContext({ viewport: { width: 1180, height: 900 } })).newPage();
   const errores = [];
   page.on("pageerror", (e) => errores.push(e.message));
-  page.on("dialog", (d) => d.accept().catch(() => {}));
+  let autoDialog = true;  // las pruebas que necesitan responder un diálogo a mano lo apagan un momento
+  page.on("dialog", (d) => { if (autoDialog) d.accept().catch(() => {}); });
   const menu = fs.readFileSync(path.join(ROOT, "data", "menu.json"), "utf8");
   await page.route("**/vendor/supabase-js-*/supabase.js", (r) => r.fulfill({ contentType: "application/javascript",
     body: "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8") }));
@@ -133,6 +134,43 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("6")'); await page.waitForSelector("#orderView:not(.hidden)");
     await page.click("#back"); await page.waitForTimeout(300);
     ok(await S(() => !!window.__drop), "una mesa vacía se borra al salir");
+
+    // Mesa ocupada: el mapa dice quién está tomando el pedido; al entrar se pregunta y, si entra, a la otra se le cierra
+    await S(() => { const S2 = window.__S, mesa = ST.tables.find((x) => x.area === "Feria" && x.number === 7);
+      const o = { id: 900, kind: "mesa", table_id: mesa.id, label: "", status: "abierta", service_pct: 10, opened_at: new Date().toISOString(), opened_by_id: 1 }; S2.orders.push(o);
+      window.__ATT = { 900: { id: 1, name: "Mesera", dev: "Tablet Barra #otra" } }; });
+    await S(() => refreshState()); await page.click('#areas [data-area="Feria"]'); await page.waitForTimeout(200);
+    const tile7 = page.locator('#areaBody [data-table]:has(.num:text-is("7"))');
+    ok(await tile7.evaluate((b) => b.classList.contains("att")) && /Tomando pedido/.test(await tile7.locator(".st").textContent()) && (await tile7.locator(".pill.att").textContent()) === "Mesera",
+      "en el mapa, la mesa dice «Tomando pedido» y quién (Mesera)");
+    ok(/Tomando pedido/.test(await page.textContent("#areaBody .legend")), "la leyenda explica «Tomando pedido»");
+    autoDialog = false;
+    let pregunta = ""; page.once("dialog", (d) => { pregunta = d.message(); d.dismiss().catch(() => {}); });
+    await tile7.click(); await page.waitForTimeout(400);
+    ok(/Mesera está tomando el pedido en Feria 7/.test(pregunta) && /Entrar igual/.test(pregunta) && !(await page.isVisible("#orderView")) && (await S(() => window.__ATT[900].name)) === "Mesera",
+      "al tocar la mesa pregunta «¿Entrar igual?» y, si no, no entra ni le quita la mesa a nadie");
+    page.once("dialog", (d) => d.accept().catch(() => {}));
+    await tile7.click(); await page.waitForSelector("#orderView:not(.hidden)");
+    ok((await S(() => window.__ATT[900].name)) === "Cajera" && (await S(() => window.__ATTCALLS.some((c) => c.p_order === 900 && c.p_tomar === true))),
+      "si entra igual, la mesa pasa a quien entró (a la otra tablet se le cierra)");
+    // Otra persona entra mientras esta tablet tiene platos sin enviar: se le cierra, avisa y lo anotado queda en la mesa
+    await page.click('#cats button:has-text("Entradas")'); await page.click('#dishes button:has-text("Gyozas")'); await page.click('#dishes button:has-text("Gyozas")');
+    await S(() => { window.__ATT[900] = { id: 3, name: "Ayudante", dev: "Tablet Tokio #zz" }; });
+    await S(() => attBeat()); await page.waitForSelector("#tablesView:not(.hidden)"); await page.waitForTimeout(300);
+    const cierre = await page.isVisible("#notice") ? await page.textContent("#notice .nmsg") : "";
+    ok(/Ayudante entró a Feria 7 y se te cerró la mesa/.test(cierre) && /\(2 platos\) quedó guardado en la mesa como «sin enviar»/.test(cierre), "a quien atendía se le cierra la mesa con un aviso de quién entró");
+    ok(await S(() => window.__S.items.some((i) => i.order_id === 900 && i.status === "pendiente" && i.name === "Gyozas" && i.qty === 2)),
+      "lo que tenía anotado (2 Gyozas) queda en la mesa como «sin enviar», no se pierde");
+    ok(!(await S(() => window.__soltar === 900)), "al cerrársela no suelta la mesa de quien entró");
+    await page.click("#notice [data-nok]"); await page.waitForTimeout(200);
+    autoDialog = true;
+    await S(() => { delete window.__ATT[900]; const o = window.__S.orders.find((x) => x.id === 900); o.status = "anulada"; }); await S(() => refreshState());
+    // Al volver al mapa, la mesa queda libre de inmediato
+    await page.click('#areaBody [data-table] .num:text-is("8")'); await page.waitForSelector("#orderView:not(.hidden)");
+    const o8 = await S(() => cur.order);
+    ok((await S(() => window.__ATT[cur.order] && window.__ATT[cur.order].name)) === "Cajera", "al abrir una mesa libre, queda tomando el pedido quien la abrió");
+    await page.click("#back"); await page.waitForTimeout(300);
+    ok(await page.evaluate((x) => window.__soltar === x && !window.__ATT[x], o8), "al volver al mapa, la mesa queda libre");
 
     // Delivery de Yummy: sin costo de envío
     await page.click('#areas [data-area="Delivery"]'); await page.click("#newDeliv");

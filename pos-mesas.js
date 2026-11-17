@@ -139,7 +139,9 @@ function metaTile() {
 }
 
 // ---------------------------------------------------------------- Mesas
-function goTables() {
+function goTables(noSoltar) {
+  // Al volver al mapa, la mesa queda libre de inmediato (salvo que ya la haya tomado otra persona)
+  if (cur.order && noSoltar !== true && U && !attOff()) rpc("pos_soltar", { p_order: cur.order, p_device: attDev() }).catch(function () {});
   cur.order = null; cur.data = null; cur.cart = [];
   show("orderView", false); show("tablesView", true); syncBars();
   refreshState().then(drawTables).catch(fail);
@@ -185,7 +187,7 @@ function drawTables() {
     return;
   }
   var tables = ST.tables.filter(function (t) { return t.area === cur.area; });
-  $("areaBody").innerHTML = '<div class="legend"><span><i></i>Libre</span><span><i class="busy"></i>Comiendo</span><span><i class="bill"></i>Pidió la cuenta</span><span><i class="pend"></i>Platos sin enviar</span><span>Tiempo en naranja: más de 1 hora</span></div>' +
+  $("areaBody").innerHTML = '<div class="legend"><span><i></i>Libre</span><span><i class="busy"></i>Comiendo</span><span><i class="bill"></i>Pidió la cuenta</span><span><i class="pend"></i>Platos sin enviar</span><span><i class="att"></i>Tomando pedido</span><span>Tiempo en naranja: más de 1 hora</span></div>' +
     '<div class="tables">' + tables.map(function (t) {
     var o = ST.orders.find(function (x) { return x.table_id === t.id; });
     return o ? tableCard(o, String(t.number), 'data-table="' + t.id + '"')
@@ -218,8 +220,10 @@ function drawTops() {
     block("Hoy", dm(t.day.from), t.day.rows) + block("Esta semana", dm(t.week.from) + " al " + dm(t.week.to), t.week.rows) + block("Este mes", dm(t.month.from) + " al " + dm(t.month.to), t.month.rows) + "</div>";
 }
 function tableCard(o, title, attr) {
-  var m = Math.round((Date.now() - new Date(o.opened_at).getTime()) / 60000), cls = (o.precuenta_at ? "bill" : "busy") + (o.pending ? " has-pend" : "");
-  return '<button type="button" class="' + cls + '" ' + attr + '><span class="st">' + (o.precuenta_at ? "Pidió la cuenta" : o.items ? "Comiendo" : "Abierta") + '</span><span class="num">' + title + "</span>" +
+  var at = o.atiende && !attMine(o.atiende) ? o.atiende : null;  // alguien está tomando el pedido ahora mismo
+  var m = Math.round((Date.now() - new Date(o.opened_at).getTime()) / 60000), cls = (o.precuenta_at ? "bill" : "busy") + (o.pending ? " has-pend" : "") + (at ? " att" : "");
+  return '<button type="button" class="' + cls + '" ' + attr + '><span class="st">' + (at ? "Tomando pedido" : o.precuenta_at ? "Pidió la cuenta" : o.items ? "Comiendo" : "Abierta") + '</span><span class="num">' + title + "</span>" +
+    (at ? '<span class="pill att">' + esc(at.name || "Alguien") + "</span>" : "") +
     '<span class="amt">' + ref(num(o.total) - num(o.paid)) + "</span><small>" + esc(o.opened_by || "") + ' · <span class="' + (m >= 60 ? "late" : "") + '">' + mins(o.opened_at) + "</span></small>" + badges(o) + "</button>";
 }
 function minsSince(t) { return Math.round((Date.now() - new Date(t).getTime()) / 60000); }

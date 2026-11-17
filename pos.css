@@ -82,6 +82,11 @@
   .legend i.busy { background:var(--accent-soft); border-color:var(--accent-line); }
   .legend i.bill { background:var(--info-soft); border-color:var(--info); }
   .legend i.pend { background:var(--warn-soft); border-color:var(--warn); }
+  .legend i.att { border:2px dashed var(--ok); }
+  .pill.att { align-self:flex-start; background:var(--ok-soft); color:var(--ok); }
+  .pill.att::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; background:currentColor; margin-right:6px; vertical-align:0; animation:attpulso 1.2s ease-in-out infinite; }
+  @keyframes attpulso { 50% { opacity:.2; } }
+  @media (prefers-reduced-motion: reduce) { .pill.att::before { animation:none; } }
   .tables { display:grid; grid-template-columns:repeat(auto-fill, minmax(132px, 1fr)); gap:12px; margin-top:12px; }
   .tables button { min-height:112px; flex-direction:column; align-items:stretch; justify-content:space-between; gap:4px; padding:10px 12px; text-align:left; border-radius:18px; box-shadow:var(--shadow); position:relative; }
   .tables button .num { font-size:30px; font-weight:800; line-height:1; letter-spacing:-.02em; }
@@ -93,6 +98,9 @@
   .tables button.bill { background:var(--info-soft); border-color:var(--info); }
   .tables button.bill .st { color:var(--info); }
   .tables button.has-pend { box-shadow:0 0 0 2px var(--warn), var(--shadow); }
+  /* Alguien está tomando el pedido en esa mesa (otra tablet) */
+  .tables button.att { outline:3px dashed var(--ok); outline-offset:-4px; }
+  .tables button.att .st { color:var(--ok); }
   .tables button .late { color:var(--warn); font-weight:800; }
   .tables button.new { border-style:dashed; border-color:var(--accent-line); background:transparent; box-shadow:none; justify-content:center; align-items:center; text-align:center; color:var(--accent); }
   .tables button.new .num { font-size:32px; }
