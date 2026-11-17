@@ -68,6 +68,7 @@ begin
       select op.*, o.opened_by, o.closed_at from public.opiniones op join public.pos_orders o on o.id = op.order_id where op.created_at >= desde)
     select jsonb_build_object(
       'dias', d,
+      'puente_qr', coalesce((select value ->> 'qr' from public.pos_kv where key = 'bridge_status'), '') = 'true',
       'impresos', (select count(*) from v),
       'respondidas', (select count(*) from v where rating is not null),
       'promedio', (select round(avg(rating), 1) from v where rating is not null),

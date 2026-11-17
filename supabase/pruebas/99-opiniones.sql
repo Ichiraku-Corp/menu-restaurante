@@ -147,7 +147,8 @@ reset role;
 select prueba.ok((:'g'::jsonb ->> 'impresos')::int = (select count(*) from public.opiniones where created_at >= now() - interval '30 days')
                  and (:'g'::jsonb ->> 'respondidas')::int = (select count(*) from public.opiniones where created_at >= now() - interval '30 days' and rating is not null)
                  and :'g'::jsonb -> 'estrellas' = (select jsonb_agg((select count(*) from public.opiniones where created_at >= now() - interval '30 days' and rating = s) order by s) from generate_series(1, 5) s)
-                 and (:'g'::jsonb ->> 'promedio')::numeric = (select round(avg(rating), 1) from public.opiniones where created_at >= now() - interval '30 days'),
+                 and (:'g'::jsonb ->> 'promedio')::numeric = (select round(avg(rating), 1) from public.opiniones where created_at >= now() - interval '30 days')
+                 and (:'g'::jsonb ->> 'puente_qr')::boolean,
   'Gestión ve cuántos recibos llevaron QR, cuántos respondieron, el promedio y cuántas de cada estrella');
 select prueba.ok(exists (select 1 from jsonb_array_elements(:'g'::jsonb -> 'lista') x
                          where (x ->> 'order_id')::bigint = :o2 and x ->> 'name' = 'Ana Pérez' and x ->> 'phone' = '+584141234567'

@@ -10,7 +10,7 @@
                   { id: 12, name: "Luis Gómez", job_title: "Cocinero", area_id: null, pay_quincena: 180, monthly_extra: 40, active: true },
                   { id: 13, name: "Rosa Díaz", job_title: "Cajera", area_id: null, pay_quincena: 160, monthly_extra: 0, active: false },
                   { id: 14, name: "Marta Socia", job_title: "Socia", area_id: null, pay_quincena: 0, monthly_extra: 0, active: true }],
-      payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0 }],
+      payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0, opinion_qr: true, opinion_google: "", opinion_alerta: true }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
@@ -44,6 +44,13 @@
     svc_month: function (a) { return { month: a.p_month, info: { status: "borrador", rate: 100, max_from_bonus: 40 }, service_pos: 0, tips_pos: 0, service_hist: 0, lines: [], employees: [] }; },
     perf_month: function () { return { no_data: true, people: [], rules: {} }; },
     announcements_admin: function () { return []; },
+    gestion_opiniones: function (a) { G.calls.push({ rpc: "gestion_opiniones", args: a });
+      return { dias: a.p_dias, puente_qr: false, impresos: 40, respondidas: 6, promedio: 4.2, estrellas: [1, 0, 1, 1, 3],
+        por_mesonero: [{ nombre: "Sasha", n: 4, promedio: 4.5, bajas: 0 }, { nombre: "Ana", n: 2, promedio: 3.5, bajas: 1 }],
+        lista: [{ order_id: 9, visita: "17/11 20:10", respondida: "17/11 21:02", mesa: "Feria 4", mesonero: "Ana", rating: 1, comment: "La sopa llegó fría <b>y tardó</b>", name: "Luis", phone: "0414-123.45.67", cambios: 1 },
+                { order_id: 8, visita: "17/11 19:40", respondida: "17/11 20:30", mesa: "Barra 2", mesonero: "Sasha", rating: 5, comment: "¡Umai! El tonkotsu", name: "", phone: "", cambios: 0 },
+                { order_id: 7, visita: "16/11 13:05", respondida: "16/11 15:00", mesa: "Para llevar", mesonero: "Sasha", rating: 3, comment: "", name: "", phone: "", cambios: 0 }] };
+    },
     gestion_promo_guardar: function (a) { G.calls.push({ rpc: "gestion_promo_guardar", args: a }); return 2; },
     gestion_promo_borrar: function (a) { G.calls.push({ rpc: "gestion_promo_borrar", args: a }); },
     gestion_facturas: function (a) { G.calls.push({ rpc: "gestion_facturas", args: a }); var t = new Date().toISOString();

@@ -186,6 +186,31 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     const cli = await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "import_data").pop().args.p_rows[0]);
     ok(cli.nombre === "Pérez, Ana" && cli.telefono === "0414-1234567", "lee CSV con comas y comillas");
 
+    // Clientes › Opiniones (QR del recibo)
+    await page.click('#secs [data-sec="clientes"]'); await page.click('#tabs [data-tab="opiniones"]'); await page.waitForTimeout(300);
+    ok(/4,2 ★/.test(await page.textContent("#opKpis")) && /15 %/.test(await page.textContent("#opKpis")) && /de 40 recibos/.test(await page.textContent("#opKpis")),
+      "Opiniones: promedio 4,2 ★ y cuántos respondieron (6 de 40 recibos, 15 %)");
+    ok(await page.isVisible("#opPuente"), "avisa si la laptop de caja todavía no imprime el QR");
+    ok((await page.$$eval("#opStars .oprow", (x) => x.map((r) => r.textContent))).join("|") === "5 ★3 · 50 %|4 ★1 · 17 %|3 ★1 · 17 %|2 ★0 · 0 %|1 ★1 · 17 %",
+      "reparto por estrellas, de 5 a 1, con cantidad y %");
+    ok(/Sasha/.test(await page.textContent("#opMes")) && /3,5 ★/.test(await page.textContent("#opMes")), "promedio por mesonero");
+    ok((await page.$$("#opList .op")).length === 3 && !(await page.$("#opList b b")) && /La sopa llegó fría <b>y tardó<\/b>/.test(await page.textContent("#opList")),
+      "lista las opiniones (el comentario se muestra como texto, sin interpretar HTML)");
+    ok(await page.getAttribute('#opList a[href^="https://wa.me/"]', "href") === "https://wa.me/584141234567", "botón para escribirle por WhatsApp a quien dejó su número (0414 → 58414)");
+    await page.click('#opFiltro [data-f="bajas"]');
+    ok((await page.$$("#opList .op")).length === 1 && (await page.$$("#opList .op.baja")).length === 1, "filtro 1–2 ★: solo las malas, marcadas en rojo");
+    await page.click('#opFiltro [data-f="contacto"]');
+    ok((await page.$$("#opList .op")).length === 1, "filtro «Con contacto»");
+    await page.selectOption("#opDias", "90"); await page.waitForTimeout(200);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.rpc === "gestion_opiniones" && c.args.p_dias === 90)), "cambiar el período vuelve a pedir el resumen (90 días)");
+    ok(await page.isChecked("#opQr") && await page.isChecked("#opAlerta") && /Falta el correo/.test(await page.textContent("#opAlertaA")),
+      "ajustes: QR y alerta encendidos, y avisa si falta el correo para las alertas");
+    await page.fill("#opGoogle", "g.page/r/abc/review"); await page.click("#opSave"); await page.waitForTimeout(200);
+    ok(!(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && "opinion_google" in c.value))), "un enlace de Google sin https:// no se guarda");
+    await page.fill("#opGoogle", "https://g.page/r/abc/review"); await page.uncheck("#opAlerta"); await page.click("#opSave"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.opinion_google === "https://g.page/r/abc/review"
+      && c.value.opinion_alerta === false && c.value.opinion_qr === true)), "guarda el enlace de Google y apaga la alerta");
+
     // Recetas: rentabilidad del menú
     await page.click('#secs [data-sec="cocina"]'); await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
     ok(/Gyozas/.test(await page.textContent("#meList")) && /Ganancia de los platos/.test(await page.textContent("#meKpis")), "muestra la rentabilidad del menú con lo vendido");

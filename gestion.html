@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-exYkt93pW97k0YvGjwLEgK4m/bPoJQf0HjBffpppfHQ='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-IUFmcdcko7KIyq7UpYQptRSGAl3R0HrKwc+fA5G70Pk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -76,6 +76,13 @@
   .bar { height:8px; background:var(--chip); border-radius:4px; overflow:hidden; min-width:60px; }
   .bar i { display:block; height:100%; background:var(--accent); }
   .empty { padding:24px; text-align:center; color:var(--muted); }
+  /* Opiniones del QR del recibo */
+  .opfil button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .oprow { display:grid; grid-template-columns:44px minmax(0, 1fr) 96px; gap:10px; align-items:center; padding:5px 0; }
+  .oprow b { white-space:nowrap; } .oprow span { text-align:right; font-variant-numeric:tabular-nums; }
+  .op { border-bottom:1px solid var(--line); padding:12px 0; } .op:last-child { border-bottom:0; }
+  .op.baja { border-left:3px solid var(--danger); padding-left:10px; }
+  .st { color:#e5a600; letter-spacing:1px; font-size:16px; } .st i { font-style:normal; color:var(--muted); opacity:.35; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
   .line { display:grid; grid-template-columns:1fr 90px 92px 80px 34px; gap:6px; align-items:center; margin-top:6px; }
   .line .cost { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; }
@@ -231,6 +238,7 @@
       <button data-tab="avisos">Avisos</button>
       <button data-tab="whatsapp">WhatsApp</button>
       <button data-tab="promos">Promociones</button>
+      <button data-tab="opiniones">Opiniones</button>
       <button data-tab="gastos">Gastos</button>
       <button data-tab="inventario">Inventario</button>
       <button data-tab="insumos">Insumos</button>
@@ -349,6 +357,33 @@
         <div class="row between"><h2 style="margin:0">Promociones</h2><button class="primary" id="addPromo">+ Promoción</button></div>
         <p class="muted">Un % menos en ciertos platos o categorías, ciertos días y horas (hora de Venezuela). La caja lo aplica sola al anotar el plato, sale en el ticket y la carta lo anuncia.</p>
         <div class="scroll" id="promoList"><div class="empty">Cargando…</div></div>
+      </div>
+    </section>
+
+    <section data-panel="opiniones" hidden>
+      <div class="card hidden" id="opSetup"><p class="muted" style="margin:0">Para ver las opiniones del QR del recibo, ejecuta <code>supabase/pos.sql</code> y <code>supabase/opiniones.sql</code>.</p></div>
+      <div id="opMain">
+        <div class="row between"><p class="muted" style="margin:0">Recibos impresos con el QR en los últimos</p>
+          <select id="opDias" style="width:auto" aria-label="Período"><option value="7">7 días</option><option value="30" selected>30 días</option><option value="90">90 días</option><option value="365">12 meses</option></select></div>
+        <div class="card hidden" id="opPuente" style="border-color:var(--warn)"><p style="margin:0"><b>La laptop de caja todavía no imprime el QR.</b> El puente se actualiza solo en unos minutos; si no, ciérralo y ábrelo de nuevo. Mientras tanto, los recibos salen sin QR.</p></div>
+        <div class="kpis" style="margin-top:10px" id="opKpis"></div>
+        <div class="card"><h2>Estrellas</h2><div id="opStars"></div></div>
+        <div class="card"><h2>Por mesonero</h2><p class="muted" style="margin-top:0">Quién abrió la mesa. Con pocas opiniones, el promedio todavía dice poco.</p><div class="scroll" id="opMes"></div></div>
+        <div class="card">
+          <div class="row between"><h2 style="margin:0">Opiniones</h2>
+            <div class="row opfil" id="opFiltro" role="group" aria-label="Filtrar opiniones"><button type="button" class="small on" data-f="todas">Todas</button><button type="button" class="small" data-f="bajas">1–2 ★</button><button type="button" class="small" data-f="medias">3 ★</button><button type="button" class="small" data-f="altas">4–5 ★</button><button type="button" class="small" data-f="contacto">Con contacto</button></div></div>
+          <div id="opList" style="margin-top:6px"></div>
+        </div>
+        <div class="card">
+          <h2>Ajustes de opiniones</h2>
+          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0"><input type="checkbox" id="opQr"> Imprimir el QR de opinión al final del recibo</label>
+          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0"><input type="checkbox" id="opAlerta"> Avisarme al correo cuando alguien califique con 1 o 2 estrellas</label>
+          <p class="muted" style="margin:2px 0 0" id="opAlertaA"></p>
+          <label for="opGoogle">Enlace para dejar reseña en Google (se ofrece a quien califica con 4 o 5 estrellas)</label>
+          <input id="opGoogle" type="url" inputmode="url" placeholder="https://g.page/r/…/review">
+          <p class="muted">Dónde está: busca «Ichiraku Ramen» en Google con tu cuenta de la ficha → «Pedir reseñas» → copiar el enlace. Vacío = la página solo da las gracias.</p>
+          <div class="row" style="justify-content:flex-end"><button type="button" class="primary" id="opSave">Guardar</button></div>
+        </div>
       </div>
     </section>
 
@@ -968,11 +1003,71 @@
     q(sb.rpc("announcement_close", { p_id: Number(b.dataset.annclose) })).then(loadAvisos).catch(fail);
   });
 
+  // ---------------------------------------------------------------- Opiniones (QR del recibo: opiniones.sql)
+  var OP = { d: null, f: "todas" };
+  function opEstrellas(n) { return '<span class="st" role="img" aria-label="' + n + ' de 5 estrellas">' + "★★★★★".slice(0, n) + "<i>" + "★★★★★".slice(0, 5 - n) + "</i></span>"; }
+  function opWa(p) { var d = String(p || "").replace(/\D/g, ""); if (/^0\d{10}$/.test(d)) d = "58" + d.slice(1); return d.length >= 10 ? "https://wa.me/" + d : ""; }
+  function opDec(x) { return String(x).replace(".", ","); }
+  function loadOpiniones() {
+    var st = S.settings || {}, listo = st.opinion_qr !== undefined;
+    $("opSetup").classList.toggle("hidden", listo); $("opMain").classList.toggle("hidden", !listo);
+    if (!listo) return Promise.resolve();
+    $("opQr").checked = !!st.opinion_qr; $("opAlerta").checked = !!st.opinion_alerta; $("opGoogle").value = st.opinion_google || "";
+    var dest = String(st.alert_emails || st.report_emails || "").trim();
+    $("opAlertaA").innerHTML = dest ? "Llegan a " + esc(dest) + " (se cambia en Dinero › Ventas › Ajustes)." : '<b style="color:var(--warn)">Falta el correo:</b> escríbelo en Dinero › Ventas › Ajustes.';
+    $("opKpis").innerHTML = '<div class="kpi"><span>Cargando…</span></div>';
+    return q(sb.rpc("gestion_opiniones", { p_dias: Number($("opDias").value) })).then(function (d) { OP.d = d; drawOpiniones(); }).catch(fail);
+  }
+  function drawOpiniones() {
+    var d = OP.d || {}, st = S.settings || {}, lista = d.lista || [], est = d.estrellas || [0, 0, 0, 0, 0];
+    var resp = num(d.respondidas), imp = num(d.impresos), bajas = num(est[0]) + num(est[1]);
+    var cont = lista.filter(function (o) { return o.name || o.phone; }).length;
+    $("opPuente").classList.toggle("hidden", !(st.opinion_qr && d.puente_qr === false));
+    $("opKpis").innerHTML =
+      '<div class="kpi"><span>Promedio</span><b>' + (d.promedio != null ? opDec(d.promedio) + " ★" : "—") + "</b><span>" + resp + (resp === 1 ? " opinión" : " opiniones") + "</span></div>" +
+      '<div class="kpi"><span>Respondieron</span><b>' + (imp ? Math.round(resp / imp * 100) + " %" : "—") + "</b><span>de " + imp + (imp === 1 ? " recibo" : " recibos") + " con QR</span></div>" +
+      '<div class="kpi"><span>1–2 estrellas</span><b' + (bajas ? ' style="color:var(--danger)"' : "") + ">" + bajas + "</b><span>para revisar</span></div>" +
+      '<div class="kpi"><span>Con contacto</span><b>' + cont + "</b><span>quieren que les escriban</span></div>";
+    var mx = Math.max.apply(null, est.map(num).concat([1]));
+    $("opStars").innerHTML = resp ? [5, 4, 3, 2, 1].map(function (n) {
+      var c = num(est[n - 1]), p = resp ? Math.round(c / resp * 100) : 0;
+      return '<div class="oprow" title="' + n + (n === 1 ? " estrella: " : " estrellas: ") + c + (c === 1 ? " opinión" : " opiniones") + " (" + p + ' %)"><b>' + n + ' ★</b><div class="bar"><i style="width:' + (c / mx * 100).toFixed(1) + '%"></i></div><span>' + c + " · " + p + " %</span></div>";
+    }).join("") : '<div class="empty">' + (imp ? "Todavía nadie respondió en este período." : "Aún no se imprimieron recibos con QR en este período.") + "</div>";
+    var mes = d.por_mesonero || [];
+    $("opMes").innerHTML = mes.length ? '<table class="tbl"><thead><tr><th>Mesonero</th><th class="n">Opiniones</th><th class="n">Promedio</th><th class="n">1–2 ★</th></tr></thead><tbody>' +
+      mes.map(function (m) { return "<tr><td>" + esc(m.nombre) + '</td><td class="n">' + num(m.n) + '</td><td class="n">' + opDec(m.promedio) + ' ★</td><td class="n">' + (num(m.bajas) ? '<b style="color:var(--danger)">' + num(m.bajas) + "</b>" : "0") + "</td></tr>"; }).join("") +
+      "</tbody></table>" : '<div class="empty">Sin opiniones todavía.</div>';
+    var F = { todas: function () { return true; }, bajas: function (o) { return o.rating <= 2; }, medias: function (o) { return o.rating === 3; },
+              altas: function (o) { return o.rating >= 4; }, contacto: function (o) { return o.name || o.phone; } };
+    var ver = lista.filter(F[OP.f] || F.todas);
+    $("opList").innerHTML = ver.length ? ver.map(function (o) {
+      var wa = opWa(o.phone);
+      return '<div class="op' + (o.rating <= 2 ? " baja" : "") + '"><div class="row between">' + opEstrellas(o.rating) + '<span class="muted">' + esc(o.respondida) + "</span></div>" +
+        (o.comment ? '<p style="margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere">' + esc(o.comment) + "</p>" : '<p class="muted" style="margin:6px 0">(sin comentario)</p>') +
+        '<p class="muted" style="margin:0">' + esc(o.mesa) + " · atendió " + esc(o.mesonero) + " · visita " + esc(o.visita) +
+          (o.cambios ? " · la cambió " + o.cambios + (o.cambios === 1 ? " vez" : " veces") : "") + "</p>" +
+        (o.name || o.phone ? '<div class="row" style="margin-top:8px"><b>' + esc(o.name || "Sin nombre") + "</b>" + (o.phone ? '<span class="muted">' + esc(o.phone) + "</span>" : "") +
+          (wa ? '<a class="btn small" href="' + wa + '" target="_blank" rel="noopener">Escribir por WhatsApp</a>' : "") + "</div>" : "") + "</div>";
+    }).join("") : '<div class="empty">' + (lista.length ? "Ninguna con ese filtro." : "Todavía no hay opiniones en este período.") + "</div>";
+  }
+  $("opDias").addEventListener("change", loadOpiniones);
+  $("opFiltro").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-f]"); if (!b) return; OP.f = b.dataset.f;
+    $("opFiltro").querySelectorAll("[data-f]").forEach(function (x) { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+    drawOpiniones();
+  });
+  $("opSave").addEventListener("click", function () {
+    var g = $("opGoogle").value.trim();
+    if (g && !/^https:\/\/\S+$/i.test(g)) return toast("El enlace de Google debe empezar con https://");
+    q(sb.from("gestion_settings").update({ opinion_qr: $("opQr").checked, opinion_alerta: $("opAlerta").checked, opinion_google: g }).eq("id", 1))
+      .then(function () { toast("Ajustes de opiniones guardados"); return refresh(); }).then(loadOpiniones).catch(fail);
+  });
+
   // ---------------------------------------------------------------- Pestañas
   // Cada pestaña pertenece a una sección; la barra de abajo muestra solo las de la sección elegida
   var TAB_SEC = { inicio: "inicio", resumen: "dinero", ventas: "dinero", historico: "dinero", gastos: "dinero", servicio: "dinero",
     nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", estaciones: "cocina", insumos: "cocina", inventario: "cocina",
-    clientes: "clientes", whatsapp: "clientes", promos: "clientes", areas: "ajustes", importar: "ajustes" };
+    clientes: "clientes", whatsapp: "clientes", promos: "clientes", opiniones: "clientes", areas: "ajustes", importar: "ajustes" };
   var SEC_LAST = {};
   function syncSecs(tab) {
     var sec = TAB_SEC[tab] || "dinero"; SEC_LAST[sec] = tab;
@@ -996,6 +1091,7 @@
     if (b.getAttribute("data-tab") === "historico") loadVentasHora();
     if (b.getAttribute("data-tab") === "gastos") loadFacturas();
     if (b.getAttribute("data-tab") === "avisos") loadAvisos();
+    if (b.getAttribute("data-tab") === "opiniones") loadOpiniones();
   });
   try { var t0 = sessionStorage.getItem("gestion-tab"); var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio"); } catch (e) { syncSecs("inicio"); }
   $("month").value = $("expMonth").value = ymNow();
