@@ -200,7 +200,7 @@ begin
             'moves', (select coalesce(jsonb_agg(jsonb_build_object('at', m.created_at, 'kind', m.kind, 'amount', m.amount_ref, 'note', m.note, 'by', m.created_by)
                        order by m.created_at desc), '[]'::jsonb) from (select * from public.pos_tab_moves where employee_id = e.id order by created_at desc limit 40) m))
           order by public.pos_tab_balance(e.id) desc, e.name), '[]'::jsonb)
-          from public.employees e where e.active or exists (select 1 from public.pos_tab_moves where employee_id = e.id));
+          from public.employees e where e.active or public.pos_tab_balance(e.id) <> 0);  -- quien ya no trabaja aquí solo aparece mientras deba algo
 end $$;
 create or replace function public.svc_tab_move(p_emp bigint, p_kind text, p_amount numeric, p_note text default '') returns numeric
 language plpgsql security definer set search_path = public as $$
