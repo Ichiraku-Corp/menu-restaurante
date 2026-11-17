@@ -973,7 +973,8 @@ begin
   update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = p_at, session_id = sess, rate = rt where id = p_order;
   if p_offline then update public.pos_payments set created_at = p_at where order_id = p_order and created_at = now();
   else
-  perform public.pos_print('caja', public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
+  -- Recibo: el shiba arriba (como la precuenta) y el QR de opinión abajo; la comanda de cocina no lleva el shiba
+  perform public.pos_print('caja', E'@logo\n' || public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
     (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case when p2.is_tip then 'Propina ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,

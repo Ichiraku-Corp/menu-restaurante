@@ -12,6 +12,7 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
   await new Promise((r) => printer.listen(0, "127.0.0.1", r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "puente-prueba-"));
   fs.copyFileSync(path.join(__dirname, "..", "puente", "puente.js"), path.join(dir, "puente.js"));
+  fs.copyFileSync(path.join(__dirname, "..", "puente", "logo.pbm"), path.join(dir, "logo.pbm"));
   fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify({ supabase_url: "http://127.0.0.1:9", anon_key: "x", email: "x", password: "x",
     printers: { cocina: { ip: "127.0.0.1", port: printer.address().port }, caja: { ip: "127.0.0.1", port: printer.address().port } } }));
   fs.writeFileSync(path.join(dir, "llave-red-local.txt"), "llave-prueba");
@@ -53,6 +54,9 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     const rec = impreso.find((x) => x.includes("RECIBO SIN INTERNET")) || "";
     ok(/Feria 4/.test(rec) && /2 Gyozas\s+10\.00/.test(rec) && /TOTAL Ref 11\.00/.test(rec) && /Efectivo \$\s+Ref 20\.00/.test(rec) && /Vuelto\s+Ref 9\.00/.test(rec) && /Bs 1,100\.00/.test(rec),
       "el recibo lleva mesa, platos, total (y en Bs), cómo pagó y el vuelto");
+    ok(rec.indexOf("\x1d\x76\x30") >= 0 && rec.indexOf("\x1d\x76\x30") < rec.indexOf("RECIBO SIN INTERNET"), "el recibo sin internet también lleva el shiba arriba");
+    const com = impreso.find((x) => x.includes("Gyozas") && !x.includes("RECIBO")) || "";
+    ok(com && com.indexOf("\x1d\x76\x30") < 0, "la comanda de cocina sale sin el shiba");
     const rx = (c) => P.srRecibo(Object.assign({}, pago, { at: new Date().toISOString(), change_currency: c.currency, change: c }));
     ok(/Vuelto\s+\$ 9\.00 \+ Bs 50\.00/.test(rx({ currency: "MIX", amount: 9.5, usd: 9, bs: 50 })) && /Vuelto\s+Bs 950\.00 p\. movil/.test(rx({ currency: "MOVIL", amount: 950 })) &&
        /Propina \(vuelto\)\s+Ref 9\.00/.test(rx({ currency: "PROPINA", amount: 9 })), "el vuelto sale como en el ticket del sistema (mixto, pago móvil, propina)");

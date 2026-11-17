@@ -850,7 +850,7 @@ function srCambio(c) {
 }
 // Recibo del cobro hecho sin internet (como el del sistema, marcado «SIN INTERNET»)
 function srRecibo(e) {
-  const out = ["^RECIBO SIN INTERNET", "~No es factura fiscal", e.order.label + "   " + srHora(e.at), "="];
+  const out = ["@logo", "^RECIBO SIN INTERNET", "~No es factura fiscal", e.order.label + "   " + srHora(e.at), "="];  // con el shiba, como el recibo normal
   if (e.prev && Number(e.prev.total) > 0) out.push(srLine("Consumo anterior (con internet)", srMoney(e.prev.total)));
   for (const i of e.items || []) out.push(srLine(i.qty + " " + i.name + (i.variant ? " " + i.variant : ""), srMoney(i.qty * i.unit_price)));
   out.push("=");

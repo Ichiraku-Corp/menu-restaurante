@@ -45,6 +45,10 @@ select prueba.ok((select body from public.pos_print_jobs where printer = 'caja' 
 select token as tk from public.opiniones where order_id = :o2 \gset
 select body as recibo from public.pos_print_jobs where printer = 'caja' and body like '%RECIBO%' order by id desc limit 1 \gset
 select prueba.ok(:'tk' ~ '^[A-Za-z0-9_-]{12}$', 'cada recibo lleva su propio código de 12 letras, difícil de adivinar');
+select prueba.ok(:'recibo' like E'@logo\n~^ICHIRAKU RAMEN\n~RECIBO%', 'el recibo empieza con el shiba, como la precuenta');
+select prueba.ok(not exists (select 1 from public.pos_print_jobs where printer <> 'caja' and body like '%@logo%')
+                 and not exists (select 1 from public.pos_print_jobs where body like '%@logo%' and body not like '%PRECUENTA%' and body not like '%RECIBO%'),
+  'el shiba solo sale en la precuenta y el recibo: nunca en las comandas');
 select prueba.ok(:'recibo' like '%~Gracias por tu visita!' || E'\n\n' || '~Como te fue? Cuentanos en 1 minuto' || E'\n' || '@qr https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || :'tk',
   'el recibo termina con «Como te fue?» y el QR con el enlace del pedido');
 -- Volver a pasar por el recibo del mismo pedido no cambia el enlace
