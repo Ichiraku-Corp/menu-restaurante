@@ -861,6 +861,8 @@ create or replace function public.opinion_qr(p_order bigint) returns text
 language plpgsql security definer set search_path = public as $$
 declare tk text;
 begin
+  -- Privacidad (privacidad.html): el nombre y WhatsApp que dejaron para que los contacten se borran a los 12 meses
+  update public.opiniones set name = '', phone = '' where answered_at < now() - interval '12 months' and (name <> '' or phone <> '');
   if not coalesce((select opinion_qr from public.gestion_settings limit 1), false) then return ''; end if;
   if coalesce((select value ->> 'qr' from public.pos_kv where key = 'bridge_status'), '') <> 'true' then return ''; end if;
   if not exists (select 1 from public.pos_payments where order_id = p_order and method <> 'cuenta' and not is_tip) then return ''; end if;

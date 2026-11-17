@@ -128,6 +128,15 @@ select prueba.falla($$select public.opinion_enviar('$$ || :'tk1' || $$', 5)$$, '
 reset role;
 update public.opiniones set created_at = now() - interval '2 days' where token = :'tk1';
 
+-- Privacidad: el contacto se borra a los 12 meses (la calificación y el comentario se quedan)
+insert into public.opiniones (order_id, token, created_at, rating, comment, name, phone, answered_at)
+values (:oe, 'viejo0000001', now() - interval '13 months', 4, 'Rico', 'Luis', '+584120000000', now() - interval '13 months');
+select public.opinion_qr(:o2);
+select prueba.ok((select name = '' and phone = '' and rating = 4 and comment = 'Rico' from public.opiniones where token = 'viejo0000001')
+                 and (select name = 'Ana Pérez' from public.opiniones where token = :'tk'),
+  'el nombre y WhatsApp de hace más de 12 meses se borran solos; la calificación y el comentario se quedan');
+delete from public.opiniones where token = 'viejo0000001';
+
 -- 5) Gestión: solo el dueño o admin ve el resumen
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
