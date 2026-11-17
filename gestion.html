@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-AU8dMmW+oyIzFcJMS3c+nj9+M8je6SRvhNgdCZzElyw='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TVXY6bcGe82kfzrIGtQAl2AlY65jX2Kao/DL8CepnFU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -2354,6 +2354,8 @@
           g.rows.map(function (x) {
             var c = CL[x.cl];
             if (x.cl === "horse" && x.pct <= 30) c = [c[0], c[1], "Su costo ya está bien: subir un poco el precio"];
+            if (x.cl === "star" && x.pct > 40) c = [c[0], c[1], "Destacarlo, pero su costo es alto: revisar la porción"];
+            if (x.cl === "puzzle" && x.pct > 40) c = [c[0], c[1], "Recomendarlo, pero su costo es alto: revisar la receta o el precio"];
             return '<tr class="click" data-dish="' + x.r.dish.id + '" data-variant="' + esc(x.r.variant) + '"><td><b>' + esc(x.r.dish.name) + "</b>" + (x.r.variant ? ' <span class="muted">' + esc(x.r.variant) + "</span>" : "") +
               '</td><td class="n">' + fmtU(x.u) + '</td><td class="n">' + money(x.m) + '</td><td class="n hide-sm">' + pctPill(x.pct) + '</td><td class="n"><b>' + money(x.contrib) + "</b></td>" +
               '<td><span class="pill ' + c[1] + '">' + c[0] + '</span><div class="muted">' + c[2] + "</div></td></tr>";
