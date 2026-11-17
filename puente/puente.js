@@ -164,7 +164,121 @@ function logoBytes() {
   return LOGO;
 }
 
-// Marcas en el texto de los tickets:  "=" línea  ·  "@logo" imagen  ·  "^" grande  ·  "~" centrado (se pueden combinar: "~^")
+// ---------------------------------------------------------------- Código QR (opinión del cliente en el recibo)
+// Codificador propio, sin dependencias: modo byte, corrección M (~15 %), versiones 1 a 6 (hasta 106 letras).
+// Se imprime como imagen, igual que el logo, así que sirve en cualquier impresora que imprima el logo.
+const QR_BLOCKS = [null, [1, 16, 10], [1, 28, 16], [1, 44, 26], [2, 32, 18], [2, 43, 24], [4, 27, 16]]; // [bloques, datos y corrección por bloque]
+const QR_REM = [0, 0, 7, 7, 7, 7, 7];  // bits sobrantes al final de cada versión
+const GF_EXP = new Array(512), GF_LOG = new Array(256);
+(function () { let x = 1; for (let i = 0; i < 255; i++) { GF_EXP[i] = x; GF_LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11d; } for (let i = 255; i < 512; i++) GF_EXP[i] = GF_EXP[i - 255]; })();
+function gfMul(a, b) { return a && b ? GF_EXP[GF_LOG[a] + GF_LOG[b]] : 0; }
+// Reed-Solomon: los n bytes de corrección de un bloque (resto de dato·x^n entre el generador ∏(x − α^i))
+function qrRS(data, n) {
+  let g = [1];
+  for (let i = 0; i < n; i++) { const ng = new Array(g.length + 1).fill(0); for (let j = 0; j < g.length; j++) { ng[j] ^= g[j]; ng[j + 1] ^= gfMul(g[j], GF_EXP[i]); } g = ng; }
+  const r = data.concat(new Array(n).fill(0));
+  for (let i = 0; i < data.length; i++) { const c = r[i]; if (c) for (let j = 0; j < g.length; j++) r[i + j] ^= gfMul(g[j], c); }
+  return r.slice(data.length);
+}
+function qrFormatBits(mask) { // nivel M = 00; BCH(15,5) y la máscara fija 101010000010010
+  const d = mask & 7; let v = d << 10;
+  for (let i = 14; i >= 10; i--) if ((v >> i) & 1) v ^= 0x537 << (i - 10);
+  return ((d << 10) | v) ^ 0x5412;
+}
+const QR_MASKS = [(r, c) => (r + c) % 2 === 0, (r) => r % 2 === 0, (r, c) => c % 3 === 0, (r, c) => (r + c) % 3 === 0,
+  (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0, (r, c) => (r * c) % 2 + (r * c) % 3 === 0,
+  (r, c) => ((r * c) % 2 + (r * c) % 3) % 2 === 0, (r, c) => ((r + c) % 2 + (r * c) % 3) % 2 === 0];
+// Matriz del código (true = negro). Devuelve también la versión, la máscara y cuántos módulos de datos llevó (para las pruebas).
+function qrMatrix(text, mascara) { // mascara (0–7) solo para las pruebas; si no, se elige la de menor penalización
+  const bytes = Array.from(Buffer.from(String(text), "utf8"));
+  let ver = 1; while (ver <= 6 && 12 + 8 * bytes.length > 8 * QR_BLOCKS[ver][0] * QR_BLOCKS[ver][1]) ver++;
+  if (ver > 6) throw new Error("Texto muy largo para el código QR (" + bytes.length + " letras)");
+  const [nb, nd, ne] = QR_BLOCKS[ver], size = 17 + 4 * ver, M = [], F = [];
+  for (let i = 0; i < size; i++) { M.push(new Array(size).fill(false)); F.push(new Array(size).fill(false)); }
+  const fn = (r, c, v) => { M[r][c] = !!v; F[r][c] = true; };
+  // Patrones de posición (con su borde blanco), de sincronización y de alineación
+  [[0, 0], [0, size - 7], [size - 7, 0]].forEach(([r0, c0]) => {
+    for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+      const rr = r0 + r, cc = c0 + c; if (rr < 0 || rr >= size || cc < 0 || cc >= size) continue;
+      fn(rr, cc, (r >= 0 && r <= 6 && (c === 0 || c === 6)) || (c >= 0 && c <= 6 && (r === 0 || r === 6)) || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+    }
+  });
+  for (let i = 8; i < size - 8; i++) { fn(6, i, i % 2 === 0); fn(i, 6, i % 2 === 0); }
+  if (ver >= 2) { const p = size - 7; for (let r = -2; r <= 2; r++) for (let c = -2; c <= 2; c++) fn(p + r, p + c, Math.max(Math.abs(r), Math.abs(c)) !== 1); }
+  // Lugar del formato (se llena al elegir la máscara) y el módulo negro fijo
+  for (let i = 0; i <= 8; i++) { if (!F[8][i]) fn(8, i, 0); if (!F[i][8]) fn(i, 8, 0); }
+  for (let i = 0; i < 8; i++) { fn(8, size - 1 - i, 0); fn(size - 1 - i, 8, 0); }
+  fn(size - 8, 8, 1);
+  // Datos: modo byte, largo, letras, terminador y relleno; corrección por bloque e intercalado
+  const bits = [], put = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >> i) & 1); };
+  put(4, 4); put(bytes.length, 8); bytes.forEach((b) => put(b, 8));
+  for (let i = 0; i < 4 && bits.length < nb * nd * 8; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const data = []; for (let i = 0; i < bits.length; i += 8) { let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j]; data.push(v); }
+  for (let p = 0xec; data.length < nb * nd; p ^= 0xec ^ 0x11) data.push(p);
+  const blocks = [], ecs = [], cw = [];
+  for (let b = 0; b < nb; b++) { blocks.push(data.slice(b * nd, (b + 1) * nd)); ecs.push(qrRS(blocks[b], ne)); }
+  for (let i = 0; i < nd; i++) for (let b = 0; b < nb; b++) cw.push(blocks[b][i]);
+  for (let i = 0; i < ne; i++) for (let b = 0; b < nb; b++) cw.push(ecs[b][i]);
+  // Colocación en zigzag de abajo hacia arriba, de a dos columnas, saltando la columna de sincronización
+  let k = 0, up = true;
+  for (let c = size - 1; c > 0; c -= 2) {
+    if (c === 6) c = 5;
+    for (let i = 0; i < size; i++) {
+      const r = up ? size - 1 - i : i;
+      for (let j = 0; j < 2; j++) { const cc = c - j; if (F[r][cc]) continue; M[r][cc] = k < cw.length * 8 ? ((cw[k >> 3] >> (7 - (k & 7))) & 1) === 1 : false; k++; }
+    }
+    up = !up;
+  }
+  // Máscara: se prueban las 8 y queda la de menor penalidad
+  const apply = (m) => {
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (!F[r][c] && QR_MASKS[m](r, c)) M[r][c] = !M[r][c];
+    const b = qrFormatBits(m), bit = (i) => ((b >> i) & 1) === 1;
+    for (let i = 0; i <= 5; i++) M[i][8] = bit(i);
+    M[7][8] = bit(6); M[8][8] = bit(7); M[8][7] = bit(8);
+    for (let i = 9; i < 15; i++) M[8][14 - i] = bit(i);
+    for (let i = 0; i < 8; i++) M[8][size - 1 - i] = bit(i);
+    for (let i = 8; i < 15; i++) M[size - 15 + i][8] = bit(i);
+    M[size - 8][8] = true;
+  };
+  let best = 0, bestScore = Infinity;
+  if (mascara >= 0 && mascara < 8) best = mascara;
+  else for (let m = 0; m < 8; m++) { apply(m); const s = qrPenalty(M); if (s < bestScore) { bestScore = s; best = m; } apply(m); }
+  apply(best);
+  return { size: size, version: ver, mask: best, modules: M, fn: F, dataModules: k, codewords: cw.length };
+}
+function qrPenalty(M) {
+  const n = M.length; let s = 0, dark = 0;
+  for (let a = 0; a < n; a++) {
+    for (const line of [M[a], M.map((row) => row[a])]) {
+      let run = 1;
+      for (let i = 1; i <= n; i++) { if (i < n && line[i] === line[i - 1]) run++; else { if (run >= 5) s += run - 2; run = 1; } }
+      for (let i = 0; i + 7 <= n; i++) if (line[i] && !line[i + 1] && line[i + 2] && line[i + 3] && line[i + 4] && !line[i + 5] && line[i + 6]) {
+        const blancoAntes = i >= 4 && !line[i - 1] && !line[i - 2] && !line[i - 3] && !line[i - 4], blancoDespues = i + 11 <= n && !line[i + 7] && !line[i + 8] && !line[i + 9] && !line[i + 10];
+        if (blancoAntes || blancoDespues) s += 40;
+      }
+    }
+    for (let b = 0; b < n; b++) { if (M[a][b]) dark++; if (a + 1 < n && b + 1 < n && M[a][b] === M[a][b + 1] && M[a][b] === M[a + 1][b] && M[a][b] === M[a + 1][b + 1]) s += 3; }
+  }
+  return s + Math.floor(Math.abs(dark * 20 - n * n * 10) / (n * n)) * 10;
+}
+// Imagen para la impresora (GS v 0), centrada, con su margen blanco; cada módulo mide `scale` puntos
+function qrBytes(text, scale) {
+  const q = qrMatrix(text), quiet = 4, px = scale || 6, dots = (q.size + 2 * quiet) * px, bw = Math.ceil(dots / 8), img = Buffer.alloc(bw * dots, 0);
+  for (let y = 0; y < dots; y++) for (let x = 0; x < dots; x++) {
+    const r = Math.floor(y / px) - quiet, c = Math.floor(x / px) - quiet;
+    if (r >= 0 && r < q.size && c >= 0 && c < q.size && q.modules[r][c]) img[y * bw + (x >> 3)] |= 0x80 >> (x & 7);
+  }
+  const out = [Buffer.from([ESC, 0x61, 0x01])];
+  for (let y = 0; y < dots; y += 64) {
+    const rows = Math.min(64, dots - y);
+    out.push(Buffer.from([GS, 0x76, 0x30, 0x00, bw & 0xff, bw >> 8, rows & 0xff, rows >> 8]), img.subarray(y * bw, (y + rows) * bw));
+  }
+  out.push(Buffer.from([ESC, 0x61, 0x00]));
+  return Buffer.concat(out);
+}
+
+// Marcas en el texto de los tickets:  "=" línea  ·  "@logo" imagen  ·  "@qr texto" código QR  ·  "^" grande  ·  "~" centrado (se pueden combinar: "~^")
 function render(body) {
   // Reiniciar y dejar un margen: algunas impresoras pierden los primeros bytes mientras se reinician,
   // y si eran el inicio del logo, el logo sale como letras sueltas. Los ceros (NUL) se ignoran.
@@ -172,6 +286,10 @@ function render(body) {
   for (const raw of String(body).split("\n")) {
     if (raw === "=") { parts.push(Buffer.from("-".repeat(WIDTH) + "\n", "ascii")); continue; }
     if (raw.trim() === "@logo") { parts.push(logoBytes()); continue; }
+    if (raw.startsWith("@qr ")) {
+      try { parts.push(qrBytes(raw.slice(4).trim())); } catch (e) { log("QR no impreso: " + e.message); }
+      continue;
+    }
     let s = raw, big = false, center = false;
     while (s[0] === "^" || s[0] === "~") { if (s[0] === "^") big = true; else center = true; s = s.slice(1); }
     const text = ascii(s);
@@ -625,7 +743,8 @@ async function checkUpdate() {
   if (updating || cfg.actualizar === false) return; updating = true;
   try {
     const from = currentVersion();
-    const rel = await rpc("pos_bridge_check", { p_version: from, p_info: { node: process.version, host: os.hostname(), ips: localIps(), app: appState } });
+    // qr: esta versión sabe imprimir códigos QR (el servidor solo los pone en el recibo si la laptop sabe)
+    const rel = await rpc("pos_bridge_check", { p_version: from, p_info: { node: process.version, host: os.hostname(), ips: localIps(), app: appState, qr: true } });
     if (!rel || !rel.version) return;
     let failed = 0; try { failed = parseInt(fs.readFileSync(path.join(DIR, "version-fallida.txt"), "utf8"), 10) || 0; } catch (e) { /* nada */ }
     if (rel.version <= failed) return; // esa versión ya falló aquí
@@ -850,4 +969,4 @@ function startBridge() {
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
   }
 }
-module.exports = { srApi, srComandas, srValid, srValidPago, srRecibo, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { qrMatrix, qrRS, qrFormatBits, qrBytes, srApi, srComandas, srValid, srValidPago, srRecibo, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
