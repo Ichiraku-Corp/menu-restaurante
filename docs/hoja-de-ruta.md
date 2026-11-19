@@ -22,7 +22,7 @@ personal y la aprobación del dueño en lo que toca dinero.
 
 Listo en la base de datos (cuentas de sala e impresora creadas, PIN del salón puestos). Falta esta noche,
 al cerrar: Node.js + puente en la laptop de caja, prueba de impresoras, activar tablets y una venta de
-prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la factura electrónica (1 dic).
+prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta pasar a la facturación digital del SENIAT (ver 12).
 
 ## Pendientes (actualizado el 7 nov 2026)
 
@@ -48,8 +48,11 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta la fact
 11. Modelo **Live2D** de Nex, cuando tenga su apariencia definitiva.
 
 ### ❓ Para averiguar
-12. **Syth Software:** ¿emiten la factura digital o quién es el proveedor autorizado? ¿Pueden exportar las
-    ventas de cada día por plato (para llenar el inventario solo)?
+12. **Factura digital (19 nov):** usaremos la plataforma gratuita del propio SENIAT («Moda SENIAT», app y web). El
+    superintendente la anunció el 26/10 para diciembre de 2026 (sin fecha exacta): facturas en tiempo real, sin internet y
+    sincronizando después. La Providencia SNAT/2026/00093 (Gaceta 43.484, 21/10/2026) la reconoce como medio oficial y
+    entra en vigencia el **19/04/2027**; desde ahí el talonario queda solo para contingencias. Falta que el SENIAT publique
+    cómo conectar sistemas como la caja (API); si solo hubiera app, habría que facturar a mano cada venta.
 13. Proveedor de internet: ¿el local tiene IP fija?
 14. ¿El 10 % de servicio que se cobraba en Syth era todo para el personal o una parte para el local?
     (hoy la gestión supone 15 % personal / 85 % local; se cambia en Ventas → Ajustes).
