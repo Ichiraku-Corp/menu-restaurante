@@ -33,6 +33,22 @@ insert into public.pos_reports (recipients, data) values ('dueno@prueba.test', '
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
 select prueba.ok((select count(*) from public.pos_report_next(600) where id = :r4) = 1, 'si el último lo tuvo que enviar la laptop, el siguiente lo envía al momento');
+-- Si el servidor ya intentó y falló, la laptop no espera los 10 minutos (el 19/11 la apagaron 4 minutos después del cierre)
+reset role;
+update public.pos_reports set status = 'enviado', sent_by = 'servidor', sent_at = now(), claimed_at = null where id = :r4;
+insert into public.pos_reports (recipients, data) values ('dueno@prueba.test', '{"kind":"cierre"}') returning id as r5 \gset
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
+select prueba.ok((select count(*) from public.pos_report_next(600) where id = :r5) = 0, 'con el servidor enviando bien, la laptop le deja el cierre recién hecho');
+select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+select prueba.ok((select count(*) from public.pos_report_next(0) where id = :r5) = 1, 'el servidor lo aparta');
+select public.pos_report_done(:r5, false, 'operation canceled');
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"puente@prueba.test"}', false);
+select prueba.ok((select count(*) from public.pos_report_next(600) where id = :r5) = 1, 'si al servidor le falló, la laptop lo toma al momento');
+select public.pos_report_done(:r5, true);
+reset role;
+select prueba.ok((select status = 'enviado' and sent_by = 'laptop' and attempts = 2 from public.pos_reports where id = :r5), 'y queda enviado por la laptop al segundo intento');
+set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
 select prueba.falla('select public.pos_report_next(0)', 'Sin permiso', 'una tablet no puede tomar correos');
 reset role;
