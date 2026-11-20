@@ -1216,7 +1216,8 @@ begin
     where r.id in (select x.id from public.pos_reports x
                    where (x.status = 'pendiente' or (x.status = 'error' and x.attempts < 10))
                      and (x.claimed_at is null or x.claimed_at < now() - interval '5 minutes')
-                     and x.created_at <= now() - make_interval(secs => espera)
+                     -- si ya falló un intento, la laptop no espera: muchas noches se apaga a los pocos minutos del cierre
+                     and (x.status = 'error' or x.created_at <= now() - make_interval(secs => espera))
                    order by x.id limit 5 for update skip locked)
     returning r.*;
 end $$;

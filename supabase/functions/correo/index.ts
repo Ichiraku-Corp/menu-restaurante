@@ -16,8 +16,9 @@ const b64 = (s: string) => { let bin = ""; for (const b of enc.encode(s)) bin +=
 export async function smtpSend(o: Smtp, to: string[], subject: string, html: string,
   connect: (host: string, port: number) => Promise<Conn> = (hostname, port) => Deno.connectTls({ hostname, port })) {
   const conn = await connect(o.host, o.port || 465);
-  let buf = "";
-  const timer = setTimeout(() => { try { conn.close(); } catch { /* ya cerrada */ } }, 30000);
+  let buf = "", vencido = false;
+  // Si el servidor de correo no termina en 60 s se corta, con un error que se entienda
+  const timer = setTimeout(() => { vencido = true; try { conn.close(); } catch { /* ya cerrada */ } }, 60000);
   async function reply(ok: number[]) {
     for (;;) {
       const m = buf.match(/^(\d{3})([ -])(.*)\r?\n/m);
@@ -31,7 +32,15 @@ export async function smtpSend(o: Smtp, to: string[], subject: string, html: str
       buf += dec.decode(chunk.subarray(0, n));
     }
   }
-  const send = (line: string) => conn.write(enc.encode(line + "\r\n"));
+  // write() puede escribir solo una parte (un cierre pesa ~100 KB): se repite hasta mandarlo todo
+  async function send(line: string) {
+    const bytes = enc.encode(line + "\r\n");
+    for (let off = 0; off < bytes.length;) {
+      const n = await conn.write(bytes.subarray(off));
+      if (!n) throw new Error("El servidor de correo no aceptó más datos");
+      off += n;
+    }
+  }
   const msg = [
     `From: =?UTF-8?B?${b64(o.from_name)}?= <${o.from}>`, `To: ${to.join(", ")}`, `Subject: =?UTF-8?B?${b64(subject)}?=`,
     `Date: ${new Date().toUTCString()}`, "MIME-Version: 1.0", "Content-Type: text/html; charset=UTF-8", "Content-Transfer-Encoding: base64", "",
@@ -48,6 +57,8 @@ export async function smtpSend(o: Smtp, to: string[], subject: string, html: str
     await send("DATA"); await reply([354]);
     await send(msg + "\r\n."); await reply([250]);
     await send("QUIT");
+  } catch (e) {
+    throw vencido ? new Error("El servidor de correo no respondió en 60 s") : e;
   } finally { clearTimeout(timer); try { conn.close(); } catch { /* ya cerrada */ } }
 }
 
