@@ -33,8 +33,8 @@ prueba. Guía: `docs/sistema-de-ventas.md`. Factura fiscal: a mano hasta pasar a
    Luego entrar en `/admin.html` y **vincular el teléfono** con el QR.
 1. Entrar en Gestión y confirmar: **12 personas** en Nómina con nombre completo y horario, los
    **9 gastos fijos**, y las pestañas **Histórico** y **Clientes** con datos.
-2. Activar la **verificación en dos pasos (2FA)** en Supabase y en GitHub (GitHub ✅ en curso).
-3. GitHub → Settings → Pages → marcar **Enforce HTTPS**.
+2. ✅ (19 nov) **Verificación en dos pasos (2FA)** activa en Supabase y en GitHub.
+3. ✅ (19 nov) **HTTPS obligatorio** en GitHub Pages (ya estaba activo).
 4. ✅ (11 nov) **Copia de seguridad diaria** activa y probada: secretos `SUPABASE_DB_URL` y `BACKUP_PASSPHRASE` en GitHub y
    probar con «Run workflow» (`docs/copias-de-seguridad.md`).
 
