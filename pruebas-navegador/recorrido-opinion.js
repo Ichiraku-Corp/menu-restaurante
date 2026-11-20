@@ -1,4 +1,4 @@
-// Página de opinión del recibo (opinion.html?t=…): estrellas, comentario, contacto opcional, Google con 4–5 estrellas
+// Página de opinión del recibo (opinion.html?t=…): estrellas, comentario, contacto opcional e invitación a Google para todos
 // y los avisos (enlace incompleto, inventado, vencido, sin conexión). Supabase se simula: nunca sale a internet.
 // Uso: node pruebas-navegador/recorrido-opinion.js   (CAPTURAS=carpeta guarda capturas de teléfono)
 "use strict";
@@ -102,12 +102,14 @@ const CAP = process.env.CAPTURAS;
     await p.fill("#tel", "0414 123 4567");
     ok(!(await visible("error")), "al corregir el número se quita el aviso");
     await foto("3-opinion-2-estrellas-contacto");
-    respuesta = { body: { ok: true, cambios: 2, google: null } };
+    respuesta = { body: { ok: true, cambios: 2, google: "https://g.page/r/ichiraku-prueba/review" } };
     await p.click("#enviar"); await esperar(p, () => !document.getElementById("gracias").hidden);
     const e2 = enviados[1] && enviados[1].body;
     ok(e2 && e2.p_rating === 2 && e2.p_name === "Ana" && e2.p_phone === "0414 123 4567" && e2.p_comment === "La sopa llegó fría.", "envía la nueva nota, el comentario y el contacto");
-    ok((await texto("grS")) === "★★☆☆☆" && /avisamos al encargado/.test(await texto("grP")) && !/WhatsApp/.test(await texto("grP")) && !(await visible("google")),
-      "con 2 estrellas: «ya le avisamos al encargado», sin invitar a Google");
+    ok((await texto("grS")) === "★★☆☆☆" && /avisamos al encargado/.test(await texto("grP")) && !/WhatsApp/.test(await texto("grP")) && await visible("google")
+       && /^¿Quieres contarlo también en Google\?$/.test(await texto("googleT")) && /ayuda a otros clientes/.test(await texto("googleP")),
+      "con 2 estrellas: «ya le avisamos al encargado» y también la invita a Google, con otro texto (Google no permite invitar solo a los contentos)");
+    await foto("4-gracias-2-estrellas-google");
     ok((await texto("grT")) === "Lo sentimos mucho" && (await texto("grK")) === "ごめんなさい" && !(await visible("grX")),
       "y pide disculpas (sin el chiste de «misión cumplida»)");
     await foto("4-gracias-2-estrellas");

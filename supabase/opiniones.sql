@@ -2,7 +2,8 @@
 -- Opinión del cliente (Ichiraku): la página opinion.html (el QR del recibo) y Gestión › Clientes › Opiniones.
 --  · Cada recibo lleva un enlace único del pedido (pos.sql: opinion_qr). Vale 30 días.
 --  · El cliente da de 1 a 5 estrellas y un comentario; si quiere que lo contacten, deja nombre y WhatsApp.
---  · 4–5 estrellas: la página lo invita a dejar la reseña en Google (el enlace se pega en Gestión).
+--  · Después de calificar, a todos se les invita a contarlo también en Google (el enlace se pega en Gestión). Las normas
+--    de Google no permiten invitar solo a los clientes contentos.
 --  · 1–2 estrellas: alerta al correo del cierre con el comentario, la mesa y quién atendió.
 -- Se ejecuta después de pos.sql y alertas.sql. Se puede volver a ejecutar.
 -- ============================================================================
@@ -20,7 +21,7 @@ begin
     'fecha', to_char(coalesce(cerrada, op.created_at) at time zone 'America/Caracas', 'DD/MM/YYYY'),
     'rating', op.rating, 'comment', op.comment, 'contacto', op.name <> '' or op.phone <> '',
     'cambios', greatest(0, 3 - op.edits),
-    'google', case when op.rating >= 4 then nullif(trim((select opinion_google from public.gestion_settings limit 1)), '') end);
+    'google', case when op.rating is not null then nullif(trim((select opinion_google from public.gestion_settings limit 1)), '') end);
 end $$;
 
 -- Guardar (o cambiar, hasta 3 veces) la opinión. Si deja nombre o WhatsApp, reemplazan a los anteriores; en blanco, se conservan.
@@ -53,7 +54,7 @@ begin
             'Todas las opiniones: Gestión › Clientes › Opiniones']);
   end if;
   return jsonb_build_object('ok', true, 'cambios', greatest(0, 3 - op.edits),
-    'google', case when p_rating >= 4 then nullif(trim(coalesce(st.opinion_google, '')), '') end);
+    'google', nullif(trim(coalesce(st.opinion_google, '')), ''));
 end $$;
 
 -- Gestión › Clientes › Opiniones: resumen de los últimos días (por fecha de la visita), por mesonero y la lista
