@@ -85,10 +85,11 @@ set role anon;
 select set_config('request.jwt.claims', '{"role":"anon"}', false);
 select prueba.ok(public.opinion_ver(:'tk') ->> 'estado' = 'respondida' and (public.opinion_ver(:'tk') ->> 'rating')::int = 5
                  and public.opinion_ver(:'tk') ->> 'google' = 'https://g.page/r/ichiraku-prueba/review',
-  'al volver a abrir el enlace ve lo que puso y, con 4–5 estrellas, el botón de reseña en Google');
+  'al volver a abrir el enlace ve lo que puso y el botón de reseña en Google');
 -- La cambia a 2 estrellas y deja sus datos: alerta al correo con la mesa, quién atendió, el comentario y el contacto
-select prueba.ok((public.opinion_enviar(:'tk', 2, 'La sopa llegó fría', 'Ana Pérez', '+58 414-123.45.67') -> 'google') = 'null'::jsonb,
-  'con 2 estrellas no ofrece Google');
+select prueba.ok((public.opinion_enviar(:'tk', 2, 'La sopa llegó fría', 'Ana Pérez', '+58 414-123.45.67') ->> 'google') = 'https://g.page/r/ichiraku-prueba/review'
+                 and public.opinion_ver(:'tk') ->> 'google' = 'https://g.page/r/ichiraku-prueba/review',
+  'con 2 estrellas también ofrece Google: las normas de Google no permiten invitar solo a los contentos');
 reset role;
 select prueba.ok((select name = 'Ana Pérez' and phone = '+584141234567' and edits = 1 from public.opiniones where token = :'tk'),
   'guarda el nombre y el WhatsApp (solo números) y cuenta el cambio');
