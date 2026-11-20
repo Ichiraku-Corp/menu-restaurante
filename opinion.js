@@ -74,7 +74,10 @@
         (!info.contacto && info.cambios > 0 ? " Si quieres que te escribamos, toca «Cambiar mi opinión» y déjanos tu WhatsApp." : "");
     $("grP").textContent = (recien ? "" : "Ya nos diste tu opinión. ") + p;
     var g = info.google && /^https:\/\//i.test(info.google) ? info.google : "";
+    // A todos se les invita a Google (sus normas no permiten invitar solo a los contentos); el texto cambia según la nota
     $("google").hidden = !g; if (g) $("googleA").href = g;
+    $("googleT").textContent = r >= 4 ? "¿Nos ayudas con un minuto más?" : "¿Quieres contarlo también en Google?";
+    $("googleP").textContent = r >= 4 ? "Cuéntalo también en Google Maps: así más gente nos encuentra." : "Tu opinión ayuda a otros clientes y a nosotros a mejorar.";
     $("cambiar").hidden = !(info.cambios > 0);
     mostrar("gracias");
     if (recien) $("grT").focus();
