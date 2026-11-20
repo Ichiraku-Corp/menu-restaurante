@@ -2,21 +2,35 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { handler, smtpSend, subjectOf } from "../correo/index.ts";
 
-// Servidor SMTP falso: responde lo justo y guarda lo que recibe
-function fakeSmtp(fail?: string) {
+// Servidor SMTP falso: lee por líneas como uno real, responde lo justo y guarda lo que recibe.
+// maxWrite simula una conexión que en cada write() acepta solo una parte de lo enviado.
+function fakeSmtp(fail?: string, maxWrite = Infinity) {
   const enc = new TextEncoder(), dec = new TextDecoder(), outbox: Uint8Array[] = [enc.encode("220 hola\r\n")], got: string[] = [];
-  let data = false;
+  let data = false, buf = "", lines = 0;
+  const reply = (r: string) => outbox.push(enc.encode(r + "\r\n"));
   const conn = {
     read(p: Uint8Array) { const m = outbox.shift(); if (!m) return Promise.resolve(null); p.set(m); return Promise.resolve(m.length); },
     write(p: Uint8Array) {
-      const line = dec.decode(p); got.push(line);
-      let r = "250 ok";
-      if (data) { data = false; r = "250 enviado"; }
-      else if (line.startsWith("EHLO")) r = "250-hola\r\n250 AUTH LOGIN";
-      else if (line.startsWith("AUTH") || got.length === 3) r = "334 dime";
-      else if (got.length === 4) r = fail === "clave" ? "535 clave mala" : "235 dentro";
-      else if (line.startsWith("DATA")) { data = true; r = "354 adelante"; }
-      outbox.push(enc.encode(r + "\r\n")); return Promise.resolve(p.length);
+      const n = Math.min(p.length, maxWrite);
+      buf += dec.decode(p.subarray(0, n), { stream: true });
+      for (;;) {
+        if (data) { // el mensaje termina con una línea que solo tiene un punto
+          const end = buf.indexOf("\r\n.\r\n");
+          if (end < 0) break;
+          got.push(buf.slice(0, end + 5)); buf = buf.slice(end + 5); data = false; reply("250 enviado");
+          continue;
+        }
+        const i = buf.indexOf("\r\n");
+        if (i < 0) break;
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2); got.push(line + "\r\n"); lines++;
+        if (line.startsWith("EHLO")) reply("250-hola\r\n250 AUTH LOGIN");
+        else if (line.startsWith("AUTH") || lines === 3) reply("334 dime");
+        else if (lines === 4) reply(fail === "clave" ? "535 clave mala" : "235 dentro");
+        else if (line.startsWith("DATA")) { data = true; reply("354 adelante"); }
+        else reply("250 ok");
+      }
+      return Promise.resolve(n);
     },
     close() {},
   };
@@ -32,6 +46,18 @@ Deno.test("envía el cierre completo por SMTP", async () => {
   assert(all.includes("RCPT TO:<dueno@prueba.test>"), "manda al destinatario");
   assert(all.includes("Subject: =?UTF-8?B?"), "asunto con acentos codificado");
   assertEquals(subjectOf(cierre), "Cierre de caja 14/11 21:45 · Ref 1.234,50");
+});
+
+Deno.test("un cierre grande sale completo aunque la conexión lo acepte por partes", async () => {
+  // El cierre del 19/11 pesaba ~100 KB y write() solo mandó una parte: el servidor se quedó esperando el resto
+  const f = fakeSmtp(undefined, 1000);
+  const html = "<table>" + "<tr><td>Ramen Ichiraku · Señor</td><td>Ref 12,50</td></tr>".repeat(1500) + "</table>";
+  await smtpSend(smtp, ["dueno@prueba.test"], subjectOf(cierre), html, f.connect);
+  const msg = f.got.find((g) => g.includes("Content-Transfer-Encoding: base64"));
+  assert(msg, "el servidor recibió el mensaje completo, con su punto final");
+  const body = msg.slice(msg.indexOf("\r\n\r\n") + 4, msg.lastIndexOf("\r\n.\r\n")).replace(/\s+/g, "");
+  assertEquals(new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0))), html, "llega todo el cierre, igualito");
+  assert(f.got.at(-1)?.startsWith("QUIT"), "y se despide");
 });
 
 Deno.test("si la clave del correo es mala, avisa el error", async () => {
