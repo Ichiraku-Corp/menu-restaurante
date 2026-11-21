@@ -253,12 +253,23 @@ $("send").addEventListener("click", function () {
     .then(function (n) { toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar"); return loadOrder(); })
     .catch(fail).then(function () { sending = false; drawTicket(); });
 });
-// Precuenta: una a la vez, y si ya salió hace poco se pregunta antes de imprimir otra
-var billBusy = false;
+// Precuenta: una a la vez, y si ya salió hace menos de 5 minutos se pregunta antes de imprimir otra
+// (en caja se juntaban 2 o 3 iguales de la misma mesa). Vale la más reciente: la de esta cuenta o la del mapa (otra tablet).
+var billBusy = false, BILL_AGAIN_S = 300;
+function billLastAt() {
+  var so = ST && ST.orders.find(function (x) { return x.id === cur.order; });
+  return [cur.data && cur.data.precuenta_at, so && so.precuenta_at].reduce(function (m, t) { return t ? Math.max(m, new Date(t).getTime()) : m; }, 0);
+}
+function billAgo(secs) {
+  if (secs < 60) { var s = Math.max(1, Math.round(secs)); return s + (s === 1 ? " segundo" : " segundos"); }
+  var m = Math.round(secs / 60); return m + (m === 1 ? " minuto" : " minutos");
+}
 $("precuenta").addEventListener("click", function () {
   if (billBusy || !cur.data) return;
-  var last = cur.data.precuenta_at ? (Date.now() - new Date(cur.data.precuenta_at).getTime()) / 1000 : Infinity;
-  if (last < 90 && !confirm("La precuenta de " + cur.data.label + " ya salió hace " + Math.max(1, Math.round(last)) + " segundos. ¿Imprimir otra?")) return;
+  var at = billLastAt(), secs = at ? (Date.now() - at) / 1000 : Infinity;
+  if (secs < BILL_AGAIN_S && !confirm("La precuenta de " + cur.data.label + " ya salió a las " +
+      new Date(at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " (hace " + billAgo(secs) + ").\n\n" +
+      "Si el cliente ya la tiene, no hace falta otra. ¿Imprimir otra de todos modos?")) return;
   billBusy = true;
   rpc("pos_precuenta", { p_order: cur.order }).then(function () {
     var t = tableById(cur.data.table_id); toast(t && t.area === "Edo" ? "Precuenta enviada a la impresora de Edo" : "Precuenta enviada a caja");

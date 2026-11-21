@@ -105,6 +105,35 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
     await page.click("#send"); await page.waitForTimeout(300);
     ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
+    // Precuenta: la primera sale; si se vuelve a tocar antes de 5 minutos pregunta (vale también la de otra tablet)
+    const cajaJobs = () => S(() => window.__S.jobs.filter((j) => j === "caja").length);
+    const preguntas = []; let responder = "no";
+    const enDialogo = (d) => { preguntas.push(d.message()); (responder === "sí" ? d.accept() : d.dismiss()).catch(() => {}); };
+    autoDialog = false; page.on("dialog", enDialogo);
+    const j0 = await cajaJobs();
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok((await cajaJobs()) === j0 + 1 && !preguntas.length, "la primera precuenta sale sin preguntar");
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok(/ya salió a las [^(]+\(hace 1 segundo\)/.test(preguntas[0] || "") && /Imprimir otra de todos modos/.test(preguntas[0]) && (await cajaJobs()) === j0 + 1,
+      "si ya salió, pregunta antes de imprimir otra y, si dicen que no, no la imprime (" + (preguntas[0] || "").split("\n")[0] + ")");
+    const precuentaHace = (min) => page.evaluate((m) => { const o = window.__S.orders.find((x) => x.status === "abierta" && x.precuenta_at);
+      o.precuenta_at = new Date(Date.now() - m * 60000).toISOString(); return Promise.all([loadOrder(), refreshState()]); }, min);
+    await precuentaHace(4);
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok(/\(hace 4 minutos\)/.test(preguntas[1] || "") && (await cajaJobs()) === j0 + 1, "a los 4 minutos todavía pregunta (" + (preguntas[1] || "").split("\n")[0] + ")");
+    responder = "sí"; await precuentaHace(4.5);
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok(preguntas.length === 3 && (await cajaJobs()) === j0 + 2, "si dicen que sí, imprime otra");
+    await precuentaHace(6);
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok(preguntas.length === 3 && (await cajaJobs()) === j0 + 3, "pasados 5 minutos sale sin preguntar");
+    await page.evaluate((t) => { window.__S.orders.find((x) => x.status === "abierta" && x.precuenta_at).precuenta_at = t; }, new Date(Date.now() - 2 * 60000).toISOString());
+    await S(() => refreshState()); responder = "no";
+    await page.evaluate((t) => { cur.data.precuenta_at = t; }, new Date(Date.now() - 10 * 60000).toISOString());  // en esta tablet, la última es de hace 10 min
+    await page.click("#precuenta"); await page.waitForTimeout(400);
+    ok(preguntas.length === 4 && /\(hace 2 minutos\)/.test(preguntas[3]) && (await cajaJobs()) === j0 + 3,
+      "si la sacó otra tablet hace 2 minutos (se ve en el mapa), también pregunta");
+    page.off("dialog", enDialogo); autoDialog = true;
     await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]');
     await page.click('#payLines [data-bill="20"]'); await page.click('#payLines [data-bill="5"]');
     ok((await page.locator("#payLines .amt").first().inputValue()) === "25.00", "billetes $20 + $5 ponen 25 en el monto");
