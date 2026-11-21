@@ -235,13 +235,16 @@
   }
   @media (min-width: 861px) and (max-height: 760px) {
     /* las líneas se desplazan; total y botones (Enviar, Precuenta, Cobrar) quedan siempre a la vista */
-    .ticket { display:flex; flex-direction:column; max-height:calc(100vh - 84px); padding:12px 14px; }
+    /* alto disponible: pantalla menos la barra de arriba, el título del pedido y los márgenes */
+    .ticket { display:flex; flex-direction:column; max-height:calc(100vh - 148px); padding:12px 14px; }
     .ticket .lines { flex:1 1 auto; min-height:56px; max-height:none; }
     .ticket .tot { padding:1px 0; font-size:14px; }
     .ticket .tot.big { font-size:21px; padding-top:3px; }
     .ticket .actions { margin-top:8px; gap:6px; }
     .ticket .actions button { min-height:44px; }
     .orderhead h2 { font-size:21px; }
+    .orderhead { min-height:0; }
+    .ticket .meta { padding-bottom:6px; }
   }
   .emptyline { text-align:center; padding:26px 10px; color:var(--muted); }
   /* Diálogos */

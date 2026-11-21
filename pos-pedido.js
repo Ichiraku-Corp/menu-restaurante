@@ -184,6 +184,8 @@ function addToCart(p) {
   try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
   var btn = document.querySelector('#dishes [data-dish="' + p.dish.id + '"]'); if (btn) { btn.classList.remove("flash"); void btn.offsetWidth; btn.classList.add("flash"); }
   drawTicket();
+  // Lo recién anotado va al final de la lista: en pantallas bajas la lista se desplaza, así que se baja hasta ahí
+  var L = $("lines"); if (L) L.scrollTop = L.scrollHeight;
 }
 
 function drawTicket() {

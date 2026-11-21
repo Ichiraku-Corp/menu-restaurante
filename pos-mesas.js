@@ -144,6 +144,7 @@ function goTables(noSoltar) {
   if (cur.order && noSoltar !== true && U && !attOff()) rpc("pos_soltar", { p_order: cur.order, p_device: attDev() }).catch(function () {});
   cur.order = null; cur.data = null; cur.cart = [];
   show("orderView", false); show("tablesView", true); syncBars();
+  window.scrollTo(0, 0);   // el mapa empieza arriba: así se ven los avisos (mesas esperando, impresora…)
   refreshState().then(drawTables).catch(fail);
 }
 function drawTables() {
