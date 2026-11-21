@@ -43,23 +43,30 @@ function startDevice() {
 }
 function lock() {
   U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
-  ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", false);
+  ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", true);
+  drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
   if (typeof waStop === "function") waStop();
   if ($("health")) $("health").classList.add("hidden");
   $("people").innerHTML = staffList.map(function (s) { return '<button type="button" data-emp="' + s.id + '">' + avatar(s.name, s.id) + "<span>" + esc(s.name) + "</span></button>"; }).join("");
   closeDialogs(); if (typeof setMarking === "function" && marking) setMarking(false);
 }
 var selected = null, pinBuf = "";
+// Con el PIN basta: la base sabe de quién es. Tocar el nombre es opcional (o necesario si dos personas comparten PIN).
+function pinWhoTxt() {
+  $("pinWho").textContent = selected ? "PIN de " + selected.name + " · toca tu nombre otra vez para quitarlo"
+    : "No hace falta tocar tu nombre: el PIN dice quién eres. Si la tablet te lo pide, tócalo aquí.";
+}
 $("people").addEventListener("click", function (e) {
   var b = e.target.closest("[data-emp]"); if (!b) return;
-  selected = staffList.find(function (s) { return String(s.id) === b.dataset.emp; });
-  document.querySelectorAll("#people button").forEach(function (x) { x.classList.toggle("on", x === b); });
-  pinBuf = ""; $("pinErr").textContent = ""; drawDots(); show("padBox", true);
+  var s2 = staffList.find(function (s) { return String(s.id) === b.dataset.emp; });
+  selected = selected && s2 && selected.id === s2.id ? null : s2;
+  document.querySelectorAll("#people button").forEach(function (x) { x.classList.toggle("on", !!selected && x === b); });
+  pinBuf = ""; $("pinErr").textContent = ""; drawDots(); pinWhoTxt();
 });
 $("pad").innerHTML = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "✓"].map(function (k) { return '<button type="button" data-k="' + k + '">' + k + "</button>"; }).join("");
 function drawDots() { $("dots").textContent = "●".repeat(pinBuf.length) + "○".repeat(Math.max(0, 4 - pinBuf.length)); }
 $("pad").addEventListener("click", function (e) {
-  var b = e.target.closest("[data-k]"); if (!b || !selected) return;
+  var b = e.target.closest("[data-k]"); if (!b) return;
   var k = b.dataset.k;
   if (k === "⌫") pinBuf = pinBuf.slice(0, -1);
   else if (k === "✓" || pinBuf.length < 4) { if (k !== "✓") pinBuf += k; }
@@ -71,9 +78,10 @@ var marking = false, markWho = null;
 var MARKS = { "in": "Llegué", break_start: "Salgo a descanso", break_end: "Volví del descanso", out: "Me voy" };
 function setMarking(on) {
   marking = on; document.body.classList.toggle("marking", on);
-  $("pinTitle").textContent = on ? "¿Quién va a marcar?" : "¿Quién está usando la tablet?";
+  $("pinTitle").textContent = on ? "Escribe tu PIN para marcar" : "Escribe tu PIN para entrar";
   $("markMode").textContent = on ? "← Volver" : "🕘 Marcar llegada o salida";
-  selected = null; pinBuf = ""; show("padBox", false); document.querySelectorAll("#people button").forEach(function (x) { x.classList.remove("on"); });
+  selected = null; pinBuf = ""; show("padBox", true); drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
+  document.querySelectorAll("#people button").forEach(function (x) { x.classList.remove("on"); });
 }
 $("markMode").addEventListener("click", function () { setMarking(!marking); });
 function drawMark(st) {
@@ -92,6 +100,16 @@ $("markOpts").addEventListener("click", function (e) {
 $("markClose").addEventListener("click", function () { $("markDlg").close(); markWho = null; setMarking(false); });
 function tryPin() {
   var emp = selected, pin = pinBuf;
+  if (!emp) {
+    // Solo el PIN: la base dice de quién es (sin marcar entrada si es para marcar llegada o salida)
+    q(sb.rpc("pos_pin_login", { p_pin: pin, p_entrar: !marking })).then(function (r) {
+      if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; if (r && r.elegir) $("pinWho").textContent = "Toca tu nombre y vuelve a escribir tu PIN."; return; }
+      var who = staffList.find(function (s) { return s.id === r.id; }) || { id: r.id, name: r.name };
+      if (marking) { selected = who; tryPin(); return; }   // marcar sigue el camino de siempre, ya con la persona
+      entrar(who, pin, r);
+    }).catch(function (err) { pinBuf = ""; drawDots(); $("pinErr").textContent = errMsg(err); });
+    return;
+  }
   if (marking) {
     q(sb.rpc("pos_mark_status", { p_emp: emp.id, p_pin: pin })).then(function (st) {
       pinBuf = ""; drawDots(); markWho = { id: emp.id, name: emp.name, pin: pin }; drawMark(st); $("markDlg").showModal();
@@ -100,11 +118,14 @@ function tryPin() {
   }
   q(sb.rpc("pos_check_pin", { p_emp: emp.id, p_pin: pin })).then(function (r) {
     if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; return; }
-    U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
-    document.body.classList.toggle("nocharge", !U.charge);
-    show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-    touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); loadMeta(); waStart();
+    entrar(emp, pin, r);
   }).catch(fail);
+}
+function entrar(emp, pin, r) {
+  U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
+  document.body.classList.toggle("nocharge", !U.charge);
+  show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
+  touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); loadMeta(); waStart();
 }
 $("btnUser").addEventListener("click", lock);
 // Bloqueo automático tras 10 minutos sin uso.

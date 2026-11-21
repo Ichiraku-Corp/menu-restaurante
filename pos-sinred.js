@@ -163,6 +163,12 @@ var SRH = {
       return s;
     });
   },
+  pos_pin_login: function (a) {
+    var pins = srGet("pins") || {}, hits = Object.keys(pins).filter(function (k) { return pins[k].h === srPinKey(Number(k), a.p_pin); });
+    if (hits.length === 1) { var x = pins[hits[0]]; return { ok: true, id: Number(hits[0]), name: x.name, can_charge: !!x.charge }; }
+    if (hits.length > 1) return { ok: false, elegir: true, error: "Ese PIN lo tienen dos personas: toca tu nombre" };
+    return { ok: false, error: "Sin internet: en esta tablet solo entra quien ya entró antes con internet" };
+  },
   pos_check_pin: function (a) {
     var known = (srGet("pins") || {})[a.p_emp];
     if (known && known.h === srPinKey(a.p_emp, a.p_pin)) return { ok: true, name: known.name, can_charge: !!known.charge };
@@ -291,6 +297,7 @@ sb.rpc = function (name, args) {
       if (name === "pos_state" && r.data) srSet("st", Object.assign({}, r.data, { _saved: Date.now() }));   // _saved: para saber qué copia es más nueva
       else if (name === "pos_staff" && r.data) srSet("staff", r.data);
       else if (name === "pos_check_pin" && r.data && r.data.ok && args) { var p = srGet("pins") || {}; p[args.p_emp] = { h: srPinKey(args.p_emp, args.p_pin), name: r.data.name, charge: !!r.data.can_charge }; srSet("pins", p); srLanToken(); }
+      else if (name === "pos_pin_login" && r.data && r.data.ok && args && args.p_entrar !== false) { var p2 = srGet("pins") || {}; p2[r.data.id] = { h: srPinKey(r.data.id, args.p_pin), name: r.data.name, charge: !!r.data.can_charge }; srSet("pins", p2); srLanToken(); }
       else if (name === "pos_order" && r.data && args) {
         // Copia de cada cuenta abierta (para cobrarla sin internet con sus platos); se quitan las que ya se cerraron
         var m = srGet("ords") || {}, open = {}; (ST && ST.orders || []).forEach(function (o) { open[o.id] = true; });

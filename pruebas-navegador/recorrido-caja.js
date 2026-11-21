@@ -52,6 +52,14 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
       "quien cobra ve la meta del día con su barra (Ref 320 de Ref 450, 71 %)");
     ok(!(await page.isVisible("#annDlg")) && await S(() => window.__S.anns[0].read.includes(2)), "«Entendido» confirma la lectura y cierra");
     ok(true, "la cajera entra con su PIN");
+    // Entrar solo con el PIN, sin tocar el nombre: la base dice de quién es
+    await page.click("#btnUser"); await page.waitForSelector("#pin:not(.hidden)");
+    ok(await page.isVisible("#pad") && /Escribe tu PIN para entrar/.test(await page.textContent("#pinTitle")), "al bloquear, el teclado del PIN ya está a la vista (no hay que elegir el nombre)");
+    for (const k of "9999") await page.click(`#pad [data-k="${k}"]`); await page.waitForTimeout(300);
+    ok(/PIN incorrecto/.test(await page.textContent("#pinErr")) && await page.isVisible("#pin"), "un PIN que no es de nadie no entra");
+    for (const k of "2222") await page.click(`#pad [data-k="${k}"]`); await page.waitForSelector("#tablesView:not(.hidden)", { timeout: 5000 });
+    await page.waitForTimeout(300); if (await page.isVisible("#annDlg")) await page.click('#annBody [data-annok]').catch(() => {});
+    ok(/Cajera/.test(await page.textContent("#btnUser")) && await S(() => U && U.id === 2 && U.charge), "con solo su PIN entra la cajera, con su permiso de cobrar");
     ok(await page.isVisible("#health") && await page.locator('#health [data-h="lap"].ok').count() === 1, "arriba se ve Internet · Laptop · Impresora en verde");
     await S(() => { window.__BRIDGE = new Date(Date.now() - 10 * 60000).toISOString(); }); await S(() => refreshState()); await page.waitForTimeout(200);
     ok(await page.locator('#health [data-h="lap"].bad').count() === 1, "si la laptop no se conecta hace rato, «Laptop» se pone en rojo");

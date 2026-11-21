@@ -441,6 +441,33 @@ begin
               else jsonb_build_object('ok', false, 'error', 'PIN incorrecto') end;
 end $$;
 
+-- Entrar solo con el PIN, sin tocar antes el nombre: los PIN son únicos (pos_set_pin no deja repetir), así que el PIN
+-- dice quién es. Con p_entrar = false solo identifica (para marcar llegada o salida) y no cuenta como entrada.
+-- Si dos personas tuvieran el mismo PIN (puesto antes de esa regla) se pide tocar el nombre.
+-- Contra adivinanzas: 10 PIN sin dueño en 10 minutos (entre todas las tablets) cierran la entrada directa 10 minutos;
+-- tocando el nombre se sigue entrando, con el límite de siempre (5 intentos por persona).
+create or replace function public.pos_pin_login(p_pin text, p_entrar boolean default true) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare fails int; ids bigint[];
+begin
+  if not public.pos_is_device() then return jsonb_build_object('ok', false, 'error', 'Este dispositivo no está autorizado'); end if;
+  if coalesce(p_pin, '') !~ '^[0-9]{4}$' then return jsonb_build_object('ok', false, 'error', 'PIN incorrecto'); end if;
+  select count(*) into fails from public.pos_log where employee_id is null and action = 'pin_fallido' and at > now() - interval '10 minutes';
+  if fails >= 10 then return jsonb_build_object('ok', false, 'elegir', true, 'error', 'Demasiados intentos: toca tu nombre y escribe tu PIN'); end if;
+  select array_agg(e.id order by e.id) into ids from public.employees e
+   where e.active and e.pos_pin_hash is not null and e.pos_pin_hash = extensions.crypt(p_pin, e.pos_pin_hash);
+  if ids is null then
+    insert into public.pos_log (employee_id, action, detail) values (null, 'pin_fallido', jsonb_build_object('directo', true));
+    return jsonb_build_object('ok', false, 'error', 'PIN incorrecto');
+  end if;
+  if array_length(ids, 1) > 1 then return jsonb_build_object('ok', false, 'elegir', true, 'error', 'Ese PIN lo tienen dos personas: toca tu nombre'); end if;
+  select count(*) into fails from public.pos_log where employee_id = ids[1] and action = 'pin_fallido' and at > now() - interval '10 minutes';
+  if fails >= 5 then return jsonb_build_object('ok', false, 'error', 'Demasiados intentos. Espera 10 minutos.'); end if;
+  if coalesce(p_entrar, true) then insert into public.pos_log (employee_id, action) values (ids[1], 'entrada'); end if;
+  return jsonb_build_object('ok', true, 'id', ids[1], 'name', public.pos_emp_name(ids[1]),
+                            'can_charge', (select pos_can_charge from public.employees where id = ids[1]));
+end $$;
+
 -- ---------------------------------------------------------------- Quién está tomando el pedido
 -- La tablet que tiene abierta una mesa avisa cada 8 segundos; a los 30 sin aviso, la mesa queda libre sola (tablet apagada,
 -- sin señal). Si otra persona entra a la misma mesa, su tablet le pregunta y, si entra igual, a la primera se le cierra la
@@ -2102,7 +2129,7 @@ declare f text;
 begin
   foreach f in array array[
     'pos_is_device()', 'pos_auth(bigint, text)', 'pos_emp_name(bigint)', 'pos_rate()', 'pos_order_label(bigint)', 'pos_totals(bigint)',
-    'pos_print(text, text)', 'pos_next_number()', 'pos_staff()', 'pos_check_pin(bigint, text)', 'pos_state()', 'pos_order(bigint)',
+    'pos_print(text, text)', 'pos_next_number()', 'pos_staff()', 'pos_check_pin(bigint, text)', 'pos_pin_login(text, boolean)', 'pos_state()', 'pos_order(bigint)',
     'pos_open(bigint, text, bigint, text)', 'pos_add(bigint, text, bigint, jsonb)', 'pos_send(bigint, text, bigint)',
     'pos_void(bigint, text, bigint, text)', 'pos_discount(bigint, text, bigint, numeric, text)', 'pos_move(bigint, text, bigint, bigint)',
     'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
