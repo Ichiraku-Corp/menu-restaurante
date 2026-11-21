@@ -75,6 +75,9 @@ const lado = (37 + 8) * 6, bw = Math.ceil(lado / 8);
 ok(b[b.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00])) + 4] === bw, "mide " + lado + " puntos de ancho (unos 3,4 cm en una impresora de 80 mm)");
 const t = P.render("~Cuentanos como te fue\n@qr " + BASE + "AbCdEfGh12_-\n~Gracias");
 ok(t.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00])) > 0 && t.indexOf(Buffer.from("@qr")) < 0, "en el ticket, «@qr enlace» se imprime como código, no como texto");
+const ceros = t.subarray(2, 2 + 512);
+ok(t[0] === 0x1b && t[1] === 0x40 && ceros.length === 512 && ceros.every((x) => x === 0) && t[2 + 512] !== 0,
+  "cada ticket empieza reiniciando la impresora y con 512 ceros de margen (si pierde bytes al reiniciarse, no se come el logo)");
 const t2 = P.render("@qr " + "x".repeat(300));
 ok(t2.indexOf(Buffer.from("xxxx")) < 0, "si el enlace no cabe, el ticket sale igual sin el código");
 

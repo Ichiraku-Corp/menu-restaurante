@@ -282,7 +282,8 @@ function qrBytes(text, scale) {
 function render(body) {
   // Reiniciar y dejar un margen: algunas impresoras pierden los primeros bytes mientras se reinician,
   // y si eran el inicio del logo, el logo sale como letras sueltas. Los ceros (NUL) se ignoran.
-  const parts = [Buffer.from([ESC, 0x40]), Buffer.alloc(64, 0)];
+  // 512 y no 64: por USB llegan en paquetes de 64 bytes y la de caja a veces perdía más de uno (21/11).
+  const parts = [Buffer.from([ESC, 0x40]), Buffer.alloc(512, 0)];
   for (const raw of String(body).split("\n")) {
     if (raw === "=") { parts.push(Buffer.from("-".repeat(WIDTH) + "\n", "ascii")); continue; }
     if (raw.trim() === "@logo") { parts.push(logoBytes()); continue; }
