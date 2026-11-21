@@ -142,7 +142,21 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(preguntas.length === 4 && /\(hace 2 minutos\)/.test(preguntas[3]) && (await cajaJobs()) === j0 + 3,
       "si la sacó otra tablet hace 2 minutos (se ve en el mapa), también pregunta");
     page.off("dialog", enDialogo); autoDialog = true;
-    await page.click("#pay"); await page.waitForTimeout(200); await page.click('#payMethods [data-m="efectivo_usd"]');
+    // En el mapa: la mesa que pidió la cuenta dice hace cuánto, y a los 5 minutos se avisa
+    await page.evaluate((t) => { window.__S.orders.find((x) => x.status === "abierta" && x.precuenta_at).precuenta_at = t; }, new Date(Date.now() - 7 * 60000).toISOString());
+    await page.click("#back"); await page.waitForSelector("#tablesView:not(.hidden)"); await S(() => refreshState()); await page.waitForTimeout(300);
+    const t3 = (await page.locator('#areaBody [data-table]:has(.num:text-is("3"))').textContent()).replace(/\s+/g, " ");
+    ok(/cuenta hace 7 min/.test(t3) && /esperando/.test(t3) && /Mesas esperando[\s\S]*pidió la cuenta hace 7 min/.test(await page.textContent("#banners")),
+      "la mesa que pidió la cuenta hace 7 min lo dice y se avisa arriba (" + t3 + ")");
+    await page.click('#areaBody [data-table] .num:text-is("3")'); await page.waitForSelector("#orderView:not(.hidden)");
+    await page.click("#pay"); await page.waitForTimeout(200);
+    const orden = await page.evaluate(() => [...document.querySelectorAll("#payMethods [data-m]")].slice(0, 2).map((b) => b.dataset.m + (b.classList.contains("top") ? "*" : "")).join(","));
+    ok(orden === "punto_debito*,pago_movil*", "al cobrar, punto y pago móvil salen primero y más grandes (" + orden + ")");
+    await page.click('#payMethods [data-m="punto_debito"]'); await page.waitForTimeout(200);
+    ok(!(await page.evaluate(() => !!document.activeElement && document.activeElement.classList.contains("amt"))) && !(await page.isDisabled("#payOk")),
+      "todo con punto: un toque y queda listo para confirmar, sin abrir el teclado");
+    await page.locator("#payLines .pay .del").first().click(); await page.waitForTimeout(150);
+    await page.click('#payMethods [data-m="efectivo_usd"]');
     await page.click('#payLines [data-bill="20"]'); await page.click('#payLines [data-bill="5"]');
     ok((await page.locator("#payLines .amt").first().inputValue()) === "25.00", "billetes $20 + $5 ponen 25 en el monto");
     ok(await page.isDisabled("#payOk") && await page.locator("#changeAsk.need").count() === 1, "con vuelto, no deja confirmar hasta elegir cómo se entrega");

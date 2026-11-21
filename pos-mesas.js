@@ -110,7 +110,7 @@ function drawBanners() {
   if (al.length && U && U.charge) h += '<div class="banner alert"><b>⚠ Cobros hechos fuera de la caja (' + al.length + ")</b><ul>" + al.map(function (a) {
     return "<li>" + new Date(a.at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " · <b>" + esc(a.by || "") + "</b> cobró " + esc(a.label) + " · " + ref(num(a.amount_ref)) + " desde «" + esc(a.device) + "»</li>";
   }).join("") + '</ul><button type="button" id="alertsSeen">Visto</button></div>';
-  // Mesas esperando: pidieron la cuenta hace más de 10 min sin cobrar, o abiertas más de 10 min sin ningún plato
+  // Mesas esperando: pidieron la cuenta hace 5 min o más sin cobrar, o abiertas más de 10 min sin ningún plato
   var wait = ST.orders.filter(function (o) { return waitInfo(o); });
   if (wait.length) h += '<div class="banner warn"><b>Mesas esperando (' + wait.length + "):</b> " + wait.map(function (o) { return esc(o.label) + " — " + waitInfo(o); }).join(" · ") + "</div>";
   if (typeof WA !== "undefined" && WA.data && WA.data.orders.length) h = '<div class="banner alert"><b>📱 WhatsApp: ' + WA.data.orders.length + " pedido" + (WA.data.orders.length > 1 ? "s" : "") +
@@ -160,7 +160,8 @@ function drawTables() {
   }).join("");
   var due = ST.orders.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = ST.orders.filter(function (o) { return o.precuenta_at; }).length,
     busyT = ST.orders.filter(function (o) { return o.kind === "mesa"; }).length;
-  $("summary").innerHTML = '<div class="s"><span>Mesas ocupadas</span><b>' + busyT + " / " + ST.tables.length + '</b></div><div class="s"><span>Por cobrar</span><b>' + ref(due) + "</b></div>" +
+  // Las cifras de caja (por cobrar, meta…) son para quien cobra; a quien atiende mesas el mapa le queda entero
+  $("summary").innerHTML = !(U && U.charge) ? "" : '<div class="s"><span>Mesas ocupadas</span><b>' + busyT + " / " + ST.tables.length + '</b></div><div class="s"><span>Por cobrar</span><b>' + ref(due) + "</b></div>" +
     '<div class="s"><span>Pidieron la cuenta</span><b>' + asked + "</b></div>" + '<div class="s"><span>Caja</span><b style="color:' + (ST.session ? "var(--ok)" : "var(--warn)") + '">' + (ST.session ? "Abierta" : "Cerrada") + "</b></div>" + metaTile();
   if (cur.area === "Para llevar" || cur.area === "Delivery") {
     var kind = cur.area === "Delivery" ? "delivery" : "llevar", list = ST.orders.filter(function (o) { return o.kind === kind; }), ent = kind === "llevar" ? ST.entregar || [] : [];
@@ -173,7 +174,8 @@ function drawTables() {
   }
   if (cur.area === "Tops") { drawTops(); return; }
   if (cur.area === "Por cobrar") {
-    var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.opened_at) - new Date(b.opened_at); });
+    // Primero quien pidió la cuenta (el que más espera arriba), después el resto por orden de llegada
+    var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.precuenta_at || a.opened_at) - new Date(b.precuenta_at || b.opened_at); });
     var due = all.reduce(function (s, o) { return s + num(o.total) - num(o.paid); }, 0), asked = all.filter(function (o) { return o.precuenta_at; }).length;
     $("areaBody").innerHTML = '<div class="card"><div class="row between"><b style="font-size:20px">' + all.length + (all.length === 1 ? " pedido abierto · " : " pedidos abiertos · ") + ref(due) + " por cobrar</b>" +
       '<span class="muted">' + asked + " pidieron la cuenta</span></div>" + (all.length && window.innerWidth <= 560 ? '<div class="duecards">' + all.map(function (o) {
@@ -224,11 +226,15 @@ function tableCard(o, title, attr) {
   var m = Math.round((Date.now() - new Date(o.opened_at).getTime()) / 60000), cls = (o.precuenta_at ? "bill" : "busy") + (o.pending ? " has-pend" : "") + (at ? " att" : "");
   return '<button type="button" class="' + cls + '" ' + attr + '><span class="st">' + (at ? "Tomando pedido" : o.precuenta_at ? "Pidió la cuenta" : o.items ? "Comiendo" : "Abierta") + '</span><span class="num">' + title + "</span>" +
     (at ? '<span class="pill att">' + esc(at.name || "Alguien") + "</span>" : "") +
-    '<span class="amt">' + ref(num(o.total) - num(o.paid)) + "</span><small>" + esc(o.opened_by || "") + ' · <span class="' + (m >= 60 ? "late" : "") + '">' + mins(o.opened_at) + "</span></small>" + badges(o) + "</button>";
+    '<span class="amt">' + ref(num(o.total) - num(o.paid)) + "</span><small>" + esc(o.opened_by || "") + " · " +
+    (o.precuenta_at ? '<span class="' + (minsSince(o.precuenta_at) >= CUENTA_AVISO_MIN ? "late" : "") + '">cuenta hace ' + mins(o.precuenta_at) + "</span>"
+                    : '<span class="' + (m >= 60 ? "late" : "") + '">' + mins(o.opened_at) + "</span>") + "</small>" + badges(o) + "</button>";
 }
 function minsSince(t) { return Math.round((Date.now() - new Date(t).getTime()) / 60000); }
+// Pedir la cuenta y pagar tomaba 8 minutos en promedio (semana del 14/11): a los 5 ya se avisa
+var CUENTA_AVISO_MIN = 5;
 function waitInfo(o) {
-  if (o.precuenta_at && num(o.total) - num(o.paid) > 0.02 && minsSince(o.precuenta_at) >= 10) return "pidió la cuenta hace " + minsSince(o.precuenta_at) + " min";
+  if (o.precuenta_at && num(o.total) - num(o.paid) > 0.02 && minsSince(o.precuenta_at) >= CUENTA_AVISO_MIN) return "pidió la cuenta hace " + minsSince(o.precuenta_at) + " min";
   if (!o.items && minsSince(o.opened_at) >= 10) return "sin pedido hace " + minsSince(o.opened_at) + " min";
   return "";
 }

@@ -18,7 +18,9 @@ $("pay").addEventListener("click", function () {
     $("payTotal").textContent = ref(dueNow) + (num(t.paid) ? " · ya abonó " + ref(num(t.paid)) + " de " + ref(num(t.total)) : "");
     $("payRateTxt").textContent = ST.rate ? "Tasa € BCV " + nf2.format(ST.rate) : "Sin tasa: solo divisas";
     $("payTotalBs").textContent = ST.rate ? bs(Math.round(dueNow * ST.rate * 100) / 100) : "";
-    $("payMethods").innerHTML = METHODS.map(function (m) { return '<button type="button" class="mbtn" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
+    // Primero lo que más se usa (21/11: punto débito 58 % de los cobros, pago móvil 23 %): los dos primeros, más grandes
+    $("payMethods").innerHTML = METHODS.slice().sort(function (a, b) { return cobroOrden(a[0]) - cobroOrden(b[0]); }).map(function (m, i) {
+      return '<button type="button" class="mbtn' + (i < 2 ? " top" : "") + '" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
       (off ? "" : '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>") +
       '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
     TABS = []; if (!off) q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
@@ -58,9 +60,13 @@ $("payMethods").addEventListener("click", function (e) {
   if (splitEq > 1) rest = Math.min(rest, Math.ceil(s.total / splitEq * 100) / 100);
   pays.push({ method: m[0], amount: splitEq > 1 ? (m[2] === "REF" ? rest.toFixed(2) : (Math.round(rest * ST.rate * 100) / 100).toFixed(2)) : suggest(m[0]), reference: "" });
   drawPays();
-  var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); }
+  // Si este pago cubre todo (lo más común: «todo con punto»), no se abre el teclado: queda listo para «Confirmar cobro».
+  // Si es una parte (o ya había otro pago), se pone el cursor en el monto para escribirlo.
+  if (pays.length > 1 || paySums().rest > 0.009) { var inputs = document.querySelectorAll("#payLines .amt"); if (inputs.length) { inputs[inputs.length - 1].focus(); inputs[inputs.length - 1].select(); } }
   payReveal();
 });
+var COBRO_ORDEN = ["punto_debito", "pago_movil", "efectivo_usd", "efectivo_bs", "binance", "punto_credito", "zelle", "paypal"];
+function cobroOrden(k) { var i = COBRO_ORDEN.indexOf(k); return i < 0 ? 99 : i; }
 // El pie fijo (pagado, vuelto y «Confirmar») no debe tapar el pago que se acaba de añadir ni el que se está
 // escribiendo, aunque el pie crezca (al aparecer «¿Cómo le das el vuelto?»)
 var payFootH = 0;
