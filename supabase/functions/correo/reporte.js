@@ -71,6 +71,50 @@ ${s.notes ? H("Notas de la cajera") + "<p>" + he(s.notes) + "</p>" : ""}
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const KINDS = { mesa: "Mesas", delivery: "Delivery propio", yummy: "Yummy", llevar: "Para llevar" };
 const dd = (ymd) => { const d = new Date(ymd + "T12:00:00Z"); return DIAS[d.getUTCDay()] + " " + String(d.getUTCDate()).padStart(2, "0") + "/" + String(d.getUTCMonth() + 1).padStart(2, "0"); };
+// Indicadores (KPI) de la semana contra la anterior: los mismos de Gestión › Inicio (inicio.sql, kpi_semana).
+// El cambio va con flecha y texto; verde si mejora y rojo si empeora (el tiempo por mesa no se pinta).
+function kpiHtml(k) {
+  if (!k || !k.actual) return "";
+  const A = k.actual, B = k.anterior || {}, f1 = (n) => Number(n).toLocaleString("es-VE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const g = (o, a, b) => ((o || {})[a] || {})[b], pc = (n) => (n == null ? "—" : Math.round(Number(n)) + " %"), mn = (n) => (n == null ? "—" : f1(n) + " min");
+  const cmp = (a, b, modo, mejor) => {
+    if (a == null || b == null || (modo === "%" && !Number(b))) return '<span style="color:#777">—</span>';
+    const d = modo === "%" ? (Number(a) - Number(b)) / Math.abs(Number(b)) * 100 : Number(a) - Number(b), x = Math.abs(d);
+    if (x < (modo === "%" ? 0.5 : modo === "n" ? 1 : 0.05)) return '<span style="color:#777">igual</span>';
+    const up = d > 0, color = !mejor ? "#555" : up === (mejor === "sube") ? "#2f7d4f" : "#b3261e";
+    const txt = modo === "%" ? Math.round(x) + " %" : modo === "pts" ? f1(x) + " pts" : modo === "min" ? f1(x) + " min" : modo === "ref" ? "Ref " + fm(x) : modo === "n1" ? f1(x) : Math.round(x);
+    return `<b style="color:${color}">${up ? "▲" : "▼"} ${txt}</b>`;
+  };
+  const can = g(A, "ventas", "canales") || {}, tot = ["mesa", "llevar", "delivery"].reduce((s, c) => s + Number((can[c] || {}).ventas || 0), 0);
+  const parte = (c) => (tot ? Math.round(Number((can[c] || {}).ventas || 0) / tot * 100) : 0);
+  const cierres = (o) => (g(o, "control", "cierres") ? `${fq(g(o, "control", "cierres_fuera"))} de ${fq(g(o, "control", "cierres"))}` : "—");
+  const grupo = (t) => [`<b style="color:#e5206b">${t}</b>`, "", "", ""];
+  const rows = [
+    grupo("Ventas"),
+    ["Ventas (con IVA, sin servicio)", "Ref " + fm(g(A, "ventas", "total")), "Ref " + fm(g(B, "ventas", "total")), cmp(g(A, "ventas", "total"), g(B, "ventas", "total"), "%", "sube")],
+    ["Ticket promedio", g(A, "ventas", "ticket") == null ? "—" : "Ref " + fm(g(A, "ventas", "ticket")), g(B, "ventas", "ticket") == null ? "—" : "Ref " + fm(g(B, "ventas", "ticket")),
+      cmp(g(A, "ventas", "ticket"), g(B, "ventas", "ticket"), "%", "sube")],
+    ["Mesa · para llevar · delivery", tot ? `${parte("mesa")} % · ${parte("llevar")} % · ${parte("delivery")} %` : "—", "", ""],
+    grupo("Costos y margen"),
+    ["Insumos (según las recetas)", pc(g(A, "costos", "insumos_pct")), pc(g(B, "costos", "insumos_pct")), cmp(g(A, "costos", "insumos_pct"), g(B, "costos", "insumos_pct"), "pts", "baja")],
+    ["Nómina", pc(g(A, "costos", "nomina_pct")), pc(g(B, "costos", "nomina_pct")), cmp(g(A, "costos", "nomina_pct"), g(B, "costos", "nomina_pct"), "pts", "baja")],
+    ["Gastos (fijos por día + variables)", "Ref " + fm(g(A, "costos", "gastos")), "Ref " + fm(g(B, "costos", "gastos")), cmp(g(A, "costos", "gastos"), g(B, "costos", "gastos"), "ref", "baja")],
+    ["Lo que queda", `Ref ${fm(g(A, "costos", "queda"))} (${pc(g(A, "costos", "queda_pct"))})`, `Ref ${fm(g(B, "costos", "queda"))} (${pc(g(B, "costos", "queda_pct"))})`,
+      cmp(g(A, "costos", "queda_pct"), g(B, "costos", "queda_pct"), "pts", "sube")],
+    grupo("Servicio"),
+    ["Tiempo de cocina (enviado a listo)", mn(g(A, "servicio", "cocina_min")), mn(g(B, "servicio", "cocina_min")), cmp(g(A, "servicio", "cocina_min"), g(B, "servicio", "cocina_min"), "min", "baja")],
+    ["Tiempo por mesa (abrir a cobrar)", mn(g(A, "servicio", "mesa_min")), mn(g(B, "servicio", "mesa_min")), cmp(g(A, "servicio", "mesa_min"), g(B, "servicio", "mesa_min"), "min", "")],
+    ["Calificación de clientes", g(A, "servicio", "calificacion") == null ? "—" : f1(g(A, "servicio", "calificacion")) + " de 5 (" + fq(g(A, "servicio", "calificaron")) + ")",
+      g(B, "servicio", "calificacion") == null ? "—" : f1(g(B, "servicio", "calificacion")) + " de 5", cmp(g(A, "servicio", "calificacion"), g(B, "servicio", "calificacion"), "n1", "sube")],
+    grupo("Control"),
+    ["Descuentos", "Ref " + fm(g(A, "control", "descuentos")), "Ref " + fm(g(B, "control", "descuentos")), cmp(g(A, "control", "descuentos"), g(B, "control", "descuentos"), "ref", "baja")],
+    ["Platos anulados en cocina", fq(g(A, "control", "anulados")), fq(g(B, "control", "anulados")), cmp(g(A, "control", "anulados"), g(B, "control", "anulados"), "n", "baja")],
+    ["Cierres de caja que no cuadran", cierres(A), cierres(B), cmp(g(A, "control", "cierres_fuera"), g(B, "control", "cierres_fuera"), "n", "baja")],
+  ];
+  const cob = g(A, "costos", "cobertura_pct");
+  return table(["Indicador", "Esta semana", "Semana anterior", "Cambio"], rows, [1, 2, 3]) +
+    (cob != null && cob < 100 ? `<p style="margin:-10px 0 8px;color:#777;font-size:12px">Insumos con recetas para el ${Math.round(cob)} % de lo vendido; el resto se estima igual.</p>` : "");
+}
 function weekSubject(d) { return `Resumen semanal ${dd(d.from)} al ${dd(d.to)} · Ref ${fm(d.totals && d.totals.total)}`; }
 function weekHtml(d) {
   const t = d.totals || {}, H = (x) => `<h2 style="font-size:17px;margin:22px 0 4px;color:#e5206b">${x}</h2>`;
@@ -87,6 +131,7 @@ ${big("Ventas", "Ref " + fm(t.total), chg === null ? "primera semana" : (chg >= 
 ${big("Pedidos", fq(t.orders), "ticket promedio Ref " + fm(t.avg))}
 ${big("Servicio acumulado", "Ref " + fm(t.service), "propinas Ref " + fm(d.tips))}
 </tr></table>
+${d.kpis ? H("Indicadores de la semana") + kpiHtml(d.kpis) : ""}
 ${H("🛵 Pago a la empresa de delivery")}
 <p style="margin:4px 0 8px;font-size:15px">Cobrado a los clientes por delivery: <b>Ref ${fm(dl.fees)}</b> en ${fq(dl.orders)} envíos.${paidDl ? ` Ya salió de caja esta semana: Ref ${fm(paidDl)}.` : ""}</p>
 <p style="margin:0 0 8px;color:#555;font-size:13px">Al pagarle, registra en caja una <b>Salida de caja</b> con el motivo «Pago delivery semanal».</p>

@@ -104,6 +104,24 @@
         gastos: [{ fecha: m, concepto: "Alquiler", tipo: "Fijo del mes", monto: 900, factura: false }, { fecha: d("14"), concepto: "Compra de hielo & agua <2>", tipo: "Salida de caja (Efectivo $)", monto: 5, factura: true }],
         nomina: [{ quincena: m, empleado: "Ana Pérez", ref: 120, tasa: 1009.3413, bs: 121120.96, fecha: d("15") }] };
     },
+    // Indicadores de ejemplo (números inventados): 7 días contra los 7 anteriores, o 30 contra 30
+    gestion_kpis: function (a) {
+      G.calls.push({ rpc: "gestion_kpis", args: a });
+      var n = a && a.p_dias === 30 ? 30 : 7, f = n / 7, dia = function (k) { return new Date(Date.now() - k * 864e5).toISOString().slice(0, 10); };
+      var per = function (desde, hasta, x) {
+        return { desde: desde, hasta: hasta, dias: n,
+          ventas: { total: x.v * f, pedidos: Math.round(x.p * f), ticket: x.v / x.p,
+                    canales: { mesa: { pedidos: Math.round(x.p * 0.7 * f), ventas: x.v * 0.68 * f }, llevar: { pedidos: Math.round(x.p * 0.22 * f), ventas: x.v * 0.21 * f },
+                               delivery: { pedidos: Math.round(x.p * 0.08 * f), ventas: x.v * 0.11 * f } } },
+          costos: { insumos_pct: x.ins, cobertura_pct: 88, insumos: x.v / 1.16 * x.ins / 100 * f, nomina: 470.8 * f, nomina_pct: x.nom, gastos: 352.6 * f,
+                    comisiones: 41.2 * f, perdidas: 12.5 * f, servicio_local: 260.1 * f, netas: x.v / 1.16 * f, queda: x.v / 1.16 * x.q / 100 * f, queda_pct: x.q },
+          servicio: { cocina_min: x.coc, cocina_n: Math.round(512 * f), mesa_min: x.mesa, mesa_n: Math.round(150 * f), calificacion: x.cal, calificaron: Math.round(23 * f), recibos_qr: Math.round(180 * f) },
+          control: { descuentos: x.desc * f, descuentos_pct: x.desc / x.v * 100, anulados: Math.round(x.anu * f), anulados_monto: x.anu * 8.7 * f, cierres: n, cierres_fuera: x.cf, diferencia: x.dif } };
+      };
+      return { dias: n,
+        actual: per(dia(n), dia(1), { v: 3520.4, p: 214, ins: 41.2, nom: 15.5, q: 39.8, coc: 14.2, mesa: 48, cal: 4.6, desc: 45.5, anu: 6, cf: 1, dif: -12.4 }),
+        anterior: per(dia(2 * n), dia(n + 1), { v: 3210, p: 201, ins: 43, nom: 16.9, q: 36.1, coc: 15.8, mesa: 46, cal: 4.5, desc: 30.2, anu: 9, cf: 2, dif: -20.1 }) };
+    },
     gestion_meta: function () { return { dia: new Date().toISOString().slice(0, 10), meta: 620, vendido: 320.45, pedidos: 21, promedio: 617.94, dias: 8, pct: 0 }; },
     gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
       caja: { abierta_desde: new Date(Date.now() - 5 * 3600e3).toISOString(), por: "Cajera" }, ultimo_cierre: { at: new Date(Date.now() - 20 * 3600e3).toISOString(), por: "Stefan", notas: "", correo: "enviado" },

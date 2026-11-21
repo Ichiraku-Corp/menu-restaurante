@@ -2079,7 +2079,7 @@ $$;
 -- El puente la llama cada minuto: desde el lunes a las 8 a. m. deja en cola el resumen de la semana pasada (una sola vez).
 create or replace function public.pos_week_queue() returns boolean
 language plpgsql security definer set search_path = public as $$
-declare nowc timestamp := now() at time zone 'America/Caracas'; d1 date; rcp text;
+declare nowc timestamp := now() at time zone 'America/Caracas'; d1 date; rcp text; kpis jsonb;
 begin
   if not (coalesce(auth.jwt() ->> 'role', '') = 'service_role' or coalesce(public.staff_role(), '') in ('impresora', 'dueño', 'admin')) then raise exception 'Sin permiso'; end if;
   d1 := date_trunc('week', nowc)::date - 7;
@@ -2089,7 +2089,10 @@ begin
                  and (closed_at at time zone 'America/Caracas')::date between d1 and d1 + 6) then return false; end if;
   select trim(report_emails) into rcp from public.gestion_settings limit 1;
   if coalesce(rcp, '') = '' then return false; end if;
-  insert into public.pos_reports (recipients, data) values (rcp, public.pos_week_report(d1));
+  -- Indicadores de la semana contra la anterior (inicio.sql); si fallaran, el resumen sale igual sin ellos
+  begin kpis := public.kpi_semana(d1); exception when others then kpis := null; end;
+  insert into public.pos_reports (recipients, data)
+  values (rcp, public.pos_week_report(d1) || case when kpis is null then '{}'::jsonb else jsonb_build_object('kpis', kpis) end);
   return true;
 end $$;
 

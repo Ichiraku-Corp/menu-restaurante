@@ -94,3 +94,21 @@ Deno.test("las alertas llegan con su asunto y sus líneas", async () => {
   const html = reportHtml(d);
   assert(html.includes("Diferencia por método: Efectivo $: falta $ 25,00") && html.includes("&lt;sin nota&gt;") && !html.includes("<sin nota>"), "líneas escapadas");
 });
+
+Deno.test("el resumen del lunes trae los indicadores de la semana contra la anterior", async () => {
+  const { reportHtml } = await import("../correo/reporte.js");
+  const per = (v: number, ins: number, cf: number) => ({
+    ventas: { total: v, ticket: v / 100, canales: { mesa: { ventas: v * 0.7 }, llevar: { ventas: v * 0.3 } } },
+    costos: { insumos_pct: ins, cobertura_pct: 90, nomina_pct: 15, gastos: 300, queda: v * 0.3, queda_pct: 35 },
+    servicio: { cocina_min: 14, mesa_min: 45, calificacion: 4.6, calificaron: 12 },
+    control: { descuentos: 20, anulados: 3, cierres: 7, cierres_fuera: cf },
+  });
+  const sem = { kind: "semanal", from: "2026-11-16", to: "2026-11-22", totals: { total: 3500 }, kpis: { dias: 7, actual: per(3500, 41, 1), anterior: per(3200, 43, 2) } };
+  const html = reportHtml(sem);
+  assert(html.includes("Indicadores de la semana") && html.includes("Esta semana") && html.includes("Semana anterior"), "sección de indicadores");
+  assert(/#2f7d4f">▲ 9 %/.test(html), "ventas +9 %, en verde");
+  assert(/#2f7d4f">▼ 2,0 pts/.test(html), "insumos bajan 2 puntos: bueno, en verde");
+  assert(html.includes("70 % · 30 % · 0 %"), "mezcla mesa · para llevar · delivery");
+  assert(html.includes("1 de 7"), "cierres que no cuadran");
+  assert(!reportHtml({ kind: "semanal", from: "2026-11-16", to: "2026-11-22", totals: { total: 1 } }).includes("Indicadores de la semana"), "sin indicadores, el resumen sale igual");
+});

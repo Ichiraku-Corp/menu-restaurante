@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TVXY6bcGe82kfzrIGtQAl2AlY65jX2Kao/DL8CepnFU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-6TkEEtTWByFzVsezCdFGnsEnm1kdlw4agJBnNFdBLVY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -124,6 +124,15 @@
   .seg { display:inline-flex; gap:4px; flex-wrap:wrap; }
   .seg button { min-height:34px; padding:4px 10px; font-size:13px; }
   .seg button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  /* Indicadores (KPI) en Inicio: cuatro grupos de fichas con su comparación contra el período anterior */
+  .indg { margin-top:14px; }
+  .indg h3 { font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:0 0 8px; }
+  .indg .kpi b { font-size:20px; }
+  .indg .kpi b.neg { color:var(--danger); }
+  .indg .kpi small { display:block; font-size:12px; color:var(--muted); margin-top:2px; line-height:1.35; }
+  .indg .kpi .cmp { display:block; margin-top:6px; font-size:12px; font-style:normal; color:var(--muted); }
+  .indg .kpi .cmp.good { color:var(--ok); }
+  .indg .kpi .cmp.bad { color:var(--danger); }
   .vh { position:relative; }
   .vh-scroll { overflow-x:auto; }
   .vh-grid { display:grid; grid-template-columns:38px repeat(var(--cols), minmax(22px, 1fr)); gap:2px; min-width:calc(38px + var(--cols) * 24px); }
@@ -254,6 +263,12 @@
       <div class="row between"><p class="muted" style="margin:0" id="iniFecha">Lo de hoy, en vivo.</p><button type="button" id="iniRefresh">Actualizar</button></div>
       <div class="kpis" style="margin-top:12px" id="iniKpis"><div class="kpi"><span>Cargando…</span></div></div>
       <div class="card metacard" id="iniMeta" hidden></div>
+      <div class="card" id="iniInd">
+        <div class="row between"><h2 style="margin:0">Indicadores</h2>
+          <div class="seg" id="indDias" role="group" aria-label="Período de los indicadores"><button type="button" data-d="7" class="on">7 días</button><button type="button" data-d="30">30 días</button></div></div>
+        <p class="muted" id="indRango" style="margin:6px 0 0">Cargando…</p>
+        <div id="indBody"></div>
+      </div>
       <div class="grid2 ini">
         <div class="card"><h2>Estado</h2><div id="iniEstado"></div></div>
         <div class="card"><h2>Alertas</h2><div id="iniAlertas"></div></div>
@@ -816,7 +831,79 @@
     if (!mfaOk || $("tabs").querySelector('[data-tab="inicio"]').classList.contains("on") === false) return;
     q(sb.rpc("gestion_inicio")).then(drawInicio).catch(function (e) { $("iniKpis").innerHTML = '<div class="kpi"><span>No se pudo cargar</span><b>—</b><span>' + esc(e.message || "") + "</span></div>"; });
     opt(sb.rpc("gestion_meta")).then(drawMeta);
+    loadKpis(false);
   }
+  // ---------------------------------------------------------------- Inicio: indicadores (KPI)
+  // Los últimos 7 o 30 días completos (hasta ayer) contra los 7 o 30 anteriores: ventas, costos y margen, servicio y control.
+  // Se piden al entrar a Inicio y cada 10 minutos (no cambian durante el día: lo de hoy está arriba).
+  var IND = { dias: 7, at: 0 };
+  try { if (Number(localStorage.getItem("gestion-ind-dias")) === 30) IND.dias = 30; } catch (e) { /* sin almacenamiento: 7 días */ }
+  var nf0 = new Intl.NumberFormat("es-VE", { maximumFractionDigits: 0 }), nf1 = new Intl.NumberFormat("es-VE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  function loadKpis(force) {
+    if (!force && Date.now() - IND.at < 10 * 60000) return;
+    IND.at = Date.now();
+    var pedido = IND.dias;
+    opt(sb.rpc("gestion_kpis", { p_dias: pedido })).then(function (r) { if (pedido === IND.dias) drawKpis(r); });
+  }
+  function syncIndDias() { Array.prototype.forEach.call($("indDias").querySelectorAll("[data-d]"), function (b) { b.classList.toggle("on", Number(b.dataset.d) === IND.dias); }); }
+  function fechaCorta(d) { return new Date(String(d) + "T12:00:00").toLocaleDateString("es-VE", { day: "numeric", month: "short" }); }
+  // Cambio contra el período anterior: «%» relativo, «pts» puntos de porcentaje, «min» minutos, «ref» monto, «n» cantidad, «n1» con un decimal.
+  // mejor = "sube", "baja" o "" (sin color: ni bueno ni malo). Siempre con flecha y texto, no solo color.
+  function indCmp(a, b, modo, mejor) {
+    if (a == null || b == null || (modo === "%" && !num(b))) return '<em class="cmp">sin datos de antes</em>';
+    a = num(a); b = num(b);
+    var d = modo === "%" ? (a - b) / Math.abs(b) * 100 : a - b;
+    if (Math.abs(d) < (modo === "%" ? 0.5 : modo === "n" ? 1 : 0.05)) return '<em class="cmp">igual que antes</em>';
+    var up = d > 0, cls = !mejor ? "" : up === (mejor === "sube") ? " good" : " bad", x = Math.abs(d);
+    var txt = modo === "%" ? nf0.format(x) + " %" : modo === "pts" ? nf1.format(x) + (Math.round(x * 10) === 10 ? " punto" : " puntos") : modo === "min" ? nf1.format(x) + " min"
+      : modo === "ref" ? money(x) : modo === "n1" ? nf1.format(x) : nf0.format(x);
+    return '<em class="cmp' + cls + '">' + (up ? "▲ " : "▼ ") + txt + " vs. antes</em>";
+  }
+  function indTile(label, value, detail, cmp, neg) {
+    return '<div class="kpi"><span>' + label + "</span><b" + (neg ? ' class="neg"' : "") + ">" + value + "</b>" + (detail ? "<small>" + detail + "</small>" : "") + (cmp || "") + "</div>";
+  }
+  function indGroup(title, tiles) { return '<div class="indg"><h3>' + title + '</h3><div class="kpis">' + tiles.join("") + "</div></div>"; }
+  function drawKpis(r) {
+    if (!r) { $("indRango").textContent = "Para ver los indicadores, vuelve a ejecutar supabase/inicio.sql."; $("indBody").innerHTML = ""; return; }
+    var A = r.actual, B = r.anterior, V = A.ventas, Vb = B.ventas, K = A.costos, Kb = B.costos, S2 = A.servicio, Sb = B.servicio, C = A.control, Cb = B.control;
+    // Antes del sistema de caja (7/11) solo hay ventas por día: lo demás no se compara
+    var posB = Object.keys(Vb.canales || {}).length > 0, sinPos = '<em class="cmp">sin datos de antes</em>';
+    $("indRango").textContent = "Del " + fechaCorta(A.desde) + " al " + fechaCorta(A.hasta) + ", contra los " + r.dias + " días anteriores (" + fechaCorta(B.desde) + " al " + fechaCorta(B.hasta) + ").";
+    var can = V.canales || {}, tot = ["mesa", "llevar", "delivery"].reduce(function (s, k) { return s + num(can[k] && can[k].ventas); }, 0);
+    var parte = function (k) { return tot ? Math.round(num(can[k] && can[k].ventas) / tot * 100) : 0; };
+    var dif = num(C.diferencia);
+    $("indBody").innerHTML =
+      indGroup("Ventas", [
+        indTile("Ventas", money(V.total), "con IVA, sin el servicio", indCmp(V.total, Vb.total, "%", "sube")),
+        indTile("Pedidos", nf0.format(num(V.pedidos)), "", indCmp(V.pedidos, Vb.pedidos, "%", "sube")),
+        indTile("Ticket promedio", V.ticket != null ? money(V.ticket) : "—", "por pedido", indCmp(V.ticket, Vb.ticket, "%", "sube")),
+        indTile("Por canal", tot ? parte("mesa") + " % mesa" : "—", tot ? parte("llevar") + " % para llevar · " + parte("delivery") + " % delivery" : "sin pedidos de la caja", "")]) +
+      indGroup("Costos y margen", [
+        indTile("Insumos", K.insumos_pct != null ? pct(K.insumos_pct) : "—",
+          K.insumos_pct != null ? "de lo vendido · con recetas para el " + nf0.format(num(K.cobertura_pct)) + " % de las ventas" : "faltan recetas o ventas por plato", indCmp(K.insumos_pct, Kb.insumos_pct, "pts", "baja")),
+        indTile("Nómina", K.nomina_pct != null ? pct(K.nomina_pct) : "—", money(K.nomina) + " en estos días", indCmp(K.nomina_pct, Kb.nomina_pct, "pts", "baja")),
+        indTile("Gastos", money(K.gastos), "fijos del mes repartidos por día, más los variables" + (num(K.perdidas) ? " · pérdidas de inventario " + money(K.perdidas) : ""), indCmp(K.gastos, Kb.gastos, "ref", "baja")),
+        indTile("Lo que queda", money(K.queda), (K.queda_pct != null ? pct(K.queda_pct) + " de las ventas sin IVA" : "") + ", después de insumos, nómina, gastos y comisiones",
+          indCmp(K.queda_pct, Kb.queda_pct, "pts", "sube"), num(K.queda) < 0)]) +
+      indGroup("Servicio", [
+        indTile("Tiempo de cocina", S2.cocina_min != null ? nf1.format(num(S2.cocina_min)) + " min" : "—",
+          S2.cocina_n ? "de enviado a listo, promedio de " + nf0.format(num(S2.cocina_n)) + " platos" : "se mide cuando cocina marca «listo»", posB ? indCmp(S2.cocina_min, Sb.cocina_min, "min", "baja") : sinPos),
+        indTile("Tiempo por mesa", S2.mesa_min != null ? nf0.format(num(S2.mesa_min)) + " min" : "—", S2.mesa_n ? "de abrir a cobrar, " + nf0.format(num(S2.mesa_n)) + " mesas" : "", posB ? indCmp(S2.mesa_min, Sb.mesa_min, "min", "") : sinPos),
+        indTile("Calificación", S2.calificacion != null ? nf1.format(num(S2.calificacion)) + " de 5" : "—",
+          num(S2.recibos_qr) ? nf0.format(num(S2.calificaron)) + " de " + nf0.format(num(S2.recibos_qr)) + " recibos con QR la dejaron" : "sin opiniones todavía", indCmp(S2.calificacion, Sb.calificacion, "n1", "sube"))]) +
+      indGroup("Control", [
+        indTile("Descuentos", money(C.descuentos), C.descuentos_pct != null ? pct(C.descuentos_pct) + " de las ventas" : "", posB ? indCmp(C.descuentos, Cb.descuentos, "ref", "baja") : sinPos),
+        indTile("Anulados en cocina", nf0.format(num(C.anulados)) + (num(C.anulados) === 1 ? " plato" : " platos"), money(C.anulados_monto) + " que ya se habían enviado",
+          posB ? indCmp(C.anulados, Cb.anulados, "n", "baja") : sinPos),
+        indTile("Cierres de caja", !num(C.cierres) ? "—" : num(C.cierres_fuera) ? nf0.format(num(C.cierres_fuera)) + " de " + nf0.format(num(C.cierres)) + " no cuadran" : "Todos cuadran",
+          num(C.cierres) ? "diferencia total: " + (dif > 0 ? "sobran " : dif < 0 ? "faltan " : "") + money(Math.abs(dif)) : "", posB ? indCmp(C.cierres_fuera, Cb.cierres_fuera, "n", "baja") : sinPos, num(C.cierres_fuera) > 0)]);
+  }
+  $("indDias").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-d]"); if (!b) return;
+    IND.dias = Number(b.dataset.d); try { localStorage.setItem("gestion-ind-dias", String(IND.dias)); } catch (x) { /* sin almacenamiento */ }
+    syncIndDias(); $("indRango").textContent = "Cargando…"; loadKpis(true);
+  });
+  syncIndDias();
   // Meta del día: promedio de ese día de la semana en las últimas 8 semanas (sin servicio) contra lo cobrado hoy
   var DIAS_PL = ["domingos", "lunes", "martes", "miércoles", "jueves", "viernes", "sábados"];
   function drawMeta(m) {
@@ -856,7 +943,7 @@
     $("iniTop").innerHTML = top.length ? top.map(function (t, i) { return '<div class="toprow"><b>' + (i + 1) + "</b><span>" + esc(t.name) + '</span><div class="bar"><i style="width:' + Math.round(num(t.qty) / mx * 100) + '%"></i></div><b class="n">' + nf3.format(num(t.qty)) + "</b></div>"; }).join("")
       : '<p class="muted" style="margin:0">Todavía no hay pedidos hoy.</p>';
   }
-  $("iniRefresh").addEventListener("click", loadInicio);
+  $("iniRefresh").addEventListener("click", function () { IND.at = 0; loadInicio(); });
   $("iniAlertas").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (!b) return; var t = document.querySelector('#tabs [data-tab="' + b.dataset.go + '"]'); if (t) t.click(); });
   setInterval(function () { if (!document.hidden) loadInicio(); }, 60000);
   function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); renderEstaciones(); loadServicio(); }

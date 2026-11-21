@@ -42,6 +42,23 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     const ini = await page.textContent("#iniMeta");
     ok(/Meta de hoy/.test(ini) && /Ref 320,45 de Ref 620,00 · 52 %/.test(ini) && /Faltan Ref 299,55/.test(ini) && /promedio de los últimos 8 (lunes|martes|miércoles|jueves|viernes|sábados|domingos) \(Ref 617,94\)/.test(ini),
       "Inicio muestra la meta del día: lo cobrado, la meta, cuánto falta y de dónde sale");
+    // Indicadores (KPI): cuatro grupos, cada número con su comparación (flecha y texto; verde si mejora, rojo si empeora)
+    await page.waitForSelector("#indBody .indg", { timeout: 3000 });
+    const ind = await page.evaluate(() => ({ grupos: [...document.querySelectorAll("#indBody .indg h3")].map((h) => h.textContent).join(","),
+      texto: document.querySelector("#iniInd").textContent.replace(/\s+/g, " ") }));
+    const ficha = (t) => page.locator("#indBody .kpi").filter({ has: page.locator("span", { hasText: new RegExp("^" + t + "$") }) }).first()
+      .evaluate((k) => ({ valor: k.querySelector("b").textContent, b: k.querySelector("b").className, cmp: k.querySelector(".cmp").textContent, cls: k.querySelector(".cmp").className }));
+    ok(ind.grupos === "Ventas,Costos y margen,Servicio,Control" && /contra los 7 días anteriores/.test(ind.texto), "Inicio tiene los indicadores de 7 días en cuatro grupos (" + ind.grupos + ")");
+    const fv = await ficha("Ventas"), fi = await ficha("Insumos"), fc = await ficha("Cierres de caja"), fm = await ficha("Tiempo por mesa");
+    ok(fv.valor === "Ref 3.520,40" && /▲ 10 % vs\. antes/.test(fv.cmp) && /good/.test(fv.cls), "ventas con su comparación: ▲ 10 % en verde (" + fv.cmp + ")");
+    ok(fi.valor === "41 %" && /▼ 1,8 puntos vs\. antes/.test(fi.cmp) && /good/.test(fi.cls), "si el % de insumos baja es bueno: ▼ 1,8 puntos en verde (" + fi.cmp + ")");
+    ok(fc.valor === "1 de 7 no cuadran" && /neg/.test(fc.b) && /▼ 1 vs\. antes/.test(fc.cmp), "cierres que no cuadran, en rojo, y que bajaron de 2 a 1 (" + fc.cmp + ")");
+    ok(/▲ 2,0 min vs\. antes/.test(fm.cmp) && !/good|bad/.test(fm.cls), "el tiempo por mesa no se pinta: más largo no es bueno ni malo (" + fm.cmp + ")");
+    ok(/con recetas para el 88 % de las ventas/.test(ind.texto) && /23 de 180 recibos con QR/.test(ind.texto) && /68 % mesa/.test(ind.texto), "dice de dónde sale cada número");
+    await page.click('#indDias [data-d="30"]'); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_kpis").pop().args.p_dias) === 30 && /contra los 30 días anteriores/.test(await page.textContent("#indRango")),
+      "el selector cambia a los últimos 30 días");
+    await page.click('#indDias [data-d="7"]'); await page.waitForTimeout(300);
     // Ventas por hora y día (Dinero › Histórico)
     await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="historico"]');
     await page.waitForSelector("#vhMap .vh-grid", { timeout: 5000 });
