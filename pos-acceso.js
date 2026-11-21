@@ -125,7 +125,7 @@ function entrar(emp, pin, r) {
   U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
   document.body.classList.toggle("nocharge", !U.charge);
   show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
-  touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadPromos(); loadMeta(); waStart();
+  touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadNotas(); loadPromos(); loadMeta(); waStart();
 }
 $("btnUser").addEventListener("click", lock);
 // Bloqueo automático tras 10 minutos sin uso.

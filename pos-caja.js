@@ -412,7 +412,9 @@ var askResolve = null, askCfg = null;
 function ask(cfg) {
   askCfg = cfg; $("askTitle").textContent = cfg.title; $("askHelp").textContent = cfg.help || ""; $("askErr").textContent = "";
   var i = $("askInput"); i.value = cfg.value == null ? "" : cfg.value; i.setAttribute("inputmode", cfg.type === "number" ? "decimal" : "text");
-  $("askDlg").showModal(); setTimeout(function () { i.focus(); i.select(); }, 50);
+  // Con notas rápidas no se abre el teclado: se toca una nota (o el campo, para escribir otra)
+  var chips = cfg.chips || []; noteChips($("askChips"), chips, i);
+  $("askDlg").showModal(); if (!chips.length) setTimeout(function () { i.focus(); i.select(); }, 50);
   return new Promise(function (res) { askResolve = res; });
 }
 function askDone(v) { var r = askResolve; askResolve = null; $("askDlg").close(); if (r) r(v); }

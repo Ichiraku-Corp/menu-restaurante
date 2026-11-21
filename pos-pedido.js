@@ -92,8 +92,30 @@ function drawMenu() {
 $("search").addEventListener("input", drawMenu);
 $("cats").addEventListener("click", function (e) { var b = e.target.closest("[data-cat]"); if (!b) return; cur.cat = b.dataset.cat === "top" ? "top" : Number(b.dataset.cat); $("search").value = ""; drawMenu(); });
 // Los platos más pedidos (últimos 30 días): se piden al entrar y cada 10 minutos
+// Notas rápidas: las más usadas de cada plato y de toda la carta (pos_notas); se tocan en vez de escribirlas
+var NOTAS = { platos: {}, todas: [] };
+function loadNotas() { q(sb.rpc("pos_notas", { p_days: 60 })).then(function (r) { if (r) NOTAS = r; }).catch(function () { /* sin notas rápidas: se escriben */ }); }
+function notasDe(dishId) {
+  var out = [], seen = {};
+  ((NOTAS.platos || {})[dishId] || []).concat(NOTAS.todas || []).forEach(function (t) { var k = String(t).toLowerCase(); if (!seen[k] && out.length < 8) { seen[k] = 1; out.push(t); } });
+  return out;
+}
+// Dibuja las notas como botones; tocar una la agrega al campo (separada por coma) y tocarla otra vez la quita
+function noteChips(box, list, input) {
+  var parts = function () { return input.value.split(",").map(function (x) { return x.trim(); }).filter(Boolean); };
+  var mark = function () { var on = parts().map(function (x) { return x.toLowerCase(); });
+    Array.prototype.forEach.call(box.querySelectorAll("[data-nota]"), function (b) { b.classList.toggle("on", on.indexOf(b.dataset.nota.toLowerCase()) >= 0); }); };
+  box.innerHTML = list.map(function (t) { return '<button type="button" data-nota="' + esc(t) + '">' + esc(t) + "</button>"; }).join("");
+  box.onclick = function (e) {
+    var b = e.target.closest("[data-nota]"); if (!b) return;
+    var t = b.dataset.nota, ps = parts(), i = ps.map(function (x) { return x.toLowerCase(); }).indexOf(t.toLowerCase());
+    if (i >= 0) ps.splice(i, 1); else ps.push(t);
+    input.value = ps.join(", ").slice(0, 120); mark();
+  };
+  input.oninput = mark; mark();
+}
 function loadTopDishes() { q(sb.rpc("pos_top_dishes", { p_days: 30 })).then(function (ids) { MENU.top = ids || []; if (cur.order) drawMenu(); }).catch(function () { /* sin la lista: la carta funciona igual */ }); }
-setInterval(function () { if (U) { loadTopDishes(); loadPromos(); } }, 600000);
+setInterval(function () { if (U) { loadTopDishes(); loadPromos(); loadNotas(); } }, 600000);
 // «Más opciones»: dividir, descuento, mover y anular, plegados para que no estorben ni se toquen sin querer
 function moreOpen(on) { $("moreBox").classList.toggle("hidden", !on); $("moreBtn").setAttribute("aria-expanded", on ? "true" : "false"); $("moreBtn").classList.toggle("on", !!on); }
 $("moreBtn").addEventListener("click", function () {
@@ -138,7 +160,7 @@ function pickDish(d) {
   $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño' + (promoOf(d) ? " · " + esc(promoTxt(promoOf(d))) : "") + '</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(promoPrice(d, num(v.price))) + "</button>"; }).join("") + "</div>" : "";
   $("dishOptions").innerHTML = ops.length ? '<div class="muted">Elige una opción</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
   if (vs && vs.length === 1) pick.variant = vs[0].label;
-  $("qVal").textContent = "1"; $("dishNote").value = ""; markPick();
+  $("qVal").textContent = "1"; $("dishNote").value = ""; noteChips($("dishNotes"), notasDe(d.id), $("dishNote")); markPick();
   $("dishDlg").showModal();
 }
 function markPick() {
@@ -230,7 +252,9 @@ $("lines").addEventListener("click", function (e) {
     if (e.target.closest("[data-inc]")) it0.qty = Math.min(50, it0.qty + 1);
     else if (e.target.closest("[data-dec]")) { it0.qty -= 1; if (it0.qty <= 0) cur.cart.splice(ci, 1); }
     else if (e.target.closest(".t")) { // tocar el nombre: poner o cambiar la nota para cocina
-      ask({ title: "Nota para cocina · " + it0.dish.name, help: "Ej.: sin cebollín, bien cocido, para compartir. Déjalo vacío para quitarla.", value: it0.notes || "" }).then(function (v) {
+      var ch = notasDe(it0.dish.id);
+      ask({ title: "Nota para cocina · " + it0.dish.name, help: ch.length ? "Toca una nota o escribe otra. Déjalo vacío para quitarla." : "Ej.: sin cebollín, bien cocido, para compartir. Déjalo vacío para quitarla.",
+            value: it0.notes || "", chips: ch }).then(function (v) {
         if (v === null) return; it0.notes = String(v).trim().slice(0, 140); drawTicket();
       });
       return;

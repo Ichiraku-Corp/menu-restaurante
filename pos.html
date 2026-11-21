@@ -13,20 +13,20 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=c7355716dc">
+<link rel="stylesheet" href="pos.css?v=2b76f08697">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=f9f2d5eead"></script>
 <script src="pos-base.js?v=3b7c33de0b" defer></script>
-<script src="pos-acceso.js?v=144a569ce6" defer></script>
+<script src="pos-acceso.js?v=277cedfc01" defer></script>
 <script src="pos-mesas.js?v=c20afe63b5" defer></script>
-<script src="pos-pedido.js?v=04126939a2" defer></script>
+<script src="pos-pedido.js?v=863134b1e2" defer></script>
 <script src="pos-cobro.js?v=7a2567c385" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=f433254d11" defer></script>
-<script src="pos-caja.js?v=01d8486d0b" defer></script>
+<script src="pos-caja.js?v=caf9dcd959" defer></script>
 </head>
 <body>
 <header>
@@ -124,6 +124,7 @@
   <div id="dishOptions"></div>
   <div class="stepper" style="margin:10px 0"><button type="button" id="qMinus">−</button><b id="qVal">1</b><button type="button" id="qPlus">+</button></div>
   <input id="dishNote" placeholder="Nota para cocina (opcional)" maxlength="120">
+  <div class="chips notechips" id="dishNotes"></div>
   <div class="row between" style="margin-top:14px"><button type="button" id="dishCancel">Cancelar</button><button type="button" class="primary big" id="dishAdd">Añadir</button></div>
 </dialog>
 
@@ -143,6 +144,7 @@
 <dialog id="askDlg">
   <h2 id="askTitle"></h2>
   <p class="muted" id="askHelp"></p>
+  <div class="chips notechips" id="askChips"></div>
   <input id="askInput">
   <p id="askErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between" style="margin-top:10px"><button type="button" id="askCancel">Cancelar</button><button type="button" class="primary" id="askOk">Aceptar</button></div>

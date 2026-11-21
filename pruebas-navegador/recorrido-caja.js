@@ -110,7 +110,20 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(!(await page.locator("#lines .line.new").count()), "el toque largo no añade nada por su cuenta");
     await page.click('#dishes button:has-text("Gyozas")', { button: "right" });
     ok(await page.isVisible("#dishDlg"), "en la laptop, el clic derecho también abre la ventana");
-    await page.fill("#dishNote", "sin salsa"); await page.click("#dishAdd");
+    // Notas rápidas: primero las del plato, después las de toda la carta; se tocan en vez de escribirlas
+    const chips = await page.evaluate(() => [...document.querySelectorAll("#dishNotes [data-nota]")].map((b) => b.textContent).join(","));
+    ok(chips === "bien doradas,sin salsa,sin picante,poco picante,sin cebollín", "notas rápidas: primero las del plato, después las de toda la carta (" + chips + ")");
+    await page.click('#dishNotes [data-nota="bien doradas"]'); await page.click('#dishNotes [data-nota="sin picante"]');
+    ok((await page.inputValue("#dishNote")) === "bien doradas, sin picante" && await page.locator("#dishNotes button.on").count() === 2, "tocar notas las agrega a la nota (y se marcan)");
+    await page.click('#dishNotes [data-nota="bien doradas"]'); await page.click('#dishNotes [data-nota="sin picante"]');
+    ok((await page.inputValue("#dishNote")) === "", "y tocarlas otra vez las quita");
+    await page.click('#dishNotes [data-nota="sin salsa"]'); await page.click("#dishAdd");
+    await page.locator("#lines .line.new .t").last().click(); await page.waitForSelector("#askDlg[open]");
+    ok(await page.locator("#askChips [data-nota]").count() === 5 && !(await page.evaluate(() => !!document.activeElement && document.activeElement.id === "askInput")),
+      "al tocar el plato para cambiar la nota salen las notas rápidas, sin abrir el teclado");
+    await page.click('#askChips [data-nota="poco picante"]');
+    ok((await page.inputValue("#askInput")) === "sin salsa, poco picante", "en la nota del plato pedido también se agregan con un toque");
+    await page.click('#askChips [data-nota="poco picante"]'); await page.click("#askOk"); await page.waitForTimeout(200);
     await page.click("#send"); await page.waitForTimeout(300);
     ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
     // Precuenta: la primera sale; si se vuelve a tocar antes de 5 minutos pregunta (vale también la de otra tablet)

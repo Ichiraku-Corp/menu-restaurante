@@ -418,6 +418,25 @@ language sql stable security definer set search_path = public as $$
     group by 1 order by 2 desc limit 12) x), '[]'::jsonb) end
 $$;
 
+-- Notas rápidas: las notas para cocina más usadas de cada plato (y de toda la carta) en los últimos días, para tocarlas
+-- en vez de escribirlas. Cuentan las que se usaron 2 veces o más; se agrupan sin importar mayúsculas ni espacios.
+create or replace function public.pos_notas(p_days int default 60) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with n as (
+    select i.dish_id, lower(regexp_replace(trim(i.notes), '\s+', ' ', 'g')) k, regexp_replace(trim(i.notes), '\s+', ' ', 'g') t
+    from public.pos_items i
+    where coalesce(trim(i.notes), '') <> '' and length(trim(i.notes)) <= 40
+      and i.created_at > now() - make_interval(days => greatest(coalesce(p_days, 60), 1))
+  ), g as (select dish_id, k, count(*) c, mode() within group (order by t) t from n group by dish_id, k)
+  select case when public.pos_is_device() then jsonb_build_object(
+    'platos', coalesce((select jsonb_object_agg(z.dish_id, z.l) from (
+                select y.dish_id, jsonb_agg(y.t order by y.c desc, y.t) l from (
+                  select dish_id, t, c, row_number() over (partition by dish_id order by c desc, t) rn from g where dish_id is not null and c >= 2) y
+                where y.rn <= 6 group by y.dish_id) z), '{}'::jsonb),
+    'todas', coalesce((select jsonb_agg(w.t order by w.c desc, w.t) from (
+                select k, sum(c) c, min(t) t from g group by k having sum(c) >= 3 order by 2 desc, 3 limit 8) w), '[]'::jsonb)) end
+$$;
+
 -- ---------------------------------------------------------------- Lectura
 drop function if exists public.pos_staff();
 create or replace function public.pos_staff() returns table (id bigint, name text, can_charge boolean)
@@ -2136,7 +2155,7 @@ begin
     'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
     'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
-    'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()', 'pos_top_dishes(integer)',
+    'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()', 'pos_top_dishes(integer)', 'pos_notas(integer)',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',
     'pos_print_done(bigint, boolean, text)', 'pos_set_pin(bigint, text)', 'pos_set_split(bigint, text, bigint, jsonb)',
