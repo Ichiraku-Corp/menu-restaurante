@@ -433,8 +433,9 @@ language sql stable security definer set search_path = public as $$
                 select y.dish_id, jsonb_agg(y.t order by y.c desc, y.t) l from (
                   select dish_id, t, c, row_number() over (partition by dish_id order by c desc, t) rn from g where dish_id is not null and c >= 2) y
                 where y.rn <= 6 group by y.dish_id) z), '{}'::jsonb),
+    -- en toda la carta: la forma de escribirla que más se usó (no la primera por orden alfabético, que depende del idioma de la base)
     'todas', coalesce((select jsonb_agg(w.t order by w.c desc, w.t) from (
-                select k, sum(c) c, min(t) t from g group by k having sum(c) >= 3 order by 2 desc, 3 limit 8) w), '[]'::jsonb)) end
+                select k, count(*) c, mode() within group (order by t) t from n group by k having count(*) >= 3 order by 2 desc, 3 limit 8) w), '[]'::jsonb)) end
 $$;
 
 -- ---------------------------------------------------------------- Lectura
