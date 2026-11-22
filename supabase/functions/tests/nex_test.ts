@@ -187,7 +187,8 @@ Deno.test("resumen del turno: cola de cocina, agotados y lo que queda poco afuer
   const t = { ...baseTables(),
     pos_items: [
       { name: "Teuchi", qty: 2, sent_at: iso(25), ready_at: null, status: "enviado" },
-      { name: "Gyozas", qty: 1, sent_at: iso(30), ready_at: iso(20), status: "enviado" },
+      // listo justo ahora: así cuenta como «de hoy» aunque la prueba corra pasada la medianoche de Venezuela
+      { name: "Gyozas", qty: 1, sent_at: iso(10), ready_at: iso(0), status: "enviado" },
     ],
     dishes: [{ name: "Luffy", available: false }],
     announcements: [{ title: "Reunión martes", expires_at: null, active: true }] };
