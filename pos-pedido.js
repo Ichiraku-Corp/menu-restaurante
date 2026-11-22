@@ -74,17 +74,24 @@ $("toggleMenu").addEventListener("click", function () {
   this.textContent = g.classList.contains("show-menu") ? "Ver cuenta (" + (cur.cart.length + (cur.data ? cur.data.items.filter(function (i) { return i.status !== "anulado"; }).length : 0)) + ")" : "Carta";
 });
 
+// Cada categoría con el color de su maid, como en la carta: Miso (naranja) el ramen; Dango (rosa) bebidas y postres; Imo (amarillo) lo demás
+function maidOf(catId) {
+  var c = MENU.cats.find(function (x) { return x.id === catId; });
+  var n = c ? c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+  return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
+}
 function drawMenu() {
   var term = $("search").value.trim().toLowerCase(), tops = (MENU.top || []).map(function (id) { return MENU.dishes.find(function (d) { return d.id === id; }); }).filter(Boolean);
   if (cur.cat === "top" && !tops.length) cur.cat = MENU.cats[0] && MENU.cats[0].id;
   $("cats").innerHTML = (tops.length ? '<button type="button" data-cat="top" class="topcat' + (!term && cur.cat === "top" ? " on" : "") + '">' + icon("star") + "<span>Lo más pedido</span></button>" : "") +
-    MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
+    MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '" data-maid="' + maidOf(c.id) + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
   var list = term ? MENU.dishes.filter(function (d) { return d.name.toLowerCase().indexOf(term) >= 0; })
     : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
-    var img = d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>";
+    // la foto va en un platito del color de la maid de su categoría
+    var img = '<span class="plate">' + (d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>") + "</span>";
     var pr = d.available && promoOf(d);
-    return '<button type="button" data-dish="' + d.id + '"' + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
+    return '<button type="button" data-dish="' + d.id + '" data-maid="' + maidOf(d.category_id) + '"' + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
       "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span>" +
       (pr ? '<em class="promo">' + esc(promoTxt(pr)) + "</em>" : "") + "</span></button>";
   }).join("") || '<p class="muted">Sin resultados.</p>';

@@ -57,6 +57,8 @@ jobs:
         run: node pruebas-navegador/sinred-cuentas.js
       - name: "Código QR del recibo: norma ISO 18004 y lectura de vuelta"
         run: node pruebas-navegador/qr-recibo.js
+      - name: Recibo «Pop dulce» (cabecera, líneas punteadas, gracias en burbuja)
+        run: node pruebas-navegador/recibo-pop.js
       - name: Los reportes por correo se generan sin errores
         run: |
           node -e '

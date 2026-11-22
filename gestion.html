@@ -8,14 +8,18 @@
 <title>Gestión · Ichiraku Ramen</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
-  :root { --bg:#f6f4f1; --surface:#fff; --text:#1f1a17; --muted:#6b625b; --line:#e5ded4;
-    --accent:#e5206b; --ok:#2f7d4f; --warn:#a86200; --danger:#b3261e; --chip:#f0ebe3; --sky:#1d6fc0; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#151210; --surface:#1f1a17; --text:#f4eee7; --muted:#b0a69c; --line:#332b26;
-      --accent:#f0588f; --ok:#5fbf86; --warn:#e0a24a; --danger:#ef7a72; --chip:#2a2420; --sky:#6fb2f0; } }
+  /* Estilo «Pop dulce» (E01 de la marca): crema con puntos, letra Poppins y contornos Azul Noche tipo sticker */
+  @font-face { font-family:"Poppins"; font-weight:500; font-display:swap; src:url(assets/fuentes/poppins-500.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:600; font-display:swap; src:url(assets/fuentes/poppins-600.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:700; font-display:swap; src:url(assets/fuentes/poppins-700.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:800; font-display:swap; src:url(assets/fuentes/poppins-800.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:900; font-display:swap; src:url(assets/fuentes/poppins-900.woff2) format("woff2"); }
+  :root { color-scheme:light; --bg:#FAF6F0; --surface:#fff; --text:#1B2D6B; --muted:#56628C; --line:#EADFD3;
+    --accent:#EA5BA6; --ok:#2f7d4f; --warn:#a86200; --danger:#b3261e; --chip:#F6EDE4; --sky:#1A7FB2; --ink:#1B2D6B; --imo:#F5BE14; --imo-t:#FDEDB3; }
   * { box-sizing:border-box; }
   [hidden], .hidden { display:none !important; }
-  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  body { margin:0; background:var(--bg) radial-gradient(rgba(234,91,166,.13) 1.3px, transparent 1.7px) 0 0 / 20px 20px; color:var(--text);
+    font:500 15px/1.45 "Poppins",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
   .wrap { max-width:980px; margin:0 auto; padding:16px; }
   header.top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   h1 { font-size:22px; margin:8px 0; }
@@ -190,6 +194,33 @@
   #notice.ok { border-color:var(--ok); }
   #notice .nmsg { flex:1; line-height:1.35; }
   #notice button { flex:none; font-weight:800; }
+  /* ---------------------------------------------------------------- Pop dulce: contornos tipo sticker */
+  header.top h1 { font-weight:900; font-size:25px; color:var(--accent); -webkit-text-stroke:6px #fff; paint-order:stroke fill; text-shadow:2px 3px 0 var(--ink); }
+  header.top h1 small { -webkit-text-stroke:0; text-shadow:none; color:var(--ink) !important; }
+  header.top h1::before { content:""; display:inline-block; width:38px; height:38px; border-radius:50%; vertical-align:-10px; margin-right:10px;
+    background:#fff url(assets/logo-gato.png) center / cover; border:3px solid #fff; box-shadow:0 0 0 2px var(--ink); transform:rotate(-6deg); }
+  button, .btn { border-width:2px; font-weight:600; }
+  header.top .btn, header.top button { border-color:var(--ink); background:#fff; border-radius:999px; color:var(--ink); }
+  button.primary { border:2px solid var(--ink); box-shadow:2px 3px 0 var(--ink); }
+  .secs { background:#fff; border:2px solid var(--ink); box-shadow:3px 4px 0 var(--ink); border-radius:18px; }
+  .secs button { border:0; font-weight:800; }
+  .secs button.on { background:var(--imo); color:var(--ink); box-shadow:none; }
+  .tabs button { border-color:var(--ink); }
+  .tabs button.on { border-color:var(--ink); box-shadow:2px 2px 0 var(--ink); }
+  .card { border:2px solid var(--ink); border-radius:22px; box-shadow:4px 5px 0 var(--ink); }
+  .kpi { border:2px solid var(--ink); border-radius:16px; }
+  .kpi b { font-weight:900; }
+  .kpi span { color:var(--ink); font-weight:800; }
+  .kpi.main { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.16) 0 10px, transparent 10px 20px), var(--accent); border-color:var(--ink); box-shadow:3px 4px 0 var(--ink); }
+  .kpi.main span { color:#fff; }
+  .metabar { height:16px; border:2px solid var(--ink); background:#fff; }
+  .metabar i { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 7px, transparent 7px 14px), var(--accent); }
+  .metacard.done .metabar i { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 7px, transparent 7px 14px), var(--ok); }
+  .seg button.on { background:var(--imo); border-color:var(--ink); color:var(--ink); }
+  .indg h3 { color:var(--accent); font-weight:900; letter-spacing:.1em; }
+  .tbl th { color:var(--ink); }
+  .tbl tr.total td { border-top-color:var(--ink); }
+  input, select, textarea { border-width:1.5px; border-color:#D9CBBE; background:#fff; }
 </style>
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>

@@ -43,7 +43,13 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   const gyo = p.locator("article", { hasText: "Gyozas" }).first();
   ok(JSON.stringify(await gyo.locator(".pbs").allTextContents()) === '["Bs 500"]', "Gyozas (Ref 5) también dice Bs 500 al lado del precio");
   const pollo = p.locator("article", { hasText: "Pollo Kobayashi" }).first();
-  ok(JSON.stringify(await pollo.locator(".prow").allTextContents()) === '["PeqRef 8Bs 800","GrRef 15Bs 1.500"]', "los platos con tamaños dicen el precio de cada uno en Bs (" + (await pollo.locator(".prow").allTextContents()).join(" | ") + ")");
+  // Cada precio en su esfera: el tamaño como etiqueta, «REF» pequeño, el número grande y debajo su equivalente en Bs
+  const esferas = await pollo.locator(".prow").evaluateAll((rs) => rs.map((r) => ["b", "i", "em", ".pbs"].map((q) => r.querySelector(q).textContent).join(" ")));
+  ok(JSON.stringify(esferas) === '["Peq REF 8 Bs 800","Gr REF 15 Bs 1.500"]', "los platos con tamaños dicen el precio de cada uno en su esfera y en Bs (" + esferas.join(" | ") + ")");
+  ok(await p.evaluate(() => { const s = [...document.querySelectorAll("#menu section")], m = (t) => s.find((x) => x.querySelector("h2").textContent.startsWith(t)).dataset.maid;
+    return m("Ramen") === "miso" && m("Bebidas") === "dango" && m("Postres") === "dango" && m("Entradas") === "imo" && m("Sushi") === "imo"; }),
+    "cada categoría lleva el color de su maid: Ramen = Miso, Bebidas y Postres = Dango, Entradas y Sushi = Imo");
+  ok(await p.evaluate(() => [...document.querySelectorAll("#menu .dish .photo")].every((i) => i.parentElement.classList.contains("plate"))), "cada foto va en su platito");
 
   // El total del pedido también en bolívares (Ref 5 + 10 % de servicio = Ref 5,50 = Bs 550)
   await p.evaluate(() => localStorage.setItem("menu-order-v1", JSON.stringify([{ id: 4, v: "", o: "", n: "", q: 1 }])));
@@ -75,7 +81,7 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   ok(/Happy hour: 20 % menos en Entradas · todo el día[\s\S]*¡Ahora!/.test(barra), "arriba anuncia la promoción de hoy y que vale ahora (todo el día)");
   if (new Date(Date.now() - 4 * 3600e3).toISOString().slice(11, 16) < "23:58") ok(/Noche: 10 % menos en platos seleccionados · hoy de 12:00 a\. m\. a 11:58 p\. m\./.test(barra), "con horario, dice de qué hora a qué hora");
   const gyoP = p.locator("article", { hasText: "Gyozas" }).first();
-  ok(/Happy hour -20 %/.test(await gyoP.textContent()) && (await gyoP.locator(".price s").textContent()) === "Ref 5" && /Ref 4/.test(await gyoP.locator(".price").textContent()) &&
+  ok(/Happy hour -20 %/.test(await gyoP.textContent()) && (await gyoP.locator(".price s").textContent()) === "5" && (await gyoP.locator(".price em").textContent()) === "4" &&
      (await gyoP.locator(".pbs").textContent()) === "Bs 480", "el plato muestra la promo, el precio normal tachado, el nuevo y su Bs");
   await p.click("#orderbar"); await p.waitForSelector("#orderSheet[open]");
   ok(/Ref 4\.4 · Bs 528$/.test(await p.textContent("#osTotal")), "el total del pedido sale con la promoción (" + (await p.textContent("#osTotal")) + ")");
@@ -86,7 +92,7 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   tasa = null;
   await p.reload(); await esperar(p, () => document.getElementById("tasa").hidden).catch(() => {});
   ok(await p.isHidden("#tasa") && !(await p.locator(".pbs").count()), "sin tasa no muestra bolívares");
-  ok(/Ref/.test(await gyo.textContent()), "y la carta se ve igual en Ref");
+  ok((await gyo.locator(".price i").textContent()) === "REF" && (await gyo.locator(".price em").textContent()) === "5", "y la carta se ve igual en Ref");
   ok(err.length === 0, "sin errores de JavaScript" + (err.length ? ": " + err.join(" | ") : ""));
   await b.close(); srv.close();
   if (fallos) { console.log(fallos + " prueba(s) fallaron"); process.exit(1); }

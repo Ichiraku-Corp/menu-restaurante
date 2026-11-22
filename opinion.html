@@ -11,6 +11,11 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   /* Marca Ichiraku · estilo E02 «Interfaz de juego» (encuestas): ventana de app, botones gruesos, interruptor y barra */
+  @font-face { font-family: "Poppins"; font-weight: 500; font-display: swap; src: url(assets/fuentes/poppins-500.woff2) format("woff2"); }
+  @font-face { font-family: "Poppins"; font-weight: 700; font-display: swap; src: url(assets/fuentes/poppins-700.woff2) format("woff2"); }
+  @font-face { font-family: "Poppins"; font-weight: 800; font-display: swap; src: url(assets/fuentes/poppins-800.woff2) format("woff2"); }
+  @font-face { font-family: "Poppins"; font-weight: 900; font-display: swap; src: url(assets/fuentes/poppins-900.woff2) format("woff2"); }
+  @font-face { font-family: "Noto Sans JP"; font-weight: 900; font-display: swap; src: url(assets/fuentes/noto-sans-jp-900.woff2) format("woff2"); }
   :root {
     --noche: #1B2D6B; --rosa: #EA5BA6; --celeste: #2FB2E8; --oro: #FFC928; --crema: #FAF6F0; --blanco: #fff;
     --texto: #1B2D6B; --suave: #5a6690; --linea: #d9dcea; --error: #b3261e;
@@ -24,6 +29,7 @@
   .top { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 22px 16px 6px; }
   .top img { width: 56px; height: 56px; border-radius: 50%; background: #fff; border: 3px solid var(--noche); }
   .marca { font-weight: 900; font-size: 22px; letter-spacing: -.01em; line-height: 1.1; }
+  .kana, [lang="ja"] { font-family: "Noto Sans JP", sans-serif; }
   .kana { font-weight: 900; font-size: 13px; color: var(--rosa); letter-spacing: .12em; }
   main { max-width: 460px; margin: 0 auto; padding: 12px 16px 40px; }
   .win { background: var(--blanco); border: 3px solid var(--noche); border-radius: 18px; box-shadow: 5px 6px 0 var(--noche); overflow: hidden; }

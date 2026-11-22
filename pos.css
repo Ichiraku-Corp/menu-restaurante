@@ -1,17 +1,22 @@
 /* Estilos de la app de caja y sala (pos.html) */
-  /* Ichiraku · Sala — pantalla táctil de trabajo: grande, clara, con el rosa de la marca solo donde hay acción */
+  /* Ichiraku · Sala — estilo «Pop dulce» (E01 de la marca): crema con puntos, contornos Azul Noche tipo sticker y el color de cada maid
+     por categoría (Miso naranja el ramen; Dango rosa bebidas y postres; Imo amarillo lo demás). El verde de cobrar y los avisos en ámbar se quedan. */
+  @font-face { font-family:"Poppins"; font-weight:500; font-display:swap; src:url(assets/fuentes/poppins-500.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:600; font-display:swap; src:url(assets/fuentes/poppins-600.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:700; font-display:swap; src:url(assets/fuentes/poppins-700.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:800; font-display:swap; src:url(assets/fuentes/poppins-800.woff2) format("woff2"); }
+  @font-face { font-family:"Poppins"; font-weight:900; font-display:swap; src:url(assets/fuentes/poppins-900.woff2) format("woff2"); }
   :root {
-    --bg:#f5f1ee; --surface:#ffffff; --raised:#fbf9f7; --text:#231c1a; --muted:#6f6561; --line:#e7dfd9; --chip:#f0eae5;
-    --accent:#e5206b; --accent-ink:#ffffff; --accent-soft:#fde6ee; --accent-line:#f6b3cb;
-    --ok:#22784a; --ok-soft:#e2f3e9; --warn:#a85a00; --warn-soft:#fdf0dc; --danger:#b3261e; --danger-soft:#fbe5e3; --info:#2563c4; --info-soft:#e4edfb;
-    --shadow:0 1px 2px rgba(60,30,30,.06), 0 4px 14px rgba(60,30,30,.06);
-    --radius:16px; --font:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+    color-scheme:light;
+    --bg:#FAF6F0; --surface:#ffffff; --raised:#FFFBF6; --text:#1B2D6B; --muted:#56628C; --line:#EADFD3; --chip:#F6EDE4;
+    --accent:#EA5BA6; --accent-ink:#ffffff; --accent-soft:#FDE3EF; --accent-line:#F2A9CB;
+    --ok:#22784a; --ok-soft:#e2f3e9; --warn:#a85a00; --warn-soft:#FDEDB3; --danger:#b3261e; --danger-soft:#fbe5e3; --info:#1A7FB2; --info-soft:#DDF2FC;
+    --shadow:none; --radius:20px; --font:"Poppins",system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+    --ink:#1B2D6B; --miso:#F38C32; --dango:#EC6EA0; --imo:#F5BE14; --miso-t:#FDE0C4; --dango-t:#FBD6E5; --imo-t:#FDEDB3; --m:var(--imo); --t:var(--imo-t);
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#131010; --surface:#1d1918; --raised:#242020; --text:#f6f0ec; --muted:#b3a9a4; --line:#352e2b; --chip:#2b2523;
-      --accent:#f2558d; --accent-ink:#ffffff; --accent-soft:#3a1a26; --accent-line:#7a2a48;
-      --ok:#5cc58a; --ok-soft:#173326; --warn:#e9a54c; --warn-soft:#3a2a14; --danger:#f07b72; --danger-soft:#3d1c1a; --info:#7fb0f5; --info-soft:#1a2a40;
-      --shadow:0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25); } }
+  [data-maid="miso"] { --m:var(--miso); --t:var(--miso-t); }
+  [data-maid="dango"] { --m:var(--dango); --t:var(--dango-t); }
+  [data-maid="imo"] { --m:var(--imo); --t:var(--imo-t); }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   [hidden], .hidden { display:none !important; }
   html, body { height:100%; }
@@ -536,3 +541,80 @@ body.marking #pin { outline:3px solid var(--info); outline-offset:8px; border-ra
 #notice.ok { border-color:var(--ok); background:var(--ok-soft); }
 #notice .nmsg { flex:1; line-height:1.35; }
 #notice button { flex:none; min-height:42px; font-weight:800; }
+
+/* ---------------------------------------------------------------- Pop dulce: contornos tipo sticker en lo que se toca y en las tarjetas */
+body { font-weight:500; background:var(--bg) radial-gradient(rgba(234,91,166,.14) 1.3px, transparent 1.7px) 0 0 / 20px 20px; }
+button { border-width:2px; }
+button.primary { border:2px solid var(--ink); box-shadow:3px 4px 0 var(--ink); }
+button.ok { border:2px solid var(--ink); box-shadow:3px 4px 0 var(--ink); }
+button.primary:active:not(:disabled), button.ok:active:not(:disabled) { transform:translate(2px, 2px); box-shadow:1px 2px 0 var(--ink); }
+button.primary:disabled, button.ok:disabled { box-shadow:none; }
+header { border-bottom:2.5px solid var(--ink); }
+header::after { content:""; position:absolute; left:0; right:0; bottom:-8.5px; height:6px; background:linear-gradient(118deg, var(--dango) 0 33%, var(--imo) 33% 66%, var(--miso) 66%); pointer-events:none; }
+header .brand img { width:40px; height:40px; border-radius:50%; background:#fff; border:2.5px solid #fff; box-shadow:0 0 0 2px var(--ink); transform:rotate(-5deg); object-fit:cover; }
+header h1 { font-weight:900; }
+header h1 small { color:var(--accent); letter-spacing:.1em; font-weight:800; font-size:10.5px; }
+header .rate, .health { background:#fff; border:2px solid var(--ink); color:var(--ink); font-weight:700; }
+header .rate:empty { display:none; }
+header button { border-color:var(--ink); border-radius:999px; }
+main { padding-top:20px; }
+.banner { border:2px solid var(--ink); border-radius:16px; }
+.banner.warn { background:var(--imo-t); color:var(--ink); }
+.card { border:2px solid var(--ink); box-shadow:4px 5px 0 var(--ink); }
+.summary .s { border:2px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink); }
+.summary .s span { color:var(--ink); font-weight:800; letter-spacing:.08em; font-size:11px; }
+.summary .s b { font-weight:900; }
+.summary .s.meta .bar { height:12px; border:2px solid var(--ink); background:#fff; }
+.summary .s.meta .bar i { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px), var(--accent); border-radius:999px 0 0 999px; }
+.summary .s.meta.done .bar i { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px), var(--ok); }
+.tabs button { border:2px solid var(--ink); font-weight:800; }
+.tabs button.on { background:var(--imo); color:var(--ink); border-color:var(--ink); box-shadow:3px 3px 0 var(--ink); }
+.tabs button.on .cnt { background:var(--accent); color:#fff; }
+.tables button { border:2px solid var(--ink); }
+.tables button .num { font-weight:900; }
+.tables button .st { color:var(--ink); }
+.tables button.busy { background:var(--dango-t); border-color:var(--ink); box-shadow:4px 4px 0 var(--ink); }
+.tables button.busy .st { color:var(--ink); }
+.tables button.bill { background:#D9F1FC; border-color:var(--ink); box-shadow:4px 4px 0 var(--ink); }
+.tables button.bill .st { color:var(--ink); }
+.tables button:not(.busy):not(.bill):not(.new) { background:rgba(255,255,255,.7); border:2px dashed #C6BFD3; box-shadow:none; }
+.tables button:not(.busy):not(.bill):not(.new) .st, .tables button:not(.busy):not(.bill):not(.new) .num { color:#8E88A8; }
+.tables button.has-pend { box-shadow:0 0 0 3px var(--warn), 4px 4px 0 3px var(--ink); }
+.tables button.new { border:2px dashed var(--accent); }
+.pend, .pill { border:1.5px solid var(--ink); }
+.cats button { border:2px solid var(--ink); font-weight:800; }
+.cats button[data-maid]::before { content:""; width:10px; height:10px; border-radius:50%; background:var(--m); box-shadow:0 0 0 1.5px var(--ink); flex:none; }
+.cats button.on { background:var(--m); color:var(--ink); border-color:var(--ink); box-shadow:3px 3px 0 var(--ink); }
+.cats button.on[data-maid]::before { background:#fff; }
+.cats button.topcat.on { background:var(--imo); }
+.dishes button { border:2px solid var(--ink); border-radius:18px; box-shadow:3px 3px 0 var(--ink); }
+.dishes button:disabled { box-shadow:none; border-style:dashed; }
+/* La foto en un platito del color de su maid (el blanco de la foto toma ese color) */
+.dishes button .plate { width:62px; height:62px; flex:none; border-radius:50%; background:var(--t); display:grid; place-items:center; overflow:hidden; border:2.5px solid #fff; box-shadow:0 0 0 2px var(--ink); }
+.dishes button .plate img { width:58px; height:58px; border-radius:50%; background:transparent; mix-blend-mode:multiply; object-fit:cover; }
+.dishes button .plate .ph { width:58px; height:58px; border-radius:50%; background:transparent; color:var(--ink); }
+.dishes button:disabled .plate { filter:grayscale(1); opacity:.55; }
+.dishes button:disabled .plate img { filter:none; opacity:1; }
+.dishes button .tx b { font-weight:800; }
+.line { border-bottom:2px dashed var(--line); }
+.line .q { background:var(--imo-t); color:var(--ink); border:1.5px solid var(--ink); }
+.search input { border:2px solid var(--ink); border-radius:999px; background:#fff; }
+.pad button { border:2px solid var(--ink); color:var(--ink); font-weight:800; box-shadow:3px 3px 0 var(--ink); }
+.pad button[data-k="✓"] { background:var(--accent); border-color:var(--ink); color:#fff; }
+.people button { border:2px solid var(--ink); }
+.people button.on { border-color:var(--ink); background:var(--imo-t); box-shadow:3px 3px 0 var(--ink); }
+#pin h2 { font-weight:900; }
+dialog { border:2.5px solid var(--ink); box-shadow:6px 7px 0 var(--ink); }
+dialog::backdrop { background:rgba(27,45,107,.5); }
+dialog h2 { font-weight:900; }
+.chips button.on, .notechips button.on { background:var(--accent); border-color:var(--ink); color:#fff; }
+.methods button { border-color:var(--ink); }
+.methods button.top { box-shadow:3px 3px 0 var(--ink); }
+.pay { border:2px dashed var(--line); }
+#toast { background:var(--ink); color:#fff; border:2px solid #fff; box-shadow:0 0 0 2px var(--ink), 0 8px 24px rgba(27,45,107,.25); }
+.winner { border:2px solid var(--ink); }
+.rank .br i { background:repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px), var(--accent); }
+@media (max-width: 560px) {
+  .tables button.busy, .tables button.bill { box-shadow:3px 3px 0 var(--ink); }
+  dialog { box-shadow:none; border-left:0; border-right:0; border-bottom:0; }
+}
