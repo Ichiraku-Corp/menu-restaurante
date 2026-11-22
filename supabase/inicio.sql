@@ -191,3 +191,55 @@ revoke execute on function public.kpi_costo_unidad(bigint, text), public.kpi_cal
   public.kpi_semana(date) from anon, public, authenticated;
 revoke execute on function public.gestion_kpis(int) from anon, public;
 grant execute on function public.gestion_kpis(int) to authenticated;
+
+-- ---------------------------------------------------------------- Inicio › Panel: metas del semáforo y datos de los gráficos
+-- Metas (se cambian en Gestión › Ajustes): insumos y nómina como % de lo vendido sin IVA, comisiones del banco como % de las
+-- ventas, tiempo de cocina en minutos y la calificación promedio de las opiniones. Los cierres: la meta es que todos cuadren.
+alter table public.gestion_settings add column if not exists meta_insumos_pct numeric(5,1) not null default 35;
+alter table public.gestion_settings add column if not exists meta_nomina_pct numeric(5,1) not null default 25;
+alter table public.gestion_settings add column if not exists meta_comisiones_pct numeric(5,1) not null default 2;
+alter table public.gestion_settings add column if not exists meta_cocina_min numeric(5,1) not null default 15;
+alter table public.gestion_settings add column if not exists meta_calificacion numeric(3,1) not null default 4.5;
+alter table public.gestion_settings drop constraint if exists gestion_settings_metas_panel_check;
+alter table public.gestion_settings add constraint gestion_settings_metas_panel_check check (
+  meta_insumos_pct between 1 and 100 and meta_nomina_pct between 1 and 100 and meta_comisiones_pct between 0 and 20
+  and meta_cocina_min between 1 and 120 and meta_calificacion between 1 and 5);
+
+-- Los últimos 7 o 30 días completos (los mismos de gestion_kpis): ventas de cada día contra el mismo día de la semana del año
+-- pasado, cobros por método (lo anotado en cada cierre) y los 10 platos que más venden con lo que deja cada uno (sin IVA).
+create or replace function public.gestion_panel(p_dias int default 7) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare n int := case when p_dias = 30 then 30 else 7 end; b date := (now() at time zone 'America/Caracas')::date - 1; a date;
+  st public.gestion_settings%rowtype; ivaf numeric;
+begin
+  if not public.can_manage() then raise exception 'Sin permiso'; end if;
+  a := b - n + 1;
+  select * into st from public.gestion_settings where id = 1;
+  ivaf := 1 + coalesce(st.iva_pct, 16) / 100;
+  return jsonb_build_object(
+    'dias', n, 'desde', a, 'hasta', b,
+    'metas', jsonb_build_object('insumos_pct', coalesce(st.meta_insumos_pct, 35), 'nomina_pct', coalesce(st.meta_nomina_pct, 25),
+                                'comisiones_pct', coalesce(st.meta_comisiones_pct, 2), 'cocina_min', coalesce(st.meta_cocina_min, 15),
+                                'calificacion', coalesce(st.meta_calificacion, 4.5)),
+    'serie', (select jsonb_agg(jsonb_build_object('dia', g.d, 'ventas', ds.total, 'ventas_ant', dp.total) order by g.d)
+              from (select generate_series(a, b, interval '1 day')::date d) g
+              left join public.daily_sales ds on ds.sale_date = g.d
+              left join public.daily_sales dp on dp.sale_date = g.d - 364),
+    'metodos', (select coalesce(jsonb_agg(jsonb_build_object('metodo', x.k, 'ref', round(x.v, 2)) order by x.v desc), '[]'::jsonb)
+                from (select m.key k, sum(m.value::numeric) v
+                      from public.daily_sales ds2 cross join lateral jsonb_each_text(coalesce(ds2.by_method, '{}'::jsonb)) m
+                      where ds2.sale_date between a and b and m.value ~ '^-?[0-9]+(\.[0-9]+)?$'
+                      group by m.key having sum(m.value::numeric) > 0) x),
+    'platos', (select coalesce(jsonb_agg(jsonb_build_object(
+                  'plato', y.nombre || case when coalesce(y.variant, '') <> '' then ' ' || y.variant else '' end,
+                  'cant', y.q, 'ventas', round(y.amt, 2), 'precio', round(y.amt / y.q, 2), 'costo', round(y.uc, 2),
+                  'costo_pct', round(y.uc / (y.amt / y.q / ivaf) * 100),
+                  'deja', round(y.amt / y.q / ivaf - y.uc, 2)) order by y.amt desc), '[]'::jsonb)
+               from (select si.dish_id, si.variant, max(coalesce(d.name, si.dish_name)) nombre, sum(si.qty) q, sum(si.amount) amt,
+                            public.kpi_costo_unidad(si.dish_id, si.variant) uc
+                     from public.sales_items si left join public.dishes d on d.id = si.dish_id
+                     where si.sale_date between a and b and si.qty > 0 and si.amount > 0
+                     group by si.dish_id, si.variant order by sum(si.amount) desc limit 10) y));
+end $$;
+revoke execute on function public.gestion_panel(int) from anon, public;
+grant execute on function public.gestion_panel(int) to authenticated;
