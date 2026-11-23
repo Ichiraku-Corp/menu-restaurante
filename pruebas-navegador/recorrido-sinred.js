@@ -118,7 +118,9 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await esperar(page, () => /Subiendo lo hecho sin internet/.test(document.getElementById("srBar").textContent), null, 15000);
     ok(true, "al volver el internet avisa que se está subiendo lo de sin internet");
     await page.click('#areas [data-area="Feria"]'); await page.click('#areaBody [data-table] .num:text-is("2")'); await page.waitForSelector("#orderView:not(.hidden)"); await page.waitForTimeout(300);
-    await page.click("#pay"); await page.waitForSelector("#payDlg[open]"); await page.click('#payMethods [data-m="punto_debito"]'); await page.click("#payOk"); await page.waitForTimeout(400);
+    await page.click("#pay"); await page.waitForTimeout(300);
+    if (await page.isVisible("#cliDlg")) { await page.fill("#cPhone", "04241112233"); await page.fill("#cName", "Cliente Prueba"); await page.click("#cOk"); }   // con internet se piden los datos del cliente
+    await page.waitForSelector("#payDlg[open]"); await page.click('#payMethods [data-m="punto_debito"]'); await page.click("#payOk"); await page.waitForTimeout(400);
     ok(/ya se cobró sin internet/.test(await page.textContent("#payErr")) && await S((x) => !window.__S.payments.some((p) => p.order_id === x), feria2), "no deja cobrar otra vez la cuenta que se cobró sin internet");
     await page.click("#payCancel"); await page.click("#back");
     enviados = []; cobros = [];   // la laptop terminó de subir

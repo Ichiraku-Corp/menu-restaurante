@@ -461,13 +461,39 @@ $("moveTables").addEventListener("click", function (e) {
 $("moveCancel").addEventListener("click", function () { $("moveDlg").close(); });
 
 // ---------------------------------------------------------------- Cliente del pedido (para factura y registro)
-var cliTimer = null;
-function clientForm() {
-  var c = (cur.data && cur.data.client) || {};
-  $("cDoc").value = c.doc_id || ""; $("cName").value = c.name || ""; $("cPhone").value = c.phone || ""; $("cEmail").value = c.email || "";
-  $("cConsent").checked = false; $("cErr").textContent = ""; $("cFound").textContent = "";
-  $("cliDlg").showModal(); setTimeout(function () { $("cDoc").focus(); }, 50);
+// Para cobrar hacen falta el nombre y el teléfono del cliente (Edgar, 23/11); la cédula y el correo son opcionales.
+// El teléfono reconoce al cliente que ya vino: se llena su nombre solo.
+var cliTimer = null, cliTelTimer = null, cliCobro = false;
+function clienteListo(d) {
+  var c = d && d.client;
+  return !!(c && String(c.name || "").trim().length >= 2 && String(c.phone || "").replace(/\D/g, "").length >= 10);
 }
+function clientForm(paraCobrar) {
+  cliCobro = paraCobrar === true;
+  var d = cur.data || {}, c = d.client || {};
+  // Sin cliente todavía: se aprovecha lo que ya trae el pedido (el teléfono del delivery o de WhatsApp, el nombre de «para llevar»)
+  var nombre = c.name || (d.kind && d.kind !== "mesa" && d.customer ? String(d.customer) : "");
+  $("cDoc").value = c.doc_id || ""; $("cName").value = nombre; $("cPhone").value = c.phone || d.phone || ""; $("cEmail").value = c.email || "";
+  $("cConsent").checked = false; $("cErr").textContent = ""; $("cFound").textContent = "";
+  $("cTitle").textContent = cliCobro ? "Datos del cliente para cobrar" : "Datos del cliente";
+  $("cHelp").textContent = cliCobro ? "Para cobrar hacen falta el nombre y el teléfono. Si ya vino antes, con el teléfono se llena solo."
+    : "Para la factura y el registro de clientes. Con el teléfono o la cédula, si ya vino antes, se llena solo.";
+  $("cOk").textContent = cliCobro ? "Guardar y cobrar" : "Guardar en el pedido";
+  show("cSkipBox", cliCobro);
+  $("cliDlg").showModal(); setTimeout(function () { $($("cPhone").value ? "cName" : "cPhone").focus(); }, 50);
+  if ($("cPhone").value) lookupPhone();
+}
+function lookupPhone() {
+  var dig = $("cPhone").value.replace(/\D/g, "");
+  if (dig.length < 10) { $("cFound").textContent = ""; return; }
+  rpc("pos_customer_by_phone", { p_phone: $("cPhone").value }).then(function (r) {
+    if (!r || dig !== $("cPhone").value.replace(/\D/g, "")) return;
+    if (!$("cName").value.trim() && r.name) $("cName").value = r.name;
+    var n = num(r.orders);
+    $("cFound").textContent = "Cliente conocido ✓" + (n ? " · " + n + (n === 1 ? " pedido" : " pedidos") : "");
+  }).catch(function () {});
+}
+$("cPhone").addEventListener("input", function () { clearTimeout(cliTelTimer); cliTelTimer = setTimeout(lookupPhone, 400); });
 function lookupClient() {
   var d = $("cDoc").value.replace(/[\s.\-]/g, "");
   if (d.length < 5) { $("cFound").textContent = ""; return; }
@@ -481,12 +507,15 @@ function lookupClient() {
 $("cDoc").addEventListener("input", function () { clearTimeout(cliTimer); cliTimer = setTimeout(lookupClient, 400); });
 $("cCancel").addEventListener("click", function () { $("cliDlg").close(); });
 $("cOk").addEventListener("click", function () {
-  var name = $("cName").value.trim();
+  var name = $("cName").value.trim(), tel = $("cPhone").value.replace(/\D/g, ""), seguir = cliCobro;
   if (name.length < 2) { $("cErr").textContent = "Escribe el nombre o la razón social."; return; }
+  if (cliCobro && tel.length < 10) { $("cErr").textContent = "Escribe el teléfono del cliente (por ejemplo 0414 1234567)."; return; }
   rpc("pos_set_customer", { p_order: cur.order, p_doc: $("cDoc").value, p_name: name, p_phone: $("cPhone").value, p_email: $("cEmail").value, p_consent: $("cConsent").checked })
     .then(function () { $("cliDlg").close(); toast("Cliente guardado en el pedido"); return loadOrder(); })
+    .then(function () { if (seguir) abrirCobro(false); })
     .catch(function (e) { $("cErr").textContent = errMsg(e); });
 });
+$("cSkip").addEventListener("click", function () { $("cliDlg").close(); abrirCobro(true); });
 $("btnClient").addEventListener("click", clientForm);
 
 // ---------------------------------------------------------------- Delivery

@@ -2,7 +2,16 @@
 "use strict";
 // ---------------------------------------------------------------- Cobro
 var pays = [], changeCur = null, payPerson = 0;  // changeCur: cómo se da el vuelto (se elige cada vez, no hay uno por defecto)
+// Para cobrar hacen falta los datos del cliente (nombre y teléfono). Sin internet no se piden (no se pueden guardar).
+// Si es consumo de un empleado se puede seguir sin cliente, pero solo cargándolo a su cuenta.
+var sinCliente = false;
 $("pay").addEventListener("click", function () {
+  var off = typeof SR !== "undefined" && SR.on;
+  if (!off && cur.data && !clienteListo(cur.data)) { clientForm(true); return; }
+  abrirCobro(false);
+});
+function abrirCobro(soloCuenta) {
+  sinCliente = !!soloCuenta;
   refreshState().then(function () {
     if (!ST.session) { toast("La caja está cerrada: ábrela en «Caja»", true); return; }
     pays = []; changeCur = null; $("payErr").textContent = "";
@@ -24,11 +33,12 @@ $("pay").addEventListener("click", function () {
       (off ? "" : '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>") +
       '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
     TABS = []; if (!off) q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
-    $("payErr").textContent = off ? "Sin internet: el recibo sale en la laptop y el cobro se sube cuando vuelva la conexión." : "";
+    $("payErr").textContent = off ? "Sin internet: el recibo sale en la laptop y el cobro se sube cuando vuelva la conexión."
+      : sinCliente ? "Sin datos del cliente: solo se puede cargar a la cuenta de un empleado." : "";
     $("selloChk").checked = !!cur.data.sello; show("canjeBtn", !off); drawSello();
     drawPayPersons(); drawPays(); $("payDlg").showModal();
   }).catch(fail);
-});
+}
 function payRef(p) { var m = minfo(p.method); return m[2] === "REF" ? num(p.amount) : (ST.rate ? num(p.amount) / ST.rate : 0); }
 var splitEq = 0;
 function personDue(p) { var r = (cur.data.split_totals || []).find(function (x) { return x.person === p; }); return r ? Math.max(0, Math.round((num(r.total) - num(r.paid)) * 100) / 100) : 0; }
@@ -242,6 +252,9 @@ function doPay(partial) {
   if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
   var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null, device: devName() || "Sin nombre", tip: !!p.tip, tab_employee_id: p.tab_employee_id || null }; }).filter(function (p) { return p.amount > 0; });
   // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
+  if (!(typeof SR !== "undefined" && SR.on) && !clienteListo(cur.data) && list.some(function (p) { return !p.tip && p.method !== "cuenta"; })) {
+    $("payErr").textContent = "Faltan los datos del cliente: sin ellos solo se puede cargar a la cuenta de un empleado."; paying = false; updatePaySums(); return;
+  }
   if (list.some(function (p) { return p.method === "cuenta" && !p.tab_employee_id; })) { $("payErr").textContent = "Elige a qué empleado se carga la cuenta."; paying = false; updatePaySums(); return; }
   if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + (p.tip ? 0 : payRef(p)); }, 0); partial = restAll > 0.02; }
   rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial, p_sello: $("selloChk").checked }).then(function (r) {

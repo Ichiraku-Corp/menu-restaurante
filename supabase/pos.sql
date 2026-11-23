@@ -1751,13 +1751,18 @@ begin
   perform public.pos_auth(p_emp, p_pin);
   if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
   cid := public.pos_customer_id(d);
+  -- Sin cédula (o con una que no está), el teléfono reconoce al cliente que ya vino, si no tiene otra cédula
+  if cid is null and public.phone_key(p_phone) is not null then
+    select id into cid from public.customers
+    where public.phone_key(phone) = public.phone_key(p_phone) and (d is null or doc_id is null) order by id limit 1;
+  end if;
   if cid is null then
     insert into public.customers (doc_id, name, phone, email, registered_at, source, marketing_consent, consent_at)
     values (d, left(trim(p_name), 80), left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), left(lower(trim(coalesce(p_email, ''))), 120),
             (now() at time zone 'America/Caracas')::date, 'pos', coalesce(p_consent, false), case when p_consent then now() end)
     returning id into cid;
   else
-    update public.customers set name = left(trim(p_name), 80),
+    update public.customers set name = left(trim(p_name), 80), doc_id = coalesce(doc_id, d),
       phone = coalesce(nullif(left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), ''), phone),
       email = coalesce(nullif(left(lower(trim(coalesce(p_email, ''))), 120), ''), email),
       marketing_consent = marketing_consent or coalesce(p_consent, false),
