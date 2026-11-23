@@ -102,6 +102,7 @@ function drawMenu() {
   if (cur.cat === "top" && !tops.length) cur.cat = MENU.cats[0] && MENU.cats[0].id;
   $("cats").innerHTML = (tops.length ? '<button type="button" data-cat="top" class="topcat' + (!term && cur.cat === "top" ? " on" : "") + '">' + icon("star") + "<span>Lo más pedido</span></button>" : "") +
     MENU.cats.map(function (c) { return '<button type="button" data-cat="' + c.id + '" data-maid="' + maidOf(c.id) + '"' + (!term && cur.cat === c.id ? ' class="on"' : "") + ">" + esc(c.name) + "</button>"; }).join("");
+  catsMas();
   var list = term ? MENU.dishes.filter(function (d) { return d.name.toLowerCase().indexOf(term) >= 0; })
     : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
@@ -114,6 +115,15 @@ function drawMenu() {
   }).join("") || '<p class="muted">Sin resultados.</p>';
 }
 $("search").addEventListener("input", drawMenu);
+// Secciones que no caben: en la caja (pantalla ancha) van en dos filas; en la tablet se deslizan y un degradado a la
+// derecha avisa que hay más. La rueda del mouse también las desliza.
+function catsMas() { var c = $("cats"); c.classList.toggle("mas", c.scrollWidth - c.scrollLeft - c.clientWidth > 4); }
+$("cats").addEventListener("scroll", catsMas, { passive: true });
+window.addEventListener("resize", catsMas);
+$("cats").addEventListener("wheel", function (e) {
+  var c = $("cats");
+  if (c.scrollWidth > c.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { c.scrollLeft += e.deltaY; e.preventDefault(); }
+}, { passive: false });
 $("cats").addEventListener("click", function (e) { var b = e.target.closest("[data-cat]"); if (!b) return; cur.cat = b.dataset.cat === "top" ? "top" : Number(b.dataset.cat); $("search").value = ""; drawMenu(); });
 // Los platos más pedidos (últimos 30 días): se piden al entrar y cada 10 minutos
 // Notas rápidas: las más usadas de cada plato y de toda la carta (pos_notas); se tocan en vez de escribirlas

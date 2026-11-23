@@ -133,6 +133,10 @@
   .search input { padding-left:40px; }
   .cats { display:flex; gap:6px; overflow-x:auto; padding:10px 0 4px; scrollbar-width:none; }
   .cats::-webkit-scrollbar { display:none; }
+  /* En la caja (pantalla ancha) todas las secciones a la vista, en dos filas si hace falta; en la tablet se deslizan
+     y, si hay más a la derecha, la última se desvanece para avisar */
+  @media (min-width: 1100px) { .cats { flex-wrap:wrap; overflow-x:visible; } }
+  .cats.mas { -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 56px), transparent); mask-image:linear-gradient(to right, #000 calc(100% - 56px), transparent); }
   .cats button { flex:none; border-radius:999px; font-size:15px; min-height:42px; padding:6px 14px; }
   .cats button.on { background:var(--text); color:var(--bg); border-color:var(--text); }
   .dishes { display:grid; grid-template-columns:repeat(auto-fill, minmax(176px, 1fr)); gap:10px; margin-top:8px; }

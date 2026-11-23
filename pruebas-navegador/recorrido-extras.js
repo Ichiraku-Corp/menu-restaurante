@@ -42,6 +42,16 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     ok(await p.isVisible("#btnFull"), "y sigue arriba con la sesión abierta");
     await p.click('#areas [data-area="Feria"]'); await p.click('#areaBody [data-table] .num:text-is("2")'); await p.waitForSelector("#orderView:not(.hidden)");
 
+    // 0b) Las secciones del pedido: en pantalla ancha (la caja) se ven todas, Bebidas incluida; en la tablet avisa que hay más
+    const secciones = () => p.evaluate(() => { const c = document.getElementById("cats"), cr = c.getBoundingClientRect();
+      return { ocultas: [...c.querySelectorAll("button")].filter((b) => { const r = b.getBoundingClientRect(); return r.right > cr.right + 1 || r.left < cr.left - 1; }).map((b) => b.textContent.trim()),
+               mas: c.classList.contains("mas"), desborda: c.scrollWidth > c.clientWidth + 4 }; });
+    let sec = await secciones();
+    ok(!sec.ocultas.length && /Bebidas/.test(await p.textContent("#cats")), "en pantalla ancha se ven todas las secciones, Bebidas incluida (" + sec.ocultas.join(", ") + ")");
+    await p.setViewportSize({ width: 960, height: 600 }); await p.waitForTimeout(200); sec = await secciones();
+    ok(!sec.desborda || sec.mas, "en la tablet, si no caben, un degradado avisa que hay más secciones");
+    await p.setViewportSize({ width: 1180, height: 900 }); await p.waitForTimeout(200);
+
     // 1) Teuchi Gr con pollo y huevo desde la ventanita
     await p.click('#cats button:has-text("Ramen")'); await p.click('#dishes button:has-text("Teuchi")');
     await p.waitForSelector("#dishDlg[open]");
