@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NOkKxrQ1a2FSaY05m2FvJKfDRtc54ju99fwmJJGMoTk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Im/YMmDWeV7k4E2eYw0t5YLq7OS4nMFqws+ZIYdUwII='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -84,6 +84,13 @@
   section > h2 small { font-size: 12px; font-weight: 900; line-height: 1; color: var(--ink); background: #fff; padding: 5px 10px; border-radius: 999px;
     border: 2px solid var(--ink); -webkit-text-stroke: 0; text-shadow: none; }
   section > h2::after { content: "✦" / ""; position: absolute; right: 16px; top: 8px; font-size: 24px; color: var(--gold); -webkit-text-stroke: 5px var(--ink); text-shadow: none; }
+  /* Cada sección con su dibujo, como un sticker: gyoza, ramen, sushi, especial, dorayaki y bubble tea (assets/secciones) */
+  section.con-dibujo > h2 { min-height: 88px; padding-right: 112px; flex-wrap: wrap; row-gap: 6px; }
+  section.con-dibujo > h2 small { white-space: nowrap; }
+  section.con-dibujo > h2::after { display: none; }
+  .dibujo { position: absolute; right: 10px; top: 50%; width: 98px; height: 98px; transform: translateY(-50%) rotate(-7deg);
+    filter: drop-shadow(2.5px 0 0 #fff) drop-shadow(-2.5px 0 0 #fff) drop-shadow(0 2.5px 0 #fff) drop-shadow(0 -2.5px 0 #fff) drop-shadow(3px 4px 0 rgba(27,45,107,.85)); }
+  section.con-dibujo:nth-of-type(even) .dibujo { transform: translateY(-50%) rotate(6deg); }
   .dish { display: flex; gap: 14px; padding: 16px; border-top: 2px dashed var(--line); }
   .dish:first-of-type { border-top: 0; }
   /* La foto, en un platito del color de la maid (el blanco de la foto toma ese color) */
@@ -376,6 +383,8 @@
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
   function platoBlanco(name) { return /postre/.test(norm(name)); }
+  // El dibujo de cada sección (assets/secciones/<nombre>.svg); las secciones nuevas salen sin dibujo
+  var DIBUJO = { entradas: "gyoza", ramen: "ramen", sushi: "sushi", especiales: "especial", postres: "dorayaki", bebidas: "boba" };
   var CATNAME = {};
   // Cada precio en Ref y, con la tasa del día, su equivalente en Bs debajo (con la promoción, si la hay)
   function priceHtml(d) {
@@ -426,8 +435,10 @@
       var sid = "cat-" + c.id, maid = maidOf(c.name);
       CATNAME[c.id] = c.name;
       navHtml += '<li><a href="#' + sid + '" data-maid="' + maid + '">' + esc(c.name) + "</a></li>";
-      html += '<section id="' + sid + '" data-maid="' + maid + '"' + (platoBlanco(c.name) ? ' data-plato="blanco"' : "") + "><h2>" + esc(c.name) +
-        (c.subtitle ? " <small lang=\"ja\">" + esc(c.subtitle) + "</small>" : "") + "</h2>";
+      var dib = DIBUJO[norm(c.name).trim()];
+      html += '<section id="' + sid + '" data-maid="' + maid + '"' + (platoBlanco(c.name) ? ' data-plato="blanco"' : "") + (dib ? ' class="con-dibujo"' : "") + "><h2>" + esc(c.name) +
+        (c.subtitle ? " <small lang=\"ja\">" + esc(c.subtitle) + "</small>" : "") +
+        (dib ? '<img class="dibujo" src="assets/secciones/' + dib + '.svg" alt="" width="98" height="98" aria-hidden="true">' : "") + "</h2>";
       items.forEach(function (d) {
         var photo = safeUrl(d.photo_url);
         var opts = (d.options || []), tags = (d.tags || []);

@@ -93,6 +93,8 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   await p.reload(); await esperar(p, () => document.getElementById("tasa").hidden).catch(() => {});
   ok(await p.isHidden("#tasa") && !(await p.locator(".pbs").count()), "sin tasa no muestra bolívares");
   ok((await gyo.locator(".price i").textContent()) === "REF" && (await gyo.locator(".price em").textContent()) === "5", "y la carta se ve igual en Ref");
+  const dibujos = await p.$$eval("main section > h2", (l) => l.map((h) => { const i = h.querySelector("img.dibujo"); return h.firstChild.textContent.trim() + ":" + (i && i.complete && i.naturalWidth > 0 ? i.getAttribute("src").split("/").pop() : "-"); }));
+  ok(dibujos.length > 0 && dibujos.every((t) => !/:-$/.test(t)) && dibujos.some((t) => /^Entradas:gyoza\.svg$/.test(t)), "cada sección trae su dibujo (" + dibujos.join(", ") + ")");
   ok(err.length === 0, "sin errores de JavaScript" + (err.length ? ": " + err.join(" | ") : ""));
   await b.close(); srv.close();
   if (fallos) { console.log(fallos + " prueba(s) fallaron"); process.exit(1); }
