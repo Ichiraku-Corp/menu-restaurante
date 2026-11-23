@@ -70,11 +70,21 @@
       var s = elapsed(o.first_sent), m = s / 60, cls = m >= BAD_MIN ? " bad" : m >= WARN_MIN ? " warn" : "";
       return '<section class="card' + cls + '" data-order="' + o.id + '"><div class="head"><b>' + esc(o.label) + '</b><span class="t" data-since="' + esc(o.first_sent) + '">' + mmss(s) + "</span></div>" +
         '<div class="sub">#' + esc(o.day_number || "") + (o.waiter ? " · " + esc(o.waiter) : "") + "</div>" +
-        o.items.map(function (i) {
-          return '<button type="button" class="item" data-item="' + i.id + '" title="Tocar cuando esté listo"><span class="q">' + fmtQ(i.qty) + '</span><span><span class="n">' + esc(i.name) + "</span>" +
-            (i.variant || i.option ? '<span class="v">' + esc([i.variant, i.option].filter(Boolean).join(" · ")) + "</span>" : "") +
-            (i.notes ? '<span class="note">' + esc(i.notes) + "</span>" : "") + "</span></button>";
-        }).join("") +
+        (function () {
+          // Los extras (proteína, huevo…) van dentro de su plato; si el plato ya salió antes, el extra va solo y dice para cuál es
+          var ids = {}, kids = {};
+          o.items.forEach(function (i) { ids[i.id] = i; });
+          o.items.forEach(function (i) { if (i.extra_de && ids[i.extra_de]) (kids[i.extra_de] = kids[i.extra_de] || []).push(i); });
+          return o.items.filter(function (i) { return !(i.extra_de && ids[i.extra_de]); }).map(function (i) {
+            return '<button type="button" class="item" data-item="' + i.id + '" title="Tocar cuando esté listo"><span class="q">' + fmtQ(i.qty) + '</span><span><span class="n">' + esc(i.name) + "</span>" +
+              (i.variant || i.option ? '<span class="v">' + esc([i.variant, i.option].filter(Boolean).join(" · ")) + "</span>" : "") +
+              (i.extra_de && i.para ? '<span class="para">para ' + esc(i.para) + "</span>" : "") +
+              (kids[i.id] || []).map(function (k) {
+                return '<span class="x">+ ' + (Number(k.qty) !== Number(i.qty) ? fmtQ(k.qty) + " " : "") + esc(k.name) + (k.notes ? " · " + esc(k.notes) : "") + "</span>";
+              }).join("") +
+              (i.notes ? '<span class="note">' + esc(i.notes) + "</span>" : "") + "</span></button>";
+          }).join("");
+        })() +
         (o.others && Object.keys(o.others).length ? '<div class="others">También lleva: ' + Object.keys(o.others).map(function (k) { return esc(k) + " <b>" + Number(o.others[k]) + "</b>"; }).join(" · ") + "</div>" : "") +
         (o.pack && o.pack.length ? '<div class="others pack">Empacar: ' + o.pack.map(esc).join(" · ") + "</div>" : "") +
         (o.items.length > 1 ? '<button type="button" class="allready" data-all="' + o.id + '">Todo listo ✓</button>' : "") + "</section>";

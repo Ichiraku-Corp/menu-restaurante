@@ -25,7 +25,8 @@
       var stOf=function(i){ var d=menu.dishes.find(function(x){return x.id===i.dish_id;}); var s=d&&map[d.category_id]; return STS.some(function(x){return x.id===s;})?s:(STS[0]?STS[0].id:null); };
       var pend=S.items.filter(function(i){ var o=S.orders.find(function(x){return x.id===i.order_id;}); return i.status==='enviado'&&!i.ready_at&&o&&o.status!=='anulada'; });
       pend.forEach(function(i){ if(a.p_station&&stOf(i)!==a.p_station) return; var o=S.orders.find(function(x){return x.id===i.order_id;});
-        (by[o.id]=by[o.id]||{id:o.id,label:lbl(o),kind:o.kind,day_number:7,waiter:'Mesera',first_sent:i.sent_at,items:[],others:{},pack:(window.__PACK||{})[o.id]||[]}).items.push({id:i.id,name:i.name,variant:i.variant,option:i.option,notes:i.notes,qty:i.qty,sent_at:i.sent_at}); });
+        (by[o.id]=by[o.id]||{id:o.id,label:lbl(o),kind:o.kind,day_number:7,waiter:'Mesera',first_sent:i.sent_at,items:[],others:{},pack:(window.__PACK||{})[o.id]||[]}).items.push({id:i.id,name:i.name,variant:i.variant,option:i.option,notes:i.notes,qty:i.qty,sent_at:i.sent_at,
+          extra_de:i.extra_de||null,para:(function(){ var pp=i.extra_de&&S.items.find(function(x){return x.id===i.extra_de;}); return pp?pp.qty+' '+pp.name+(pp.variant?' '+pp.variant:''):null; })()}); });
       if(a.p_station) Object.keys(by).forEach(function(k){ pend.forEach(function(i){ if(i.order_id===by[k].id&&stOf(i)!==a.p_station){ var n=(STS.find(function(x){return x.id===stOf(i);})||{}).name; if(n) by[k].others[n]=(by[k].others[n]||0)+1; } }); });
       var listos=S.items.filter(function(i){return i.ready_at&&(!a.p_station||stOf(i)===a.p_station);});
       return {now:new Date().toISOString(),station:a.p_station||null,stations:STS.map(function(x){return {id:x.id,name:x.name,pending:pend.filter(function(i){return stOf(i)===x.id;}).length};}),
@@ -35,7 +36,7 @@
         if(!i.ready_at) b.falta++; else if(!i.served_at){ b.por++; if(!b.at||i.ready_at>b.at) b.at=i.ready_at; } });
       var L=Object.keys(by).map(function(k){return by[k];});
       return {now:new Date().toISOString(),preparando:L.filter(function(b){return b.falta>0;}).map(function(b){return {n:b.n};}),listos:L.filter(function(b){return b.falta===0&&b.por>0;}).map(function(b){return {n:b.n,at:b.at};})}; },
-    pos_kitchen_ready:function(a){ var n=0; S.items.forEach(function(i){ if(a.p_items.indexOf(i.id)>=0){ i.ready_at=a.p_ready?new Date().toISOString():null; i.served_at=null; n++; } }); return n; },
+    pos_kitchen_ready:function(a){ var n=0; S.items.forEach(function(i){ if(a.p_items.indexOf(i.id)>=0||(i.extra_de&&a.p_items.indexOf(i.extra_de)>=0)){ i.ready_at=a.p_ready?new Date().toISOString():null; i.served_at=null; n++; } }); return n; },
     pos_served:function(a){ auth(a); var n=0; S.items.forEach(function(i){ if(i.order_id===a.p_order&&i.ready_at&&!i.served_at){ i.served_at=new Date().toISOString(); n++; } }); return n; },
     pos_cash_out:function(a){ auth(a); window.__out=a; },
     // Mesa ocupada: window.__ATT[pedido] = {id, name, dev} de quien la atiende (las pruebas simulan otras tablets ahí)
@@ -66,11 +67,16 @@
     menu_promos:function(){ return window.__PROMOS||[]; },
     pos_meta:function(a){ var e=auth(a); if(!e.cc) throw {message:'No tienes permiso para cobrar. Pídele a una cajera autorizada.'}; window.__metaCalls=(window.__metaCalls||0)+1;
       return window.__META||{dia:new Date().toISOString().slice(0,10),meta:450,vendido:320,pedidos:18,promedio:448.5,dias:8,pct:0}; },
-    pos_add:function(a){ auth(a); a.p_items.forEach(function(it){ var d=menu.dishes.find(function(x){return x.id===it.dish_id}); var p=d.price; if(d.variants&&d.variants.length){ var v=d.variants.find(function(x){return x.label===it.variant}); if(!v) throw {message:'Elige el tamaño de '+d.name}; p=v.price; }
+    pos_add:function(a){ auth(a); var ids=[]; a.p_items.forEach(function(it){ var d=menu.dishes.find(function(x){return x.id===it.dish_id}); var p=d.price;
+      var par=null; if(it.extra_de!=null){ par=ids[it.extra_de]; if(!par) throw {message:'El extra no tiene plato'}; } else if(it.extra_de_item) par=it.extra_de_item; if(d.variants&&d.variants.length){ var v=d.variants.find(function(x){return x.label===it.variant}); if(!v) throw {message:'Elige el tamaño de '+d.name}; p=v.price; }
       var pr=(window.__PROMOS||[]).find(function(x){return (x.dish_ids||[]).indexOf(d.id)>=0||(x.category_ids||[]).indexOf(d.category_id)>=0;}), lp=p; if(pr) p=Math.round(p*(1-pr.percent/100)*100)/100;
-      S.items.push({id:++id,order_id:a.p_order,dish_id:d.id,name:d.name,variant:it.variant||'',option:it.option||'',notes:it.notes||'',qty:it.qty,unit_price:p,list_price:lp,promo:pr?pr.name+' -'+pr.percent+' %':'',status:'pendiente'}); }); return a.p_items.length; },
+      S.items.push({id:++id,order_id:a.p_order,dish_id:d.id,name:d.name,variant:it.variant||'',option:it.option||'',notes:it.notes||'',qty:it.qty,unit_price:p,list_price:lp,promo:pr?pr.name+' -'+pr.percent+' %':'',status:'pendiente',extra_de:par}); ids.push(id); }); return a.p_items.length; },
     pos_send:function(a){ auth(a); var n=0; S.items.forEach(function(i){ if(i.order_id===a.p_order&&i.status==='pendiente'){i.status='enviado';i.sent_at=new Date(Date.now()-60000).toISOString();n++;} }); S.jobs.push('cocina'); return n; },
-    pos_void:function(a){ auth(a); var i=S.items.find(function(x){return x.id===a.p_item}); if(i.status==='pendiente'){S.items.splice(S.items.indexOf(i),1);return 'quitado';} if((a.p_reason||'').length<3) throw {message:'Escribe el motivo'}; i.status='anulado'; i.void_reason=a.p_reason; return 'anulado'; },
+    pos_void:function(a){ auth(a); var i=S.items.find(function(x){return x.id===a.p_item}); var kids=S.items.filter(function(x){return x.extra_de===i.id&&x.status!=='anulado';});
+      var quitar=function(x){ S.items.splice(S.items.indexOf(x),1); };
+      if(i.status==='pendiente'){ kids.forEach(function(k){ if(k.status==='pendiente') quitar(k); }); quitar(i); return 'quitado'; }
+      if((a.p_reason||'').length<3) throw {message:'Escribe el motivo'}; i.status='anulado'; i.void_reason=a.p_reason;
+      kids.forEach(function(k){ if(k.status==='pendiente') quitar(k); else { k.status='anulado'; k.void_reason=a.p_reason; } }); return 'anulado'; },
     pos_discount:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.discount=a.p_amount; o.discount_reason=a.p_reason; },
     pos_precuenta:function(a){ auth(a); S.orders.find(function(x){return x.id===a.p_order}).precuenta_at=new Date().toISOString(); S.jobs.push('caja'); },
     pos_customer_by_phone:function(a){ auth(a); return String(a.p_phone).replace(/\D/g,'').slice(-10)==='4141234567' ? {id:7,name:'Ana Frecuente',address:'Calle 2, casa azul',notes:'',orders:3,spent:45,last_at:new Date(Date.now()-2*86400000).toISOString(),top:['Gyozas','Ramen']} : null; },

@@ -411,12 +411,21 @@ begin
     'month', jsonb_build_object('from', date_trunc('month', d)::date, 'to', d, 'rows', public.pos_ranking(date_trunc('month', d)::date, d)));
 end $$;
 
--- Los platos más pedidos de los últimos días (para la fila «Lo más pedido» al tomar el pedido)
+-- Extras (proteína, huevo, maíz…): son platos de una categoría marcada «es_extra» (no salen en la carta: solo-caja).
+-- Los platos de las categorías «con_extras» (Ramen, Especiales) los ofrecen en su ventanita. Cada extra va en su
+-- propia línea (con su precio, receta y costo) colgada del plato que lo lleva: pos_items.extra_de.
+alter table public.categories add column if not exists es_extra boolean not null default false;
+alter table public.categories add column if not exists con_extras boolean not null default false;
+alter table public.pos_items add column if not exists extra_de bigint references public.pos_items(id) on delete set null;
+create index if not exists pos_items_extra_de on public.pos_items (extra_de) where extra_de is not null;
+
+-- Los platos más pedidos de los últimos días (para la fila «Lo más pedido» al tomar el pedido). Los extras no cuentan.
 create or replace function public.pos_top_dishes(p_days int default 30) returns jsonb
 language sql stable security definer set search_path = public as $$
   select case when public.pos_is_device() then coalesce((select jsonb_agg(x.dish_id order by x.q desc) from (
     select i.dish_id, sum(i.qty) q from public.pos_items i
-    where i.status <> 'anulado' and i.dish_id is not null and i.created_at > now() - make_interval(days => greatest(coalesce(p_days, 30), 1))
+    where i.status <> 'anulado' and i.dish_id is not null and i.extra_de is null and i.created_at > now() - make_interval(days => greatest(coalesce(p_days, 30), 1))
+      and not exists (select 1 from public.dishes dd join public.categories cc on cc.id = dd.category_id where dd.id = i.dish_id and cc.es_extra)
     group by 1 order by 2 desc limit 12) x), '[]'::jsonb) end
 $$;
 
@@ -613,7 +622,7 @@ begin
     'items', (select coalesce(jsonb_agg(jsonb_build_object(
                 'id', i.id, 'dish_id', i.dish_id, 'name', i.name, 'variant', i.variant, 'option', i.option, 'notes', i.notes,
                 'qty', i.qty, 'unit_price', i.unit_price, 'promo', i.promo, 'status', i.status, 'void_reason', i.void_reason,
-                'canje', i.canje is not null, 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
+                'canje', i.canje is not null, 'extra_de', i.extra_de, 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
               from public.pos_items i where i.order_id = o.id),
     'split', o.split, 'channel', o.channel,
     'split_totals', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from public.pos_split(o.id) x),
@@ -699,14 +708,16 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.promo_de(bigint, timestamptz) from anon, public, authenticated;
 
+-- Un extra lleva "extra_de": la posición (desde 0) de su plato en esta misma lista, o "extra_de_item": el id de un
+-- plato que ya está en la cuenta (el extra que piden cuando el plato ya salió a cocina).
 create or replace function public.pos_add(p_emp bigint, p_pin text, p_order bigint, p_items jsonb)
 returns int language plpgsql security definer set search_path = public as $$
-declare it record; d record; price numeric; n int := 0; pid bigint; pname text; ppct numeric;
+declare it record; d record; price numeric; n int := 0; pid bigint; pname text; ppct numeric; ids bigint[] := '{}'; par bigint; nid bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if not exists (select 1 from public.pos_orders where id = p_order and status = 'abierta') then raise exception 'El pedido ya está cerrado'; end if;
   for it in select * from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb))
-            as x(dish_id bigint, variant text, option text, notes text, qty numeric) loop
+            as x(dish_id bigint, variant text, option text, notes text, qty numeric, extra_de int, extra_de_item bigint) loop
     select * into d from public.dishes where id = it.dish_id;
     if d.id is null then raise exception 'Plato no encontrado'; end if;
     if not d.available then raise exception '% está agotado', d.name; end if;
@@ -716,11 +727,28 @@ begin
       select (v ->> 'price')::numeric into price from jsonb_array_elements(d.variants) v where v ->> 'label' = coalesce(it.variant, '');
       if price is null then raise exception 'Elige el tamaño de %', d.name; end if;
     end if;
+    par := null;
+    if it.extra_de is not null or it.extra_de_item is not null then
+      if not exists (select 1 from public.categories c where c.id = d.category_id and c.es_extra) then raise exception '% no es un extra', d.name; end if;
+      if it.extra_de is not null then
+        if it.extra_de < 0 or it.extra_de >= n then raise exception 'El extra % no tiene plato', d.name; end if;
+        par := ids[it.extra_de + 1];
+      else
+        select x.id into par from public.pos_items x where x.id = it.extra_de_item and x.order_id = p_order and x.status <> 'anulado';
+        if par is null then raise exception 'El plato de % ya no está en la cuenta', d.name; end if;
+      end if;
+      if exists (select 1 from public.pos_items x left join public.dishes dd on dd.id = x.dish_id left join public.categories cc on cc.id = dd.category_id
+                 where x.id = par and (x.extra_de is not null or coalesce(cc.es_extra, false))) then
+        raise exception 'Un extra va con un plato, no con otro extra';
+      end if;
+    end if;
     pid := null; select x.id, x.name, x.percent into pid, pname, ppct from public.promo_de(d.id) x;
-    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, promo, list_price)
+    insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, created_by, promo, list_price, extra_de)
     values (p_order, d.id, d.name, coalesce(it.variant, ''), left(coalesce(it.option, ''), 40), left(coalesce(trim(it.notes), ''), 120), it.qty,
             case when pid is null then price else round(price * (1 - ppct / 100), 2) end, p_emp,
-            case when pid is null then '' else pname || ' -' || replace(trim_scale(ppct)::text, '.', ',') || ' %' end, price);
+            case when pid is null then '' else pname || ' -' || replace(trim_scale(ppct)::text, '.', ',') || ' %' end, price, par)
+    returning id into nid;
+    ids := ids || nid;
     n := n + 1;
   end loop;
   return n;
@@ -736,11 +764,21 @@ begin
   if n = 0 then return 0; end if;
   select day_number into num from public.pos_orders where id = p_order;
   added := exists (select 1 from public.pos_items x where x.order_id = p_order and x.status in ('enviado', 'anulado'));
-  select string_agg('^' || trim_scale(i.qty)::text || ' ' || i.name ||
-                    case when i.variant <> '' then ' ' || i.variant else '' end ||
-                    case when i.option <> '' then E'\n  ' || i.option else '' end ||
-                    case when i.notes <> '' then E'\n  >> ' || i.notes else '' end, E'\n' order by i.id)
-    into lines from public.pos_items i where i.order_id = p_order and i.status = 'pendiente';
+  -- Los extras salen debajo de su plato («  + Extra huevo»; con número solo si no es uno por plato).
+  -- Si el plato ya había salido, el extra sale solo y dice para cuál es.
+  select string_agg(
+           case when p.status = 'pendiente' then
+             '  + ' || case when i.qty <> p.qty then trim_scale(i.qty)::text || ' ' else '' end || i.name ||
+             case when i.notes <> '' then E'\n    >> ' || i.notes else '' end
+           else
+             '^' || trim_scale(i.qty)::text || ' ' || i.name ||
+             case when i.variant <> '' then ' ' || i.variant else '' end ||
+             case when i.option <> '' then E'\n  ' || i.option else '' end ||
+             case when i.notes <> '' then E'\n  >> ' || i.notes else '' end ||
+             case when p.id is not null then E'\n  >> para ' || trim_scale(p.qty)::text || ' ' || p.name || case when p.variant <> '' then ' ' || p.variant else '' end else '' end
+           end, E'\n' order by case when p.status = 'pendiente' then p.id else i.id end, i.id)
+    into lines from public.pos_items i left join public.pos_items p on p.id = i.extra_de
+    where i.order_id = p_order and i.status = 'pendiente';
   body := '^' || public.pos_order_label(p_order) || E'\n' || case when added then E'^+ AGREGADO\n' else '' end ||
           coalesce('Orden #' || num || '   ', '') || public.pos_now_txt() || '  ' || coalesce(public.pos_emp_name(p_emp), '') || E'\n=\n' || lines || E'\n=';
   -- inventario de afuera: se descuenta al enviar
@@ -758,21 +796,32 @@ end $$;
 -- Quitar un plato: si no se ha enviado se borra; si ya está en cocina se anula con motivo.
 create or replace function public.pos_void(p_emp bigint, p_pin text, p_item bigint, p_reason text default '')
 returns text language plpgsql security definer set search_path = public as $$
-declare it record;
+declare it record; k record; extras text := '';
 begin
   perform public.pos_auth(p_emp, p_pin);
   select i.*, o.status as ostatus into it from public.pos_items i join public.pos_orders o on o.id = i.order_id where i.id = p_item;
   if it.id is null then raise exception 'Plato no encontrado'; end if;
   if it.ostatus <> 'abierta' then raise exception 'El pedido ya está cerrado'; end if;
   if it.status = 'pendiente' then
+    delete from public.pos_items where extra_de = p_item and status = 'pendiente';   -- sus extras sin enviar se van con él
     delete from public.pos_items where id = p_item; return 'quitado';
   end if;
   if it.status = 'anulado' then return 'ya anulado'; end if;
   if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo de la anulación'; end if;
   update public.pos_items set status = 'anulado', void_reason = trim(p_reason), voided_by = p_emp, voided_at = now() where id = p_item;
   perform public.inv_consume_item(p_item, 1);  -- devuelve lo de afuera
+  -- Sus extras: los que no habían salido se quitan; los que ya estaban en cocina se anulan con el mismo motivo
+  delete from public.pos_items where extra_de = p_item and status = 'pendiente';
+  for k in select * from public.pos_items where extra_de = p_item and status = 'enviado' order by id loop
+    update public.pos_items set status = 'anulado', void_reason = trim(p_reason), voided_by = p_emp, voided_at = now() where id = k.id;
+    perform public.inv_consume_item(k.id, 1);
+    extras := extras || E'\n  + ' || trim_scale(k.qty)::text || ' ' || k.name;
+    insert into public.pos_log (employee_id, action, order_id, detail)
+    values (p_emp, 'anular_plato', k.order_id, jsonb_build_object('plato', k.name, 'variante', k.variant, 'cantidad', k.qty,
+            'monto', k.qty * k.unit_price, 'motivo', trim(p_reason)));
+  end loop;
   perform public.pos_print('cocina', '^ANULAR - ' || public.pos_order_label(it.order_id) || E'\n' || public.pos_now_txt() || E'\n=\n^' ||
-    trim_scale(it.qty)::text || ' ' || it.name || case when it.variant <> '' then ' ' || it.variant else '' end ||
+    trim_scale(it.qty)::text || ' ' || it.name || case when it.variant <> '' then ' ' || it.variant else '' end || extras ||
     E'\nMotivo: ' || trim(p_reason) || E'\n=');
   insert into public.pos_log (employee_id, action, order_id, detail)
   values (p_emp, 'anular_plato', it.order_id, jsonb_build_object('plato', it.name, 'variante', it.variant, 'cantidad', it.qty,
@@ -2072,13 +2121,15 @@ begin
   )
   select jsonb_build_object(
     'now', now(), 'station', p_station,
-    'stations', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'pending', (select count(*) from pend where pend.st = s.id)) order by s.position, s.id)
+    'stations', coalesce((select jsonb_agg(jsonb_build_object('id', s.id, 'name', s.name, 'pending', (select count(*) from pend where pend.st = s.id and pend.extra_de is null)) order by s.position, s.id)
                  from public.kitchen_stations s where s.active), '[]'::jsonb),
     'orders', (select coalesce(jsonb_agg(x order by x->>'first_sent'), '[]'::jsonb) from (
       select jsonb_build_object('id', o.id, 'label', public.pos_order_label(o.id), 'kind', o.kind, 'day_number', o.day_number,
                'waiter', public.pos_emp_name(o.opened_by), 'first_sent', min(p.sent_at),
                'items', jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'variant', p.variant, 'option', p.option, 'notes', p.notes,
-                          'qty', p.qty, 'sent_at', p.sent_at) order by p.sent_at, p.id),
+                          'qty', p.qty, 'sent_at', p.sent_at, 'extra_de', p.extra_de,
+                          'para', (select trim_scale(pp.qty)::text || ' ' || pp.name || case when pp.variant <> '' then ' ' || pp.variant else '' end
+                                   from public.pos_items pp where pp.id = p.extra_de)) order by p.sent_at, p.id),
                -- Lo que el mismo pedido tiene pendiente en otras estaciones (para coordinar la salida)
                'others', (select coalesce(jsonb_object_agg(s2.name, z.n), '{}'::jsonb) from (
                             select p2.st, count(*) n from pend p2 where p_station is not null and p2.order_id = o.id and p2.st is distinct from p_station group by p2.st) z
@@ -2091,9 +2142,9 @@ begin
       group by o.id) q),
     'recent', (select coalesce(jsonb_agg(jsonb_build_object('id', z.id, 'name', z.name, 'qty', z.qty, 'label', public.pos_order_label(z.order_id),
                  'minutes', round(extract(epoch from z.ready_at - z.sent_at) / 60, 1)) order by z.ready_at desc), '[]'::jsonb)
-               from (select * from it where it.ready_at > now() - interval '15 minutes' and (p_station is null or it.st = p_station) order by it.ready_at desc limit 8) z),
+               from (select * from it where it.ready_at > now() - interval '15 minutes' and it.extra_de is null and (p_station is null or it.st = p_station) order by it.ready_at desc limit 8) z),
     'today', (select jsonb_build_object('count', count(*), 'avg', round(avg(extract(epoch from it.ready_at - it.sent_at) / 60)::numeric, 1))
-              from it where it.ready_at >= t0 and (p_station is null or it.st = p_station))
+              from it where it.ready_at >= t0 and it.extra_de is null and (p_station is null or it.st = p_station))
   ) into r;
   return r;
 end $$;
@@ -2105,9 +2156,9 @@ declare n int;
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   if p_ready then
-    update public.pos_items set ready_at = now() where id = any(p_items) and status = 'enviado' and ready_at is null;
+    update public.pos_items set ready_at = now() where (id = any(p_items) or extra_de = any(p_items)) and status = 'enviado' and ready_at is null;
   else
-    update public.pos_items set ready_at = null, served_at = null where id = any(p_items) and ready_at > now() - interval '15 minutes';
+    update public.pos_items set ready_at = null, served_at = null where (id = any(p_items) or extra_de = any(p_items)) and ready_at > now() - interval '15 minutes';
   end if;
   get diagnostics n = row_count; return n;
 end $$;

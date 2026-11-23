@@ -11,7 +11,24 @@ function attDev() { return ((devName() || "Tablet") + " #" + ATT_ID).slice(0, 60
 function attOff() { return typeof SR !== "undefined" && SR.on; }  // sin internet no aplica
 function attMine(a) { return !!a && !!U && a.id === U.id && a.dev === attDev(); }
 function attCall(id, tomar) { return attOff() || !U ? Promise.resolve({ ok: true }) : rpc("pos_atender", { p_order: id, p_device: attDev(), p_tomar: !!tomar }); }
-function cartItems() { return cur.cart.map(function (c) { return { dish_id: c.dish.id, variant: c.variant, option: c.option, notes: c.notes, qty: c.qty }; }); }
+// Lo anotado, listo para pos_add. Cada extra va detrás de su plato: "extra_de" es la posición del plato en esta lista
+// (los marcados en la ventanita, uno por plato; y los que se agregan después desde «Extras») o "extra_de_item" si el plato ya estaba en la cuenta.
+function cartItems() {
+  var out = [];
+  cur.cart.forEach(function (c) {
+    if (c.para && c.para.cart) return;   // van detrás de su plato
+    var it = { dish_id: c.dish.id, variant: c.variant, option: c.option, notes: c.notes, qty: c.qty };
+    if (c.para && c.para.item) it.extra_de_item = c.para.item;
+    out.push(it);
+    var ix = out.length - 1;
+    (c.extras || []).forEach(function (x) { out.push({ dish_id: x.id, variant: "", option: "", notes: "", qty: c.qty, extra_de: ix }); });
+    cur.cart.forEach(function (e) { if (e.para && e.para.cart === c) out.push({ dish_id: e.dish.id, variant: "", option: "", notes: e.notes, qty: e.qty, extra_de: ix }); });
+  });
+  return out;
+}
+// Líneas sin enviar (cada extra cuenta como línea, igual que en el servidor)
+function cartLines() { return cur.cart.reduce(function (s2, c) { return s2 + 1 + (c.extras || []).length; }, 0); }
+function quitarCarrito(c) { cur.cart = cur.cart.filter(function (e) { return e !== c && !(e.para && e.para.cart === c); }); }
 var attLost = null;
 function attBeat() {
   if (!U || !cur.order || document.hidden || attOff()) return;
@@ -89,7 +106,7 @@ function drawMenu() {
     : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
     // la foto va en un platito del color de la maid de su categoría
-    var img = '<span class="plate">' + (d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc(d.name.charAt(0)) + "</span>") + "</span>";
+    var img = '<span class="plate">' + (d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc((isExtra(d) ? extraLabel(d) : d.name).charAt(0)) + "</span>") + "</span>";
     var pr = d.available && promoOf(d);
     return '<button type="button" data-dish="' + d.id + '" data-maid="' + maidOf(d.category_id) + '"' + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
       "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span>" +
@@ -134,6 +151,53 @@ $("moreBox").addEventListener("click", function (e) { if (e.target.closest("butt
 // Mantener presionado (o clic derecho en la laptop) abre la ventana completa: cantidad, opciones y nota.
 // La nota también se agrega después tocando la línea en la cuenta.
 var LONG = { t: 0, fired: false };
+// ---------------------------------------------------------------- Extras (proteína, huevo, maíz…)
+// Son platos de la categoría marcada «es_extra». Los platos de las categorías «con_extras» (Ramen, Especiales) los ofrecen en su
+// ventanita; tocar un extra en la carta pregunta para cuál plato es. Cada extra va en su propia línea, colgada de su plato.
+function catOf(d) { return d && (MENU.cats || []).find(function (c) { return c.id === d.category_id; }); }
+function isExtra(d) { var c = catOf(d); return !!(c && c.es_extra); }
+function takesExtras(d) { var c = catOf(d); return !!(c && c.con_extras); }
+function extrasMenu() { return (MENU.dishes || []).filter(function (x) { return x.available && isExtra(x); }); }
+function extraLabel(x) { var t = String(x.name).replace(/^extra\s+/i, ""); return t.charAt(0).toUpperCase() + t.slice(1); }
+function sameExtras(a, b) {
+  var k = function (l) { return (l || []).map(function (x) { return x.id; }).sort(function (p, q2) { return p - q2; }).join(","); };
+  return k(a) === k(b);
+}
+function platosParaExtra() {
+  var L = [];
+  cur.cart.forEach(function (c) { if (!c.para && takesExtras(c.dish)) L.push({ cart: c, label: fmtQ(c.qty) + " " + c.dish.name + (c.variant ? " " + c.variant : ""), estado: "nuevo, sin enviar" }); });
+  ((cur.data && cur.data.items) || []).forEach(function (i) {
+    if (i.status === "anulado" || i.extra_de || !(i.id > 0)) return;
+    var d = (MENU.dishes || []).find(function (x) { return x.id === i.dish_id; });
+    if (d && takesExtras(d)) L.push({ item: i, label: fmtQ(i.qty) + " " + i.name + (i.variant ? " " + i.variant : ""), estado: i.status === "pendiente" ? "sin enviar" : "ya en cocina" });
+  });
+  return L;
+}
+var PARA = null;
+function pedirExtra(x) {
+  var L = attOff() ? [] : platosParaExtra();   // sin internet va suelto
+  if (!L.length) return addToCart({ dish: x, variant: "", option: "", qty: 1, notes: "" });
+  if (L.length === 1) return ponerExtra(x, L[0]);
+  PARA = { x: x, L: L };
+  $("paraTitle").textContent = "¿Para cuál plato es " + x.name + "?";
+  $("paraList").innerHTML = L.map(function (p, k) { return '<button type="button" data-k="' + k + '"><span>' + esc(p.label) + "</span><small>" + esc(p.estado) + "</small></button>"; }).join("");
+  $("paraDlg").showModal();
+}
+function ponerExtra(x, p) {
+  var same = cur.cart.find(function (e) { return e.para && e.dish.id === x.id && (p.cart ? e.para.cart === p.cart : e.para.item === p.item.id); });
+  if (same) same.qty += 1;
+  else cur.cart.push({ dish: x, variant: "", option: "", qty: 1, notes: "", extras: [], para: p.cart ? { cart: p.cart, label: p.label } : { item: p.item.id, label: p.label } });
+  toast("+ " + x.name + " para " + p.label);
+  try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
+  drawTicket();
+  var Ls = $("lines"); if (Ls) Ls.scrollTop = Ls.scrollHeight;
+}
+$("paraList").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-k]"); if (!b || !PARA) return;
+  var p = PARA; PARA = null; $("paraDlg").close(); ponerExtra(p.x, p.L[Number(b.dataset.k)]);
+});
+$("paraSuelto").addEventListener("click", function () { var p = PARA; PARA = null; $("paraDlg").close(); if (p) addToCart({ dish: p.x, variant: "", option: "", qty: 1, notes: "" }); });
+$("paraCancel").addEventListener("click", function () { PARA = null; $("paraDlg").close(); });
 function dishOf(b) { return b && MENU.dishes.find(function (x) { return x.id === Number(b.dataset.dish); }); }
 function needsChoice(d) { var vs = variantsOf(d); return (vs && vs.length > 1) || (d.options || []).length > 0; }
 $("dishes").addEventListener("pointerdown", function (e) {
@@ -142,30 +206,33 @@ $("dishes").addEventListener("pointerdown", function (e) {
   LONG.t = setTimeout(function () {
     var d = dishOf(b); if (!d) return;
     LONG.fired = true; try { if (navigator.vibrate) navigator.vibrate(25); } catch (x) {}
-    pickDish(d);
+    if (isExtra(d)) pedirExtra(d); else pickDish(d);
   }, 450);
 });
 ["pointerup", "pointercancel", "pointerleave"].forEach(function (ev) { $("dishes").addEventListener(ev, function () { clearTimeout(LONG.t); }); });
 $("dishes").addEventListener("contextmenu", function (e) {
   var b = e.target.closest("[data-dish]"); if (!b) return;
   e.preventDefault(); clearTimeout(LONG.t);
-  if (!LONG.fired && !b.disabled) { var d = dishOf(b); if (d) { LONG.fired = true; pickDish(d); } }
+  if (!LONG.fired && !b.disabled) { var d = dishOf(b); if (d) { LONG.fired = true; if (isExtra(d)) pedirExtra(d); else pickDish(d); } }
 });
 $("dishes").addEventListener("click", function (e) {
   var b = e.target.closest("[data-dish]"); if (!b) return;
   if (LONG.fired) { LONG.fired = false; return; } // ya se abrió la ventana con el toque largo
   var d = dishOf(b); if (!d) return;
+  if (isExtra(d)) return pedirExtra(d);
   if (needsChoice(d)) return pickDish(d);
   var vs = variantsOf(d);
   addToCart({ dish: d, variant: vs && vs.length === 1 ? vs[0].label : "", option: "", qty: 1, notes: "" });
 });
 var pick = null;
 function pickDish(d) {
-  pick = { dish: d, variant: "", option: "", qty: 1 };
-  var vs = variantsOf(d), ops = d.options || [];
+  pick = { dish: d, variant: "", option: "", qty: 1, extras: [] };
+  var vs = variantsOf(d), ops = d.options || [], xs = takesExtras(d) ? extrasMenu() : [];
   $("dishTitle").textContent = d.name;
   $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño' + (promoOf(d) ? " · " + esc(promoTxt(promoOf(d))) : "") + '</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(promoPrice(d, num(v.price))) + "</button>"; }).join("") + "</div>" : "";
   $("dishOptions").innerHTML = ops.length ? '<div class="muted">Elige una opción</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
+  $("dishExtras").innerHTML = xs.length ? '<div class="muted">Extras <small>(uno por plato)</small></div><div class="chips xchips">' + xs.map(function (x) {
+    return '<button type="button" data-x="' + x.id + '">' + esc(extraLabel(x)) + " <small>+" + esc(ref(priceOf(x, ""))) + "</small></button>"; }).join("") + "</div>" : "";
   if (vs && vs.length === 1) pick.variant = vs[0].label;
   $("qVal").textContent = "1"; $("dishNote").value = ""; noteChips($("dishNotes"), notasDe(d.id), $("dishNote")); markPick();
   $("dishDlg").showModal();
@@ -173,7 +240,15 @@ function pickDish(d) {
 function markPick() {
   document.querySelectorAll("#dishVariants [data-v]").forEach(function (b) { b.classList.toggle("on", b.dataset.v === pick.variant); });
   document.querySelectorAll("#dishOptions [data-o]").forEach(function (b) { b.classList.toggle("on", b.dataset.o === pick.option); });
+  document.querySelectorAll("#dishExtras [data-x]").forEach(function (b) { b.classList.toggle("on", pick.extras.some(function (x) { return x.id === Number(b.dataset.x); })); });
+  var nx = pick.extras.length; $("dishAdd").textContent = nx ? "Añadir con " + nx + (nx === 1 ? " extra" : " extras") : "Añadir";
 }
+$("dishExtras").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-x]"); if (!b || !pick) return;
+  var id = Number(b.dataset.x), had = pick.extras.some(function (x) { return x.id === id; });
+  pick.extras = had ? pick.extras.filter(function (x) { return x.id !== id; }) : pick.extras.concat((MENU.dishes || []).filter(function (x) { return x.id === id; }));
+  markPick();
+});
 $("dishVariants").addEventListener("click", function (e) { var b = e.target.closest("[data-v]"); if (b) { pick.variant = b.dataset.v; markPick(); } });
 $("dishOptions").addEventListener("click", function (e) { var b = e.target.closest("[data-o]"); if (b) { pick.option = b.dataset.o; markPick(); } });
 $("qMinus").addEventListener("click", function () { pick.qty = Math.max(1, pick.qty - 1); $("qVal").textContent = pick.qty; });
@@ -185,9 +260,9 @@ $("dishAdd").addEventListener("click", function () {
   pick.notes = $("dishNote").value.trim(); addToCart(pick); $("dishDlg").close();
 });
 function addToCart(p) {
-  var same = cur.cart.find(function (c) { return c.dish.id === p.dish.id && c.variant === p.variant && c.option === p.option && c.notes === p.notes && !p.notes; });
-  if (same) same.qty += p.qty; else cur.cart.push({ dish: p.dish, variant: p.variant, option: p.option, qty: p.qty, notes: p.notes || "" });
-  toast("+" + p.qty + " " + p.dish.name + (p.variant ? " " + p.variant : ""));
+  var same = cur.cart.find(function (c) { return !c.para && c.dish.id === p.dish.id && c.variant === p.variant && c.option === p.option && c.notes === p.notes && !p.notes && sameExtras(c.extras, p.extras); });
+  if (same) same.qty += p.qty; else cur.cart.push({ dish: p.dish, variant: p.variant, option: p.option, qty: p.qty, notes: p.notes || "", extras: (p.extras || []).slice() });
+  toast("+" + p.qty + " " + p.dish.name + (p.variant ? " " + p.variant : "") + ((p.extras || []).length ? " con " + p.extras.map(extraLabel).join(", ").toLowerCase() : ""));
   try { if (navigator.vibrate) navigator.vibrate(15); } catch (e) {}
   var btn = document.querySelector('#dishes [data-dish="' + p.dish.id + '"]'); if (btn) { btn.classList.remove("flash"); void btn.offsetWidth; btn.classList.add("flash"); }
   drawTicket();
@@ -208,21 +283,38 @@ function drawTicket() {
     ? 'Delivery · ' + esc(d.phone || "sin teléfono") + ' <button type="button" id="editDeliv" style="min-height:32px;padding:4px 10px;font-size:13px">Editar datos</button><div class="muted" style="font-weight:400">' + esc(d.address || "Sin dirección") + "</div>"
     : "Para llevar (sin servicio)";
   $("orderBy").textContent = "Abrió " + (d.opened_by || "") + " · " + mins(d.opened_at);
-  var h = "";
-  d.items.forEach(function (i) {
+  var h = "", ids = {}, kids = {};
+  d.items.forEach(function (i) { ids[i.id] = true; });
+  d.items.forEach(function (i) { if (i.extra_de && ids[i.extra_de]) (kids[i.extra_de] = kids[i.extra_de] || []).push(i); });
+  function itemLine(i, sub) {
     var cls = i.status === "anulado" ? "void" : "click";
-    h += '<div class="line ' + cls + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
+    return '<div class="line ' + cls + (sub ? " sub" : "") + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + (sub ? "+ " : "") + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
       (i.option ? "<small>" + esc(i.option) + "</small>" : "") + (i.notes ? "<small>» " + esc(i.notes) + "</small>" : "") + (i.promo ? '<small class="promo">' + esc(i.promo) + "</small>" : "") +
       (i.status === "anulado" ? "<small>Anulado: " + esc(i.void_reason) + "</small>" : i.status === "pendiente" ? "<small>sin enviar</small>" : "") +
       '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + personDots(d, i) + "</span></div>";
+  }
+  d.items.forEach(function (i) {
+    if (i.extra_de && ids[i.extra_de]) return;   // va debajo de su plato
+    h += itemLine(i, false);
+    (kids[i.id] || []).forEach(function (k) { h += itemLine(k, true); });
   });
-  cur.cart.forEach(function (c, ix) {
-    h += '<div class="line new" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
+  function cartLine(c, ix, sub) {
+    return '<div class="line new' + (sub ? " sub" : "") + '" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + (sub ? "+ " : "") + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
+      (c.para && c.para.item ? '<small class="para">para ' + esc(c.para.label) + "</small>" : "") +
       (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + (promoOf(c.dish) ? '<small class="promo">' + esc(promoTxt(promoOf(c.dish))) + "</small>" : "") + '<small>nuevo, sin enviar · toca para ' + (c.notes ? "cambiar la nota" : "agregar nota") + '</small></span><span class="p">' +
       ref(c.qty * priceOf(c.dish, c.variant)) + "</span></div>";
+  }
+  cur.cart.forEach(function (c, ix) {
+    if (c.para && c.para.cart) return;   // va debajo de su plato
+    h += cartLine(c, ix, false);
+    (c.extras || []).forEach(function (x) {
+      h += '<div class="line new sub" data-cart="' + ix + '" data-xrm="' + x.id + '"><span class="q">' + fmtQ(c.qty) + '</span><span class="t"><span>+ ' + esc(x.name) + "</span>" +
+        "<small>" + (c.qty > 1 ? "uno por plato · " : "") + "toca para quitarlo</small></span><span class=\"p\">" + ref(c.qty * priceOf(x, "")) + "</span></div>";
+    });
+    cur.cart.forEach(function (e, k) { if (e.para && e.para.cart === c) h += cartLine(e, k, true); });
   });
   $("lines").innerHTML = h || '<p class="emptyline">Sin platos todavía.<br>Elige de la carta.</p>';
-  var t = d.totals, cartSum = cur.cart.reduce(function (s, c) { return s + c.qty * priceOf(c.dish, c.variant); }, 0), rate = ST && ST.rate;
+  var t = d.totals, cartSum = cur.cart.reduce(function (s, c) { return s + c.qty * (priceOf(c.dish, c.variant) + (c.extras || []).reduce(function (s2, x) { return s2 + priceOf(x, ""); }, 0)); }, 0), rate = ST && ST.rate;
   var sub = num(t.subtotal) + cartSum, disc = Math.min(num(t.discount), sub), svc = Math.round((sub - disc) * num(d.service_pct)) / 100, dl = num(t.delivery), tot = sub - disc + svc + dl, paid = num(t.paid);
   cur.due = tot - paid;
   $("totals").innerHTML = '<div class="tot"><span>Subtotal</span><span>' + ref(sub) + "</span></div>" +
@@ -237,7 +329,7 @@ function drawTicket() {
       return '<span style="--pc:' + pcol(x.person) + '"><i class="pdot' + (x.person ? "" : " none") + '"></i>' + (x.person ? "P" + x.person : "Sin asignar") + " " + ref(x.total) + (okp ? " ✓" : "") + "</span>";
     }).join("") + "</div>" : "") +
     (d.precuenta_at ? '<div class="muted">Precuenta impresa a las ' + new Date(d.precuenta_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + "</div>" : "");
-  var pending = cur.cart.length + d.items.filter(function (i) { return i.status === "pendiente"; }).length;
+  var pending = cartLines() + d.items.filter(function (i) { return i.status === "pendiente"; }).length;
   label("send", "send", pending ? "Enviar a cocina (" + pending + ")" : "Enviar a cocina");
   $("send").disabled = !pending;
   var hasItems = d.items.some(function (i) { return i.status !== "anulado"; });
@@ -258,8 +350,14 @@ $("lines").addEventListener("click", function (e) {
   var c = e.target.closest("[data-cart]");
   if (c) {
     var ci = Number(c.dataset.cart), it0 = cur.cart[ci];
+    if (c.dataset.xrm) {   // un extra marcado en la ventanita: tocarlo lo quita
+      var xid = Number(c.dataset.xrm), xq = (it0.extras || []).find(function (x) { return x.id === xid; });
+      it0.extras = (it0.extras || []).filter(function (x) { return x.id !== xid; });
+      if (xq) toast("Sin " + xq.name.toLowerCase());
+      drawTicket(); return;
+    }
     if (e.target.closest("[data-inc]")) it0.qty = Math.min(50, it0.qty + 1);
-    else if (e.target.closest("[data-dec]")) { it0.qty -= 1; if (it0.qty <= 0) cur.cart.splice(ci, 1); }
+    else if (e.target.closest("[data-dec]")) { it0.qty -= 1; if (it0.qty <= 0) quitarCarrito(it0); }
     else if (e.target.closest(".t")) { // tocar el nombre: poner o cambiar la nota para cocina
       var ch = notasDe(it0.dish.id);
       ask({ title: "Nota para cocina · " + it0.dish.name, help: ch.length ? "Toca una nota o escribe otra. Déjalo vacío para quitarla." : "Ej.: sin cebollín, bien cocido, para compartir. Déjalo vacío para quitarla.",
@@ -272,8 +370,10 @@ $("lines").addEventListener("click", function (e) {
   }
   var l = e.target.closest("[data-item]"); if (!l || l.classList.contains("void")) return;
   var it = cur.data.items.find(function (i) { return i.id === Number(l.dataset.item); });
-  if (it.status === "pendiente") { rpc("pos_void", { p_item: it.id, p_reason: "" }).then(loadOrder).catch(fail); return; }
-  ask({ title: "Anular " + fmtQ(it.qty) + " " + it.name + (it.variant ? " " + it.variant : ""), help: "Ya está en cocina. Escribe el motivo: quedará en el cierre de caja.", value: "", required: 3 })
+  if (it.status === "pendiente") { rpc("pos_void", { p_item: it.id, p_reason: "" }).then(loadOrder).catch(fail); return; }   // sus extras sin enviar se van con él
+  var nk = cur.data.items.filter(function (x) { return x.extra_de === it.id && x.status !== "anulado"; }).length;
+  ask({ title: "Anular " + fmtQ(it.qty) + " " + it.name + (it.variant ? " " + it.variant : "") + (nk ? (nk === 1 ? " y su extra" : " y sus " + nk + " extras") : ""),
+        help: "Ya está en cocina. " + (nk ? (nk === 1 ? "Su extra también se anula. " : "Sus extras también se anulan. ") : "") + "Escribe el motivo: quedará en el cierre de caja.", value: "", required: 3 })
     .then(function (r) { if (r === null) return; return rpc("pos_void", { p_item: it.id, p_reason: r }).then(function () { toast("Anulado y avisado a cocina"); return loadOrder(); }); }).catch(fail);
 });
 

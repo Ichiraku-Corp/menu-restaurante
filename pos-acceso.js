@@ -42,7 +42,7 @@ function startDevice() {
   loadMenu();
 }
 function lock() {
-  U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; show("btnFull", false); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
+  U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; syncFull(); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
   ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", true);
   drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
   if (typeof waStop === "function") waStop();
@@ -174,24 +174,41 @@ function syncOrderBar() {
   b.textContent = { send: "Enviar (" + pending + ")", pay: "Cobrar", bill: "Precuenta", none: "Enviar" }[b.dataset.mode];
   b.className = b.dataset.mode === "pay" ? "ok" : "primary";
 }
-// Pantalla completa (para tablets sin «instalar app», como las Fire con Silk)
-var standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
-var canFull = !standalone && (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+// Pantalla completa: el botón está siempre arriba, también en la pantalla del PIN y en la app instalada.
+// Una vez puesta, la tablet vuelve sola a pantalla completa con el primer toque si se sale (al recargar, con el teclado…).
+// El mismo botón la quita. Si la app ya abre en pantalla completa (instalada así), el botón no hace falta.
+var appFull = !!(window.matchMedia && window.matchMedia("(display-mode: fullscreen)").matches) && !(document.fullscreenElement || document.webkitFullscreenElement);
+var canFull = !appFull && !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+var FULL_ON = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+var FULL_OFF = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
 function isFull() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function wantFull() { try { return localStorage.getItem("pos-full") === "1"; } catch (e) { return false; } }
 function goFull() {
   var el = document.documentElement, f = el.requestFullscreen || el.webkitRequestFullscreen;
   try { var r = f && f.call(el); if (r && r.catch) r.catch(function () {}); } catch (e) {}
 }
-function syncFull() { show("btnFull", !!(canFull && U && !isFull())); }
+function exitFull() {
+  var f = document.exitFullscreen || document.webkitExitFullscreen;
+  try { var r = f && f.call(document); if (r && r.catch) r.catch(function () {}); } catch (e) {}
+}
+function syncFull() {
+  show("btnFull", canFull); if (!canFull) return;
+  var b = $("btnFull"), on = isFull(), t = on ? "Salir de pantalla completa" : "Pantalla completa";
+  if (b.dataset.on !== String(on)) { b.dataset.on = String(on); b.innerHTML = on ? FULL_OFF : FULL_ON; b.setAttribute("aria-label", t); b.title = t; }
+}
 if (canFull) {
-  $("btnFull").addEventListener("click", function () { goFull(); try { localStorage.setItem("pos-full", "1"); } catch (e) {} });
+  $("btnFull").addEventListener("click", function () {
+    if (isFull()) { try { localStorage.removeItem("pos-full"); } catch (e) {} exitFull(); }
+    else { try { localStorage.setItem("pos-full", "1"); } catch (e) {} goFull(); }
+  });
   ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) { document.addEventListener(ev, syncFull); });
-  // Si ya se eligió pantalla completa, se recupera con el primer toque (los navegadores exigen un toque).
-  document.addEventListener("pointerdown", function () {
-    var want = false; try { want = localStorage.getItem("pos-full") === "1"; } catch (e) {}
-    if (want && U && !isFull()) goFull();
+  // Si ya se eligió pantalla completa, se recupera con el primer toque (los navegadores exigen un toque), con o sin sesión.
+  document.addEventListener("pointerdown", function (e) {
+    if (e.target && e.target.closest && e.target.closest("#btnFull")) return;   // el botón decide
+    if (wantFull() && !isFull()) goFull();
   }, true);
 }
+syncFull();
 var wake = null;
 function keepAwake() {
   try { if (navigator.wakeLock && !wake && document.visibilityState === "visible") navigator.wakeLock.request("screen").then(function (w) { wake = w; w.addEventListener("release", function () { wake = null; }); }).catch(function () {}); } catch (e) {}

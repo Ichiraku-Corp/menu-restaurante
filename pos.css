@@ -641,3 +641,14 @@ dialog h2 { font-weight:900; }
 .cjrow .stepper { display:flex; align-items:center; gap:8px; } .cjrow .stepper button { min-width:46px; font-size:20px; font-weight:800; }
 .cjrow .stepper b { min-width:22px; text-align:center; font-size:18px; }
 .cjya { padding:8px 12px; border-radius:12px; background:var(--ok-soft); color:var(--ok); font-weight:600; }
+/* Extras de los platos: chips con su precio en la ventanita y líneas «+ Extra» debajo de su plato en la cuenta */
+#dishExtras { margin-top:8px; }
+.xchips button small { font-weight:700; font-size:13px; opacity:.8; }
+.xchips button.on small { opacity:1; }
+.line.sub { margin-left:22px; padding-top:5px; padding-bottom:5px; border-bottom-style:dotted; }
+.line.sub .t > span:first-child { font-weight:700; }
+.line.sub .q { min-width:26px; height:26px; font-size:13px; }
+.line .t small.para { color:var(--ink); font-weight:700; }
+.paralist { display:grid; gap:10px; }
+.paralist button { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:56px; padding:8px 16px; border:2px solid var(--ink); border-radius:16px; background:#fff; color:var(--ink); font-weight:800; font-size:17px; text-align:left; }
+.paralist button small { color:var(--muted); font-weight:600; font-size:13px; white-space:nowrap; }

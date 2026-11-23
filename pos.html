@@ -13,19 +13,19 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=3a73e90bea">
+<link rel="stylesheet" href="pos.css?v=bb0bb71568">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=f9f2d5eead"></script>
 <script src="pos-base.js?v=3b7c33de0b" defer></script>
-<script src="pos-acceso.js?v=277cedfc01" defer></script>
-<script src="pos-mesas.js?v=7f12d2b16c" defer></script>
-<script src="pos-pedido.js?v=7a30056e41" defer></script>
+<script src="pos-acceso.js?v=0f39d1ecb8" defer></script>
+<script src="pos-mesas.js?v=1e727585a9" defer></script>
+<script src="pos-pedido.js?v=8003d35817" defer></script>
 <script src="pos-cobro.js?v=0d8fe5d8ee" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
-<script src="pos-sinred.js?v=cb4858f40e" defer></script>
+<script src="pos-sinred.js?v=4bf3d16cbd" defer></script>
 <script src="pos-caja.js?v=c0abb22846" defer></script>
 </head>
 <body>
@@ -122,10 +122,19 @@
   <h2 id="dishTitle"></h2>
   <div id="dishVariants"></div>
   <div id="dishOptions"></div>
+  <div id="dishExtras"></div>
   <div class="stepper" style="margin:10px 0"><button type="button" id="qMinus">−</button><b id="qVal">1</b><button type="button" id="qPlus">+</button></div>
   <input id="dishNote" placeholder="Nota para cocina (opcional)" maxlength="120">
   <div class="chips notechips" id="dishNotes"></div>
   <div class="row between" style="margin-top:14px"><button type="button" id="dishCancel">Cancelar</button><button type="button" class="primary big" id="dishAdd">Añadir</button></div>
+</dialog>
+
+<!-- Un extra pedido aparte (desde «Extras»): ¿para cuál plato? -->
+<dialog id="paraDlg">
+  <h2 id="paraTitle"></h2>
+  <p class="muted">Sale en la comanda con ese plato.</p>
+  <div class="paralist" id="paraList"></div>
+  <div class="row between" style="margin-top:12px"><button type="button" id="paraCancel">Cancelar</button><button type="button" id="paraSuelto">Sin plato</button></div>
 </dialog>
 
 <!-- Pedir un texto (motivo, nombre…) o un número -->

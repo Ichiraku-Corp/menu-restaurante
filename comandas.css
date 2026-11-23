@@ -34,6 +34,8 @@ header { position:sticky; top:0; z-index:2; display:flex; align-items:center; ga
 .item .q { font-size:24px; font-weight:900; min-width:2.2ch; }
 .item .n { font-size:21px; font-weight:800; }
 .item .v { display:block; font-size:16px; color:var(--muted); }
+.item .x { display:block; margin-top:3px; font-size:19px; font-weight:800; color:#8fd8ff; }
+.item .para { display:block; font-size:16px; font-weight:700; color:#8fd8ff; }
 .item .note { display:block; margin-top:4px; padding:4px 8px; border-radius:8px; background:#ffe06633; color:#ffe066; font-weight:800; font-size:17px; }
 .allready { display:block; width:100%; padding:12px; border:0; border-top:1px solid var(--line); background:var(--ok); color:#06210f; font-weight:900; font-size:18px; }
 .recent { display:flex; flex-wrap:wrap; gap:8px; padding:8px 12px 16px; color:var(--muted); font-size:15px; }
