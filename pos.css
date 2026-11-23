@@ -662,3 +662,15 @@ dialog h2 { font-weight:900; }
 .dishes button .plate .ph.emo { font-size:32px; line-height:1; }
 .xchips .emo { font-size:18px; line-height:1; }
 .dishes button[data-plato="blanco"] .plate { background:#fff; }
+/* La maid del día en la pantalla del PIN, abajo a la derecha, con su globito a la izquierda de la cara. Su alto y el
+   lugar del globito los calcula pos-acceso.js para que nunca tape textos ni botones. */
+.maidpin { position:fixed; right:36px; bottom:-40px; height:520px; width:auto; pointer-events:none; z-index:0; }
+.maidbub { position:fixed; right:290px; bottom:390px; z-index:1; margin:0; box-sizing:border-box; max-width:250px; background:#fff; color:var(--ink); border:2.5px solid var(--ink);
+  border-radius:18px; padding:8px 14px; font-weight:900; font-size:16px; line-height:1.2; box-shadow:3px 4px 0 var(--ink); pointer-events:none; }
+.maidbub small { display:block; margin-top:2px; font-weight:700; font-size:12.5px; line-height:1.3; color:var(--muted); }
+#pin.hidden ~ .maidpin, #pin.hidden ~ .maidbub { display:none !important; }
+.maidpin:not([hidden]) { animation:maidIn .45s ease-out; }
+.maidbub:not([hidden]) { animation:bubIn .3s .3s ease-out both; }
+@keyframes maidIn { from { opacity:0; transform:translateX(28px); } }
+@keyframes bubIn { from { opacity:0; transform:scale(.85); } }
+@media (max-width: 599px), (max-height: 479px) { .maidpin, .maidbub { display:none !important; } }

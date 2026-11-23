@@ -13,14 +13,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=d12342aed7">
+<link rel="stylesheet" href="pos.css?v=c83fb83fd7">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=f9f2d5eead"></script>
 <script src="pos-base.js?v=3b7c33de0b" defer></script>
-<script src="pos-acceso.js?v=232bcc288b" defer></script>
+<script src="pos-acceso.js?v=42384c4aa0" defer></script>
 <script src="pos-mesas.js?v=b5ea79844b" defer></script>
 <script src="pos-pedido.js?v=3f7c327477" defer></script>
 <script src="pos-cobro.js?v=0d8fe5d8ee" defer></script>
@@ -72,6 +72,10 @@
     <p class="muted" style="text-align:center;margin-top:24px">Este equipo: <b id="devNameTxt"></b> <button type="button" id="devRename" style="min-height:34px;padding:4px 10px;font-size:13px">Cambiar</button></p>
     <p class="muted" style="text-align:center;margin-top:8px"><button id="devOut" class="danger">Desactivar este dispositivo</button></p>
   </section>
+  <!-- La maid del día saluda en la pantalla del PIN (tablets y laptop; pos-acceso.js elige cuál y su tamaño). Va fuera de
+       #pin para que la animación de entrada de #pin no la mueva; solo se ve mientras se ve #pin. -->
+  <img id="maidPin" class="maidpin" alt="" width="390" height="800" hidden>
+  <p id="maidBub" class="maidbub" hidden></p>
 
   <!-- 3. Mesas -->
   <section id="tablesView" class="hidden">

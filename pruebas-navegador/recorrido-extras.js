@@ -38,6 +38,35 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     ok(await p.isVisible("#btnFull"), "el botón de pantalla completa está en la pantalla del PIN");
     // Sin nombres: se entra solo con el PIN; los nombres salen solo si dos personas comparten el PIN
     ok(!(await p.isVisible("#people")) && !(await p.isVisible("#pinWho")), "la pantalla del PIN no muestra los nombres");
+    await p.waitForFunction(() => !document.getElementById("maidPin").hidden, null, { timeout: 4000 }).catch(() => {});
+    ok(await p.evaluate(() => { const i = document.getElementById("maidPin"); return !i.hidden && i.complete && i.naturalWidth > 0 && /assets\/maids\/(miso|dango-moto|imo)\.webp$/.test(i.src); })
+      && /Okaerinasai/.test(await p.textContent("#maidBub")), "la maid del día saluda en la pantalla del PIN");
+    // La maid nunca tapa textos ni botones: ni cuando salen los nombres (PIN compartido), ni en la Fire HD 8 acostada o parada
+    const maid = () => p.evaluate(() => {
+      const rg = document.createRange(), cajas = [];
+      document.getElementById("pin").querySelectorAll("h2, p, button").forEach((el) => {
+        let r; if (el.tagName === "BUTTON") r = el.getBoundingClientRect(); else { rg.selectNodeContents(el); r = rg.getBoundingClientRect(); }
+        if (r.width && r.height) cajas.push(r);
+      });
+      const i = document.getElementById("maidPin"), b = document.getElementById("maidBub"), m = i.getBoundingClientRect(), g = b.getBoundingClientRect();
+      const sil = MAID_SILUETA[i.src.split("/").pop().replace(".webp", "")], fh = m.height / sil.length, bandas = [];
+      sil.forEach((f, k) => { if (f[1] > f[0] && m.top + k * fh < innerHeight) bandas.push({ left: m.left + m.width * f[0] / 100, right: m.left + m.width * f[1] / 100, top: m.top + k * fh, bottom: m.top + (k + 1) * fh }); });
+      const choca = (a) => cajas.some((c) => a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top);
+      return { ve: !i.hidden && m.width > 0, choca: bandas.some(choca) || (!b.hidden && choca(g)), alto: Math.round(m.height) };
+    });
+    let mm = await maid();
+    ok(mm.ve && !mm.choca && mm.alto > 400, "en la tablet grande sale grande y sin tapar nada (" + JSON.stringify(mm) + ")");
+    await p.evaluate(() => { show("pinSide", true); for (let i = 0; i < 6; i++) document.getElementById("people").insertAdjacentHTML("beforeend", '<button type="button" class="relleno">Persona ' + i + "</button>"); });
+    await p.setViewportSize({ width: 1180, height: 760 }); await p.waitForTimeout(200); mm = await maid();
+    ok(!mm.choca, "con los nombres a la vista (9) y la pantalla más baja no tapa nada (" + JSON.stringify(mm) + ")");
+    await p.evaluate(() => { document.querySelectorAll("#people .relleno").forEach((b) => b.remove()); show("pinSide", false); });
+    for (const [w, h] of [[960, 600], [600, 960]]) {
+      await p.setViewportSize({ width: w, height: h }); await p.waitForTimeout(200); mm = await maid();
+      ok(mm.ve && !mm.choca, "en la Fire HD 8 " + (w > h ? "acostada" : "parada") + " sale sin tapar nada (" + JSON.stringify(mm) + ")");
+    }
+    await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(200);
+    ok(!(await p.isVisible("#maidPin")), "en el teléfono no sale");
+    await p.setViewportSize({ width: 1180, height: 900 }); await p.waitForTimeout(200);
     await p.evaluate(() => { window.__S.staff.push({ id: 4, name: "Mesera Dos", pin: "1111", cc: false }); staffList.push({ id: 4, name: "Mesera Dos" }); lock(); });
     for (const k of "1111") await p.click(`#pad [data-k="${k}"]`);
     await p.waitForTimeout(200);

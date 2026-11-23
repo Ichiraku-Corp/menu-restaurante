@@ -210,6 +210,136 @@ if (canFull) {
   }, true);
 }
 syncFull();
+// La maid del día en la pantalla del PIN. Sale en las tablets y en la laptop, acostadas o paradas; en teléfonos no sale
+// y la imagen ni se descarga. Cada día le toca a una (Miso, Dango, Imo) y cada una tiene 10 frases que se turnan.
+// Su alto es una parte del alto de la pantalla (MAID_ESCALA); si así tapara algún texto o botón, se achica hasta
+// que no tape nada, y si no cabe, ese día no sale.
+var MAID_ESCALA = { acostada: 0.62, parada: 0.34 };
+var MAIDS = [
+  { img: "miso", hola: "¡Okaerinasai!", frases: [
+    "¿Listos para el ramen? Yo ya revisé todo dos veces.",
+    "Respira, sonríe y escribe tu PIN. Hoy sale todo bien.",
+    "Imaginé mil cosas que podían salir mal… y no pasó ninguna.",
+    "Cada cliente que entra llega a casa. Recíbelo así.",
+    "Un buen caldo no se apura. Una buena maid tampoco.",
+    "Si algo se complica, avísame. Aquí nadie atiende solo.",
+    "Fui la primera de mi clase. Hoy la primera mesa es tuya.",
+    "Mi perrito me despidió en la puerta. Ahora te recibo yo.",
+    "Horrores cósmicos: vencidos. Hora pico: vamos por ella.",
+    "Si cerramos bonito, hoy me premio con puré."] },
+  { img: "dango-moto", hola: "¡Okaerinasaiii!", frases: [
+    "¡Hoy va a ser un día dulce! Lo presiento.",
+    "¡Llegué volando en mi moto para verte!",
+    "Sonrisa puesta, delantal puesto… ¿y tu PIN? ¡Eso!",
+    "¡Ofrece un postre en cada mesa! Bueno… o dos.",
+    "Me distraje mirando los postres. ¿Qué hacía? ¡Ah, tu PIN!",
+    "¡Atender mesas es lo que más me gusta después de los dulces!",
+    "Anoche serví bobas dormida. ¡Hoy despierta lo hago mejor!",
+    "¡Cada cliente es un amigo que todavía no conoces!",
+    "Hoy no se me cae ni un plato… ¡creo!",
+    "Al salir me voy de compras. ¡Pero primero, a brillar!"] },
+  { img: "imo", hola: "Okaerinasai…", frases: [
+    "Escribe tu PIN y a jugar.",
+    "Nivel nuevo desbloqueado: el turno de hoy. Dificultad: normal.",
+    "Mi café y yo te damos la bienvenida. Sobre todo el café.",
+    "Saqué tu carta del tarot: hoy cobras sin errores. No me falles.",
+    "Guarda la partida y entra. Las mesas no se atienden solas.",
+    "Si la tablet se cuelga, no la sacudas. Llámame.",
+    "Hice las cuentas: sonreír sube las propinas. Tú verás.",
+    "No cocino, pero sirvo como profesional. Tú también.",
+    "Misión del día: sobrevivir a la hora pico. Recompensa: café.",
+    "Sí, sí, ya dije okaerinasai. Ahora escribe tu PIN."] }
+];
+// Silueta de cada maid en 32 franjas de arriba abajo: desde dónde hasta dónde hay dibujo (en % del ancho de la imagen).
+// Sirve para acomodarla en el hueco libre sin tapar nada.
+var MAID_SILUETA = {
+  "miso": [[48,70],[46,74],[40,78],[39,81],[41,87],[2,90],[0,99],[16,100],[19,96],[25,93],[32,86],[39,86],[36,88],[30,92],[28,93],[30,93],[37,93],[43,76],[45,73],[47,71],[49,70],[51,74],[51,75],[51,75],[51,76],[53,77],[56,79],[58,81],[59,81],[60,80],[60,74],[60,69]],
+  "dango-moto": [[41,61],[39,64],[37,67],[36,71],[32,73],[33,91],[30,91],[12,88],[12,86],[16,90],[16,90],[11,89],[8,84],[22,81],[20,86],[19,87],[18,87],[17,90],[16,97],[16,99],[16,100],[16,100],[14,100],[12,96],[11,95],[9,92],[7,89],[2,87],[0,68],[1,69],[17,69],[21,69]],
+  "imo": [[42,66],[23,72],[16,73],[9,98],[6,100],[7,100],[16,99],[16,98],[19,97],[20,92],[42,89],[38,78],[32,85],[30,93],[25,93],[23,91],[22,86],[27,78],[34,79],[32,80],[32,82],[31,85],[30,88],[29,89],[27,89],[25,89],[23,88],[17,91],[13,92],[0,93],[0,94],[8,93]]
+};
+// Dónde y de qué alto va la maid sin tapar nada. Prueba de grande a chica: abajo a la derecha (saliéndose un poco por
+// abajo) o parada junto al teclado si a su derecha queda espacio. El globito va a la izquierda, lo más cerca posible
+// de su cara, o encima de su cabeza. Devuelve null si no cabe. (La página de prueba de tamaños usa esta misma función.)
+// o: { W, H, prop (ancho/alto de la imagen), sil, max (alto máximo), estorbos [rect], teclado (rect o null), globos [{w,h}] }
+function colocarMaid(o) {
+  function choca(c) {
+    for (var i = 0; i < o.estorbos.length; i++) { var e = o.estorbos[i]; if (c.l < e.right && c.r > e.left && c.t < e.bottom && c.b > e.top) return true; }
+    return false;
+  }
+  var lugares = [function (a) { return { x1: o.W - 36, y1: o.H + a * 0.08 }; }];
+  if (o.teclado && o.W - o.teclado.right >= 130) lugares.push(function () { return { x1: o.W - 10, y1: o.teclado.bottom }; });
+  for (var a = Math.round(o.max); a >= 180; a -= 6) {
+    for (var k = 0; k < lugares.length; k++) {
+      var L = lugares[k](a), w = a * o.prop, x0 = L.x1 - w, y0 = L.y1 - a, fh = a / o.sil.length, bandas = [], i;
+      if (x0 < 8 || y0 < 0) continue;
+      for (i = 0; i < o.sil.length && y0 + i * fh < o.H; i++) {
+        var f = o.sil[i];
+        if (f[1] > f[0]) bandas.push({ l: x0 + w * f[0] / 100, r: x0 + w * f[1] / 100, t: y0 + i * fh, b: y0 + (i + 1) * fh });
+      }
+      if (bandas.some(choca)) continue;
+      for (var gi = 0; gi < o.globos.length; gi++) {
+        var G = o.globos[gi];
+        for (var t = y0 + a * 0.04; t <= y0 + a * 0.22 && t + G.h <= o.H - 8; t += 6) {   // junto a la cara, no más abajo
+          var der = o.W;
+          bandas.forEach(function (b) { if (b.b > t && b.t < t + G.h) der = Math.min(der, b.l); });
+          var c = { l: der - 8 - G.w, r: der - 8, t: t, b: t + G.h };
+          if (c.l >= 8 && !choca(c)) return { alto: a, x: x0, y: y0, globo: c, g: gi };
+        }
+        var hx = x0 + w * (o.sil[1][0] + o.sil[1][1]) / 200, cl = Math.max(8, Math.min(hx - G.w / 2, o.W - 10 - G.w));
+        var c2 = { l: cl, r: cl + G.w, t: y0 - G.h - 6, b: y0 - 6 };
+        if (c2.t >= 0 && !choca(c2)) return { alto: a, x: x0, y: y0, globo: c2, g: gi };
+      }
+    }
+  }
+  return null;
+}
+(function maidDelDia() {
+  var mq = window.matchMedia && window.matchMedia("(min-width: 600px) and (min-height: 480px)");
+  if (!mq || !mq.matches) return;
+  var dia = Math.floor((Date.now() - 4 * 3600e3) / 864e5), m = MAIDS[dia % MAIDS.length];   // el día cambia a medianoche en Venezuela
+  var img = $("maidPin"), bub = $("maidBub"), pin = $("pin"), rg = document.createRange(), pend = false;
+  bub.innerHTML = esc(m.hola) + "<small>" + esc(m.frases[Math.floor(dia / MAIDS.length) % m.frases.length]) + "</small>";
+  // Lo que no se puede tapar: la barra de arriba y los textos y botones de la pantalla del PIN
+  function estorbos() {
+    var out = [document.querySelector("header").getBoundingClientRect()];
+    pin.querySelectorAll("h2, p, button").forEach(function (el) {
+      var r;
+      if (el.tagName === "BUTTON") r = el.getBoundingClientRect(); else { rg.selectNodeContents(el); r = rg.getBoundingClientRect(); }
+      if (r.width && r.height) out.push(r);
+    });
+    return out;
+  }
+  // Dónde están de verdad las teclas (la caja del teclado ocupa todo el ancho aunque las teclas vayan al centro)
+  function teclado() {
+    var t = { left: 1e9, top: 1e9, right: 0, bottom: 0, width: 0 };
+    $("pad").querySelectorAll("button").forEach(function (b) {
+      var r = b.getBoundingClientRect();
+      if (r.width) { t.left = Math.min(t.left, r.left); t.top = Math.min(t.top, r.top); t.right = Math.max(t.right, r.right); t.bottom = Math.max(t.bottom, r.bottom); t.width = t.right - t.left; }
+    });
+    return t;
+  }
+  function acomodar() {
+    pend = false;
+    var W = window.innerWidth, H = window.innerHeight, r = null, angosto = 170;
+    if (mq.matches && img.naturalWidth && !pin.classList.contains("hidden")) {
+      bub.hidden = false; bub.style.cssText = "left:0;top:0;right:auto;bottom:auto";   // un instante, para medirlo (no llega a pintarse)
+      var g1 = { w: bub.offsetWidth, h: bub.offsetHeight }, pad = teclado();
+      angosto = Math.max(130, Math.min(170, pad.width ? W - pad.right - 22 : 170));   // el angosto cabe al lado del teclado
+      bub.style.maxWidth = angosto + "px";
+      var g2 = { w: bub.offsetWidth, h: bub.offsetHeight };
+      r = colocarMaid({ W: W, H: H, prop: img.naturalWidth / img.naturalHeight, sil: MAID_SILUETA[m.img], max: H * (W > H ? MAID_ESCALA.acostada : MAID_ESCALA.parada),
+        estorbos: estorbos(), teclado: pad.width ? pad : null, globos: g2.w < g1.w ? [g1, g2] : [g1] });
+    }
+    img.hidden = bub.hidden = !r;
+    if (!r) return;
+    img.style.cssText = "left:" + Math.round(r.x) + "px;top:" + Math.round(r.y) + "px;height:" + r.alto + "px;right:auto;bottom:auto";
+    bub.style.cssText = "left:" + Math.round(r.globo.l) + "px;top:" + Math.round(r.globo.t) + "px;right:auto;bottom:auto" + (r.g ? ";max-width:" + angosto + "px" : "");
+  }
+  function pedir() { if (!pend) { pend = true; requestAnimationFrame(acomodar); } }
+  img.addEventListener("load", pedir); window.addEventListener("resize", pedir); window.addEventListener("scroll", pedir, { passive: true });
+  if (window.MutationObserver) new MutationObserver(pedir).observe(pin, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class", "hidden"] });
+  img.src = "assets/maids/" + m.img + ".webp";
+})();
 var wake = null;
 function keepAwake() {
   try { if (navigator.wakeLock && !wake && document.visibilityState === "visible") navigator.wakeLock.request("screen").then(function (w) { wake = w; w.addEventListener("release", function () { wake = null; }); }).catch(function () {}); } catch (e) {}
