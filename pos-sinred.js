@@ -325,7 +325,7 @@ function srLanToken() {
 loadMenu = function () {
   return Promise.all([
     q(sb.from("categories").select("id,name,position,es_extra,con_extras").order("position")),
-    q(sb.from("dishes").select("id,category_id,name,price,variants,options,available,position,photo_url").order("position"))
+    q(sb.from("dishes").select("id,category_id,name,price,variants,options,available,position,photo_url,attributes").order("position"))
   ]).then(function (r) { MENU.cats = r[0]; MENU.dishes = r[1]; srSet("menu", { cats: r[0], dishes: r[1] }); },
     function (e) { var m = srGet("menu"); if (!m) throw e; if (!(MENU.dishes || []).length) { MENU.cats = m.cats; MENU.dishes = m.dishes; } })
     .then(function () { if (!cur.cat && MENU.cats[0]) cur.cat = MENU.cats[0].id; if (cur.order) drawMenu(); }).catch(fail);

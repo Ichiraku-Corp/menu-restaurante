@@ -19,8 +19,8 @@ const M = JSON.parse(fs.readFileSync(path.join(ROOT, "data", "menu.json"), "utf8
 M.categories.forEach((c) => { if (c.name === "Ramen" || c.name === "Especiales") c.con_extras = true; });
 M.categories.push({ id: 70, name: "Extras", subtitle: "トッピング", position: 3.5, es_extra: true });
 M.categories.sort((a, b) => a.position - b.position);
-M.dishes.push({ id: 701, category_id: 70, name: "Extra pollo", price: 4, variants: [], options: [], available: true, position: 1, tags: ["solo-caja"] },
-              { id: 702, category_id: 70, name: "Extra huevo", price: 1, variants: [], options: [], available: true, position: 2, tags: ["solo-caja"] });
+M.dishes.push({ id: 701, category_id: 70, name: "Extra pollo", price: 4, variants: [], options: [], available: true, position: 1, tags: ["solo-caja"], attributes: { emoji: "🍗" } },
+              { id: 702, category_id: 70, name: "Extra huevo", price: 1, variants: [], options: [], available: true, position: 2, tags: ["solo-caja"], attributes: { emoji: "🥚" } });
 const menu = JSON.stringify(M);
 const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8");
 (async () => {
@@ -57,11 +57,12 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     await p.waitForSelector("#dishDlg[open]");
     const chips = await p.textContent("#dishExtras");
     ok(/Pollo/.test(chips) && /\+Ref 4,00/.test(chips) && /Huevo/.test(chips) && /\+Ref 1,00/.test(chips), "la ventanita del ramen trae los extras con su precio");
+    ok(/🍗\s*Pollo/.test(chips) && /🥚\s*Huevo/.test(chips), "cada extra lleva su emoji (🍗 Pollo, 🥚 Huevo)");
     await p.click('#dishVariants [data-v="Gr"]'); await p.click('#dishExtras button:has-text("Pollo")'); await p.click('#dishExtras button:has-text("Huevo")');
     ok((await p.textContent("#dishAdd")) === "Añadir con 2 extras", "el botón dice «Añadir con 2 extras»");
     await p.click("#dishAdd"); await p.waitForTimeout(150);
     const subs = await p.$$eval("#lines .line.new.sub", (l) => l.map((x) => x.textContent));
-    ok(subs.length === 2 && /\+ Extra pollo/.test(subs[0]) && /\+ Extra huevo/.test(subs[1]), "en la cuenta, los extras salen debajo del ramen (" + subs.length + ")");
+    ok(subs.length === 2 && /\+ 🍗 Extra pollo/.test(subs[0]) && /\+ 🥚 Extra huevo/.test(subs[1]), "en la cuenta, los extras salen debajo del ramen, con su emoji (" + subs.length + ")");
     ok(/Ref 20,00/.test(await p.textContent("#totals")), "el total suma los extras: 15 + 4 + 1 = Ref 20");
     await p.click("#send"); await p.waitForTimeout(400);
     let it = await items();
@@ -70,7 +71,9 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     ok((await p.$$("#lines .line.sub")).length === 2, "después de enviar, la cuenta los sigue mostrando debajo del ramen");
 
     // 2) Un huevo más después: hay un solo plato con extras → va a ese, sin preguntar
-    await p.click('#cats button:has-text("Extras")'); await p.click('#dishes button:has-text("Extra huevo")'); await p.waitForTimeout(150);
+    await p.click('#cats button:has-text("Extras")'); await p.waitForTimeout(100);
+    ok((await p.textContent('#dishes button:has-text("Extra pollo") .plate')).trim() === "🍗", "en la sección «Extras» cada extra muestra su emoji en el platito");
+    await p.click('#dishes button:has-text("Extra huevo")'); await p.waitForTimeout(150);
     ok(!(await p.isVisible("#paraDlg")) && /para 1 Teuchi Gr/.test(await p.textContent("#lines .line.new")), "con un solo plato, el extra va a ese y lo dice («para 1 Teuchi Gr»)");
     await p.click("#send"); await p.waitForTimeout(400);
     it = await items();
@@ -120,6 +123,12 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     await p.click('#dishExtras button:has-text("Huevo")'); await p.click("#dishAdd"); await p.waitForTimeout(100);
     await p.click("#lines .line.new.sub"); await p.waitForTimeout(100);
     ok((await p.$$("#lines .line.new.sub")).length === 0 && /Tonkotsu/.test(await p.textContent("#lines")), "tocar el extra sin enviar lo quita y el ramen queda");
+    // 7) Postres: el platito es blanco (no rosado), como en la carta
+    await p.click('#cats button:has-text("Postres")'); await p.waitForTimeout(100);
+    const fondos = await p.$$eval("#dishes button .plate", (l) => l.map((x) => getComputedStyle(x).backgroundColor));
+    await p.click('#cats button:has-text("Bebidas")'); await p.waitForTimeout(100);
+    const fondoBebida = await p.$eval("#dishes button .plate", (x) => getComputedStyle(x).backgroundColor);
+    ok(fondos.length > 0 && fondos.every((c) => c === "rgb(255, 255, 255)") && fondoBebida !== "rgb(255, 255, 255)", "los postres tienen el platito blanco; las bebidas siguen en rosado");
     ok(errores.length === 0, "sin errores en la página" + (errores.length ? ": " + errores.join(" | ") : ""));
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message); }
   await browser.close(); server.close();

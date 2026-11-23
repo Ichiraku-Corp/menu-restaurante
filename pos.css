@@ -656,3 +656,7 @@ dialog h2 { font-weight:900; }
 .paralist { display:grid; gap:10px; }
 .paralist button { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:56px; padding:8px 16px; border:2px solid var(--ink); border-radius:16px; background:#fff; color:var(--ink); font-weight:800; font-size:17px; text-align:left; }
 .paralist button small { color:var(--muted); font-weight:600; font-size:13px; white-space:nowrap; }
+/* Emojis de los extras y platito blanco de los postres */
+.dishes button .plate .ph.emo { font-size:32px; line-height:1; }
+.xchips .emo { font-size:18px; line-height:1; }
+.dishes button[data-plato="blanco"] .plate { background:#fff; }

@@ -97,6 +97,13 @@ function maidOf(catId) {
   var n = c ? c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
   return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
 }
+// Postres: el platito va blanco (sus fotos tienen fondo blanco y con el rosado se veían rosadas), igual que en la carta
+function platoBlanco(catId) {
+  var c = MENU.cats.find(function (x) { return x.id === catId; });
+  return !!c && /postre/.test(c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+}
+// Emoji del plato (se guarda en dishes.attributes.emoji; por ahora los extras: 🍗 pollo, 🥓 panceta…)
+function emojiOf(d) { var e = d && d.attributes && d.attributes.emoji; return typeof e === "string" ? e : ""; }
 function drawMenu() {
   var term = $("search").value.trim().toLowerCase(), tops = (MENU.top || []).map(function (id) { return MENU.dishes.find(function (d) { return d.id === id; }); }).filter(Boolean);
   if (cur.cat === "top" && !tops.length) cur.cat = MENU.cats[0] && MENU.cats[0].id;
@@ -107,9 +114,10 @@ function drawMenu() {
     : cur.cat === "top" ? tops : MENU.dishes.filter(function (d) { return d.category_id === cur.cat; });
   $("dishes").innerHTML = list.map(function (d) {
     // la foto va en un platito del color de la maid de su categoría
-    var img = '<span class="plate">' + (d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<span class="ph">' + esc((isExtra(d) ? extraLabel(d) : d.name).charAt(0)) + "</span>") + "</span>";
+    var img = '<span class="plate">' + (d.photo_url && /^(assets\/|data:image\/|https:\/\/)/.test(d.photo_url) ? '<img src="' + esc(d.photo_url) + '" alt="" loading="lazy">'
+      : emojiOf(d) ? '<span class="ph emo" aria-hidden="true">' + esc(emojiOf(d)) + "</span>" : '<span class="ph">' + esc((isExtra(d) ? extraLabel(d) : d.name).charAt(0)) + "</span>") + "</span>";
     var pr = d.available && promoOf(d);
-    return '<button type="button" data-dish="' + d.id + '" data-maid="' + maidOf(d.category_id) + '"' + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
+    return '<button type="button" data-dish="' + d.id + '" data-maid="' + maidOf(d.category_id) + '"' + (platoBlanco(d.category_id) ? ' data-plato="blanco"' : "") + (d.available ? "" : " disabled") + (pr ? ' class="haspromo"' : "") + ">" + img + '<span class="tx"><b>' + esc(d.name) + "</b>" +
       "<span>" + (d.available ? (variantsOf(d) ? "desde " : "") + ref(minPrice(d)) : "Agotado") + "</span>" +
       (pr ? '<em class="promo">' + esc(promoTxt(pr)) + "</em>" : "") + "</span></button>";
   }).join("") || '<p class="muted">Sin resultados.</p>';
@@ -242,7 +250,7 @@ function pickDish(d) {
   $("dishVariants").innerHTML = vs ? '<div class="muted">Tamaño' + (promoOf(d) ? " · " + esc(promoTxt(promoOf(d))) : "") + '</div><div class="chips">' + vs.map(function (v) { return '<button type="button" data-v="' + esc(v.label) + '">' + esc(v.label) + " · " + ref(promoPrice(d, num(v.price))) + "</button>"; }).join("") + "</div>" : "";
   $("dishOptions").innerHTML = ops.length ? '<div class="muted">Elige una opción</div><div class="chips">' + ops.map(function (o) { return '<button type="button" data-o="' + esc(o) + '">' + esc(o) + "</button>"; }).join("") + "</div>" : "";
   $("dishExtras").innerHTML = xs.length ? '<div class="muted">Extras <small>(uno por plato)</small></div><div class="chips xchips">' + xs.map(function (x) {
-    return '<button type="button" data-x="' + x.id + '">' + esc(extraLabel(x)) + " <small>+" + esc(ref(priceOf(x, ""))) + "</small></button>"; }).join("") + "</div>" : "";
+    return '<button type="button" data-x="' + x.id + '">' + (emojiOf(x) ? '<span class="emo" aria-hidden="true">' + esc(emojiOf(x)) + "</span> " : "") + esc(extraLabel(x)) + " <small>+" + esc(ref(priceOf(x, ""))) + "</small></button>"; }).join("") + "</div>" : "";
   if (vs && vs.length === 1) pick.variant = vs[0].label;
   $("qVal").textContent = "1"; $("dishNote").value = ""; noteChips($("dishNotes"), notasDe(d.id), $("dishNote")); markPick();
   $("dishDlg").showModal();
@@ -298,7 +306,8 @@ function drawTicket() {
   d.items.forEach(function (i) { if (i.extra_de && ids[i.extra_de]) (kids[i.extra_de] = kids[i.extra_de] || []).push(i); });
   function itemLine(i, sub) {
     var cls = i.status === "anulado" ? "void" : "click";
-    return '<div class="line ' + cls + (sub ? " sub" : "") + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + (sub ? "+ " : "") + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
+    var em = sub ? emojiOf((MENU.dishes || []).find(function (x) { return x.id === i.dish_id; })) : "";
+    return '<div class="line ' + cls + (sub ? " sub" : "") + '" data-item="' + i.id + '"><span class="q">' + fmtQ(i.qty) + '</span><span class="t">' + (sub ? "+ " + (em ? em + " " : "") : "") + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") +
       (i.option ? "<small>" + esc(i.option) + "</small>" : "") + (i.notes ? "<small>» " + esc(i.notes) + "</small>" : "") + (i.promo ? '<small class="promo">' + esc(i.promo) + "</small>" : "") +
       (i.status === "anulado" ? "<small>Anulado: " + esc(i.void_reason) + "</small>" : i.status === "pendiente" ? "<small>sin enviar</small>" : "") +
       '</span><span class="p">' + ref(num(i.qty) * num(i.unit_price)) + personDots(d, i) + "</span></div>";
@@ -309,7 +318,7 @@ function drawTicket() {
     (kids[i.id] || []).forEach(function (k) { h += itemLine(k, true); });
   });
   function cartLine(c, ix, sub) {
-    return '<div class="line new' + (sub ? " sub" : "") + '" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + (sub ? "+ " : "") + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
+    return '<div class="line new' + (sub ? " sub" : "") + '" data-cart="' + ix + '"><span class="qty"><button type="button" data-dec aria-label="Uno menos">−</button><b>' + c.qty + '</b><button type="button" data-inc aria-label="Uno más">+</button></span><span class="t"><span>' + (sub || (c.para && c.para.item) ? "+ " + (emojiOf(c.dish) ? emojiOf(c.dish) + " " : "") : "") + esc(c.dish.name) + (c.variant ? " " + esc(c.variant) : "") + "</span>" +
       (c.para && c.para.item ? '<small class="para">para ' + esc(c.para.label) + "</small>" : "") +
       (c.option ? "<small>" + esc(c.option) + "</small>" : "") + (c.notes ? "<small>» " + esc(c.notes) + "</small>" : "") + (promoOf(c.dish) ? '<small class="promo">' + esc(promoTxt(promoOf(c.dish))) + "</small>" : "") + '<small>nuevo, sin enviar · toca para ' + (c.notes ? "cambiar la nota" : "agregar nota") + '</small></span><span class="p">' +
       ref(c.qty * priceOf(c.dish, c.variant)) + "</span></div>";
@@ -318,7 +327,7 @@ function drawTicket() {
     if (c.para && c.para.cart) return;   // va debajo de su plato
     h += cartLine(c, ix, false);
     (c.extras || []).forEach(function (x) {
-      h += '<div class="line new sub" data-cart="' + ix + '" data-xrm="' + x.id + '"><span class="q">' + fmtQ(c.qty) + '</span><span class="t"><span>+ ' + esc(x.name) + "</span>" +
+      h += '<div class="line new sub" data-cart="' + ix + '" data-xrm="' + x.id + '"><span class="q">' + fmtQ(c.qty) + '</span><span class="t"><span>+ ' + (emojiOf(x) ? esc(emojiOf(x)) + " " : "") + esc(x.name) + "</span>" +
         "<small>" + (c.qty > 1 ? "uno por plato · " : "") + "toca para quitarlo</small></span><span class=\"p\">" + ref(c.qty * priceOf(x, "")) + "</span></div>";
     });
     cur.cart.forEach(function (e, k) { if (e.para && e.para.cart === c) h += cartLine(e, k, true); });
