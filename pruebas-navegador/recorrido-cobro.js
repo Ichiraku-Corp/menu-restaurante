@@ -9,7 +9,7 @@ const srv=http.createServer((q,r)=>{const f=path.join(ROOT,decodeURIComponent(q.
 const err=[];p.on("pageerror",e=>err.push(e.message));p.on("dialog",d=>d.accept());
 const menu=fs.readFileSync(path.join(ROOT,"data/menu.json"),"utf8");
 await p.route("**/vendor/supabase-js-*/supabase.js",r=>r.fulfill({contentType:"application/javascript",body:"window.__MENU="+menu+";"+fs.readFileSync(path.join(ROOT,"pruebas-navegador/supabase-falso.js"),"utf8")}));
-const pin=async(e,c)=>{await p.click(`#people [data-emp="${e}"]`);for(const k of c)await p.click(`#pad [data-k="${k}"]`);};
+const pin=async(e,c)=>{for(const k of c)await p.click(`#pad [data-k="${k}"]`);};
 await p.goto("http://localhost:8795/pos.html");await p.fill("#devEmail","a@b.c");await p.fill("#devPass","x");await p.click("#device button");
 await pin(2,"2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(400);
 if(await p.isVisible("#annDlg")) await p.keyboard.press("Escape");

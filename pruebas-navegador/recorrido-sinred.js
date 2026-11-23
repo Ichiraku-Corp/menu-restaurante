@@ -45,7 +45,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     r.fulfill({ status: 404, body: "{}" });
   });
   const S = (fn) => page.evaluate(fn);
-  const pin = async (emp, code) => { await page.click(`#people [data-emp="${emp}"]`); for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
+  const pin = async (emp, code) => { for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
 
   try {
     await page.goto("http://localhost:8797/pos.html");

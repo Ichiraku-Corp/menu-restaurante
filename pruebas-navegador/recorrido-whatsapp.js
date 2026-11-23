@@ -53,7 +53,7 @@ const ORDER = { id: 41, status: "por_aceptar", kind: "delivery", zone: "Centro",
   await page.route("**/vendor/supabase-js-*/supabase.js", (r) => r.fulfill({ contentType: "application/javascript",
     body: "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8") + FAKE_WA }));
   const S = (fn, arg) => page.evaluate(fn, arg);
-  const pin = async (emp, code) => { await page.click(`#people [data-emp="${emp}"]`); for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
+  const pin = async (emp, code) => { for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
 
   try {
     // ---------------------------------------------------------------- Carta: «Pedir por WhatsApp»

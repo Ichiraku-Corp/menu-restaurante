@@ -167,7 +167,8 @@ var SRH = {
     var pins = srGet("pins") || {}, hits = Object.keys(pins).filter(function (k) { return pins[k].h === srPinKey(Number(k), a.p_pin); });
     if (hits.length === 1) { var x = pins[hits[0]]; return { ok: true, id: Number(hits[0]), name: x.name, can_charge: !!x.charge }; }
     if (hits.length > 1) return { ok: false, elegir: true, error: "Ese PIN lo tienen dos personas: toca tu nombre" };
-    return { ok: false, error: "Sin internet: en esta tablet solo entra quien ya entró antes con internet" };
+    // Solo con el PIN no se distingue un PIN mal escrito de alguien que nunca entró aquí: el aviso dice las dos cosas
+    return { ok: false, error: "PIN incorrecto. Sin internet, en esta tablet solo entra quien ya entró antes con internet" };
   },
   pos_check_pin: function (a) {
     var known = (srGet("pins") || {})[a.p_emp];

@@ -43,7 +43,7 @@ function startDevice() {
 }
 function lock() {
   U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; syncFull(); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
-  ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", true);
+  ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", true); show("pinSide", false);
   drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
   if (typeof waStop === "function") waStop();
   if ($("health")) $("health").classList.add("hidden");
@@ -51,10 +51,11 @@ function lock() {
   closeDialogs(); if (typeof setMarking === "function" && marking) setMarking(false);
 }
 var selected = null, pinBuf = "";
-// Con el PIN basta: la base sabe de quién es. Tocar el nombre es opcional (o necesario si dos personas comparten PIN).
+// Con el PIN basta: la base sabe de quién es. Los nombres no se muestran: solo salen si dos personas comparten PIN
+// y hay que tocar el suyo.
 function pinWhoTxt() {
   $("pinWho").textContent = selected ? "PIN de " + selected.name + " · toca tu nombre otra vez para quitarlo"
-    : "No hace falta tocar tu nombre: el PIN dice quién eres. Si la tablet te lo pide, tócalo aquí.";
+    : "Ese PIN lo tienen dos personas: toca tu nombre y vuelve a escribir tu PIN.";
 }
 $("people").addEventListener("click", function (e) {
   var b = e.target.closest("[data-emp]"); if (!b) return;
@@ -80,7 +81,7 @@ function setMarking(on) {
   marking = on; document.body.classList.toggle("marking", on);
   $("pinTitle").textContent = on ? "Escribe tu PIN para marcar" : "Escribe tu PIN para entrar";
   $("markMode").textContent = on ? "← Volver" : "🕘 Marcar llegada o salida";
-  selected = null; pinBuf = ""; show("padBox", true); drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
+  selected = null; pinBuf = ""; show("padBox", true); show("pinSide", false); drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
   document.querySelectorAll("#people button").forEach(function (x) { x.classList.remove("on"); });
 }
 $("markMode").addEventListener("click", function () { setMarking(!marking); });
@@ -103,7 +104,7 @@ function tryPin() {
   if (!emp) {
     // Solo el PIN: la base dice de quién es (sin marcar entrada si es para marcar llegada o salida)
     q(sb.rpc("pos_pin_login", { p_pin: pin, p_entrar: !marking })).then(function (r) {
-      if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; if (r && r.elegir) $("pinWho").textContent = "Toca tu nombre y vuelve a escribir tu PIN."; return; }
+      if (!r || !r.ok) { pinBuf = ""; drawDots(); $("pinErr").textContent = (r && r.error) || "PIN incorrecto"; if (r && r.elegir) { $("pinWho").textContent = "Toca tu nombre y vuelve a escribir tu PIN."; show("pinSide", true); } return; }
       var who = staffList.find(function (s) { return s.id === r.id; }) || { id: r.id, name: r.name };
       if (marking) { selected = who; tryPin(); return; }   // marcar sigue el camino de siempre, ya con la persona
       entrar(who, pin, r);
@@ -124,7 +125,7 @@ function tryPin() {
 function entrar(emp, pin, r) {
   U = { id: emp.id, name: r.name || emp.name, pin: pin, charge: !!r.can_charge };
   document.body.classList.toggle("nocharge", !U.charge);
-  show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + "<span>" + esc(U.name) + ' · <span class="muted">Salir</span></span>';
+  show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + '<span class="quien">' + esc(U.name) + '</span><span class="salir muted">· Salir</span>';
   touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadNotas(); loadPromos(); loadMeta(); waStart();
 }
 $("btnUser").addEventListener("click", lock);

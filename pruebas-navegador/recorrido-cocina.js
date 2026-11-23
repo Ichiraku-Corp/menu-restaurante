@@ -23,7 +23,7 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
   try {
     await tablet.goto("http://localhost:8798/pos.html");
     await tablet.fill("#devEmail", "t@e.test"); await tablet.fill("#devPass", "x"); await tablet.click("#device button");
-    await tablet.click('#people [data-emp="2"]'); for (const k of "2222") await tablet.click(`#pad [data-k="${k}"]`);
+    for (const k of "2222") await tablet.click(`#pad [data-k="${k}"]`);
     await tablet.waitForSelector("#tablesView:not(.hidden)");
     await tablet.click('#areas [data-area="Feria"]'); await tablet.click('#areaBody [data-table] .num:text-is("2")'); await tablet.waitForSelector("#orderView:not(.hidden)");
     await tablet.click('#cats button:has-text("Entradas")'); await tablet.click('#dishes button:has-text("Gyozas")', { button: "right" }); await tablet.fill("#dishNote", "bien doradas"); await tablet.click("#dishAdd");

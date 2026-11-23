@@ -30,7 +30,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
   await page.route("**/vendor/supabase-js-*/supabase.js", (r) => r.fulfill({ contentType: "application/javascript",
     body: "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__dirname, "supabase-falso.js"), "utf8") }));
   const S = (fn) => page.evaluate(fn);
-  const pin = async (emp, code) => { await page.click(`#people [data-emp="${emp}"]`); for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
+  const pin = async (emp, code) => { for (const k of code) await page.click(`#pad [data-k="${k}"]`); };
 
   try {
     // Equipo y PIN

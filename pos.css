@@ -342,8 +342,10 @@
     header { gap:6px; padding:6px 10px; }
     header h1 small, header .brand h1 { display:none; }
     header .rate { font-size:12px; padding:4px 8px; }
-    #btnCaja span, #btnUser > span:not(.avatar) { display:none; }
-    #btnCaja, #btnUser { padding:6px; min-width:46px; }
+    #btnCaja span, #btnUser .salir { display:none; }   /* el nombre de quien entró se ve siempre */
+    #btnCaja { padding:6px; min-width:46px; }
+    #btnUser { padding:6px 12px 6px 6px; }
+    #btnUser .quien { max-width:9ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     main { padding:10px; }
     .summary { display:grid; grid-template-columns:1fr 1fr; }
     .summary .s.meta { grid-column:1 / -1; }

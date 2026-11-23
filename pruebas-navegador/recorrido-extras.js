@@ -36,10 +36,20 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     await p.waitForSelector("#pin:not(.hidden)");
     // 0) Pantalla completa: el botón ya está en la pantalla del PIN (antes, solo después de entrar)
     ok(await p.isVisible("#btnFull"), "el botón de pantalla completa está en la pantalla del PIN");
+    // Sin nombres: se entra solo con el PIN; los nombres salen solo si dos personas comparten el PIN
+    ok(!(await p.isVisible("#people")) && !(await p.isVisible("#pinWho")), "la pantalla del PIN no muestra los nombres");
+    await p.evaluate(() => { window.__S.staff.push({ id: 4, name: "Mesera Dos", pin: "1111", cc: false }); staffList.push({ id: 4, name: "Mesera Dos" }); lock(); });
+    for (const k of "1111") await p.click(`#pad [data-k="${k}"]`);
+    await p.waitForTimeout(200);
+    ok(await p.isVisible('#people [data-emp="1"]') && /toca tu nombre/i.test(await p.textContent("#pinWho")), "si dos personas comparten el PIN, salen los nombres para tocar el suyo");
     await p.click('#people [data-emp="1"]'); for (const k of "1111") await p.click(`#pad [data-k="${k}"]`);
     await p.waitForSelector("#tablesView:not(.hidden)");
     if (await p.isVisible("#annDlg")) await p.keyboard.press("Escape");
     ok(await p.isVisible("#btnFull"), "y sigue arriba con la sesión abierta");
+    ok((await p.textContent("#btnUser .quien")) === "Mesera" && await p.isVisible("#btnUser .quien"), "dentro de la sesión, arriba sale el nombre de quien entró");
+    await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(150);
+    ok(await p.isVisible("#btnUser .quien") && !(await p.isVisible("#btnUser .salir")), "en el teléfono también se ve el nombre (sin «Salir»)");
+    await p.setViewportSize({ width: 1180, height: 900 }); await p.waitForTimeout(150);
     await p.click('#areas [data-area="Feria"]'); await p.click('#areaBody [data-table] .num:text-is("2")'); await p.waitForSelector("#orderView:not(.hidden)");
 
     // 0b) Las secciones del pedido: en pantalla ancha (la caja) se ven todas, Bebidas incluida; en la tablet avisa que hay más
