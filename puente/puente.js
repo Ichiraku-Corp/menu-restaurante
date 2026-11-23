@@ -969,6 +969,7 @@ async function srApi(req, res, rel) {
       order: { id: Number.isInteger(b.order.id) ? b.order.id : null, tmp: b.order.tmp ? String(b.order.tmp) : "", label: srTxt(b.order.label, 40) || "Sin internet" },
       lines: b.lines.map((l) => ({ method: l.method, amount: Math.round(Number(l.amount) * 100) / 100, reference: srTxt(l.reference, 40), tip: !!l.tip })),
       change_currency: b.change_currency || "REF", change: b.change && typeof b.change === "object" ? srCambio(b.change) : null,
+      sello: b.sello === true,
       total: Math.round(Number(b.total) * 100) / 100, service: Math.round(Number(b.service || 0) * 100) / 100, rate: Number(b.rate) > 0 ? Number(b.rate) : null,
       prev: b.prev && typeof b.prev === "object" ? { total: Number(b.prev.total) || 0, paid: Number(b.prev.paid) || 0 } : null,
       items: (Array.isArray(b.items) ? b.items : []).slice(0, 80).map((i) => ({ name: srTxt(i.name, 60), variant: srTxt(i.variant, 30), qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0 })),

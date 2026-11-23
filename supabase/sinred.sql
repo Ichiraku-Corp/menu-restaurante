@@ -149,6 +149,7 @@ begin
     from jsonb_array_elements(coalesce(e -> 'lines', '[]'::jsonb)) x where coalesce(x ->> 'method', '') <> 'cuenta';
     begin
       r := public.pos_pay_core(emp, oid, lines, coalesce(nullif(e ->> 'change_currency', ''), 'REF'), true, at, true);
+      if coalesce((e ->> 'sello')::boolean, false) then update public.pos_orders set sello = true where id = oid; end if;
       if not coalesce((r ->> 'closed')::boolean, false) then
         note := note || ' · quedan Ref ' || (r ->> 'rest') || ' por cobrar (sin internet se cobró menos de lo que dice el sistema)';
       end if;

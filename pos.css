@@ -618,3 +618,26 @@ dialog h2 { font-weight:900; }
   .tables button.busy, .tables button.bill { box-shadow:3px 3px 0 var(--ink); }
   dialog { box-shadow:none; border-left:0; border-right:0; border-bottom:0; }
 }
+
+/* ---------------------------------------------------------------- Tarjeta de puntos en el cobro */
+.sello { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px; margin:12px 0 2px; padding:10px 12px;
+  border:2px dashed var(--line); border-radius:16px; background:var(--raised); }
+.sello.lleva { border:2px solid var(--ink); background:var(--accent-soft); box-shadow:3px 4px 0 var(--accent); }
+.sello.marcada { border:2px solid var(--ok); background:var(--ok-soft); }
+.sellochk { display:flex; align-items:center; gap:12px; cursor:pointer; min-width:0; flex:1 1 260px; }
+.sellochk input { width:28px; height:28px; flex:none; padding:0; accent-color:var(--ok); }
+.sellochk span { display:grid; min-width:0; }
+.sellochk b { font-size:17px; }
+.sellochk small { color:var(--muted); font-size:13.5px; }
+.sello.lleva .sellochk small { color:var(--ink); font-weight:700; }
+.canjebtn { border:2px solid var(--ink); border-radius:999px; background:#fff; }
+.canjebtn.hay { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); }
+.canjelist { display:grid; gap:10px; max-height:52vh; overflow:auto; }
+.cjg { border:2px solid var(--ink); border-radius:16px; padding:8px 10px; background:#fff; }
+.cjg.off { opacity:.4; }
+.cjh { font-weight:800; padding:2px 2px 6px; } .cjh small { color:var(--ok); font-weight:800; }
+.cjrow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:6px 2px; border-top:1px solid var(--line); }
+.cjrow span:first-child { display:grid; min-width:0; } .cjrow small { color:var(--muted); font-size:13px; }
+.cjrow .stepper { display:flex; align-items:center; gap:8px; } .cjrow .stepper button { min-width:46px; font-size:20px; font-weight:800; }
+.cjrow .stepper b { min-width:22px; text-align:center; font-size:18px; }
+.cjya { padding:8px 12px; border-radius:12px; background:var(--ok-soft); color:var(--ok); font-weight:600; }

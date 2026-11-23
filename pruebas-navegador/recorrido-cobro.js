@@ -48,5 +48,27 @@ ok(/Happy hour -20 %/.test(await p.textContent("#lines .line.new"))&&/Ref 4,00/.
 await p.click("#send");await p.waitForTimeout(400);
 ok(await p.evaluate(()=>{const i=window.__S.items.filter(x=>x.name==="Gyozas").pop();return i.unit_price===4&&i.promo==="Happy hour -20 %";})&&/Happy hour -20 %/.test(await p.textContent("#lines")),"al enviar queda cobrado con la promo y la línea lo dice");
 await p.evaluate(()=>{window.__PROMOS=[];loadPromos();});
+// Tarjeta de puntos: desde Ref 20 la casilla «Tarjeta entregada» se resalta; «Canje» deja el premio (2 bebidas) en Ref 0
+await p.click("#back");await p.waitForTimeout(300);
+await p.click('#areas [data-area="Feria"]');await p.click('#areaBody [data-table] .num:text-is("6")');await p.waitForSelector("#orderView:not(.hidden)");
+await p.click('#cats button:has-text("Entradas")');for(let k=0;k<4;k++){await p.click('#dishes button:has-text("Gyozas")');await p.waitForTimeout(60);}
+await p.click('#cats button:has-text("Bebidas")');for(let k=0;k<3;k++){await p.click('#dishes button:has-text("Limonada rosa")');await p.waitForTimeout(60);}
+await p.click("#send");await p.waitForTimeout(400);
+await p.click("#pay");await p.waitForTimeout(300);
+ok(await p.isVisible("#selloBox")&&await p.evaluate(()=>document.getElementById("selloBox").classList.contains("lleva"))&&/lleva sello/.test(await p.textContent("#selloHint")),
+  "con Ref 20 o más la casilla «Tarjeta entregada» se resalta: «Esta compra lleva sello»");
+const total0=await p.textContent("#payTotal");
+await p.click("#canjeBtn");await p.waitForSelector("#canjeDlg[open]");
+ok(await p.isDisabled("#canjeOk")&&/2 bebidas/.test(await p.textContent("#canjeList"))&&!/Gyozas/.test(await p.textContent("#canjeList")),"el canje solo ofrece lo que entra en el premio (las bebidas) y empieza sin nada elegido");
+await p.click('#canjeList [data-cj="1"]');await p.click('#canjeList [data-cj="1"]');await p.click('#canjeList [data-cj="1"]');
+ok(/El premio es de 2 bebidas/.test(await p.textContent("#canjeErr"))&&(await p.textContent("#canjeOk"))==="Canjear 2 bebidas"&&!(await p.isDisabled("#canjeOk")),"no deja pasar de 2 bebidas y con 2 se puede canjear");
+await p.click("#canjeOk");await p.waitForTimeout(700);
+const total1=await p.textContent("#payTotal");
+ok(await p.evaluate(()=>window.__canje&&window.__canje.premio==="bebida"&&window.__S.items.filter(i=>i.canje&&i.unit_price===0).reduce((s,i)=>s+i.qty,0)===2),"las 2 limonadas quedan en Ref 0 (la tercera sigue a su precio)");
+ok(await p.isVisible("#payDlg")&&total0!==total1&&/Canje ✓/.test(await p.textContent("#canjeBtn")),"el cobro se vuelve a abrir con el total sin el premio ("+total0+" → "+total1+")");
+await p.check("#selloChk");
+ok(await p.evaluate(()=>document.getElementById("selloBox").classList.contains("marcada")),"al marcar la casilla queda en verde: «Se anota un sello en esta compra»");
+await p.click('#payMethods [data-m="punto_debito"]');await p.waitForTimeout(200);await p.click("#payOk");await p.waitForTimeout(500);
+ok(await p.evaluate(()=>window.__sello===true),"al cobrar se manda «Tarjeta entregada» con el pago");
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE COBRO EN VARIOS PASES PASARON");})();

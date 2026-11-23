@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=9777a484de">
+<link rel="stylesheet" href="pos.css?v=3a73e90bea">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
@@ -23,10 +23,10 @@
 <script src="pos-acceso.js?v=277cedfc01" defer></script>
 <script src="pos-mesas.js?v=7f12d2b16c" defer></script>
 <script src="pos-pedido.js?v=7a30056e41" defer></script>
-<script src="pos-cobro.js?v=7a2567c385" defer></script>
+<script src="pos-cobro.js?v=0d8fe5d8ee" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
-<script src="pos-sinred.js?v=f433254d11" defer></script>
-<script src="pos-caja.js?v=caf9dcd959" defer></script>
+<script src="pos-sinred.js?v=cb4858f40e" defer></script>
+<script src="pos-caja.js?v=c0abb22846" defer></script>
 </head>
 <body>
 <header>
@@ -232,6 +232,11 @@
   <h2 id="payTitle">Cobrar</h2>
   <div class="row between"><div><div class="muted">Total</div><b style="font-size:26px" class="n" id="payTotal"></b></div>
     <div style="text-align:right"><div class="muted" id="payRateTxt"></div><b style="font-size:20px" class="n" id="payTotalBs"></b></div></div>
+  <!-- Tarjeta de puntos: un sello por compra de Ref 20 o más; con 3 sellos, el premio se cobra en Ref 0 con «Canje» -->
+  <div class="sello" id="selloBox">
+    <label class="sellochk"><input type="checkbox" id="selloChk"><span><b>Tarjeta entregada</b><small id="selloHint">Un sello por compra de Ref 20 o más</small></span></label>
+    <button type="button" class="canjebtn" id="canjeBtn">Canje de tarjeta</button>
+  </div>
   <div id="payPersonsBox" class="hidden"><p class="muted" style="margin:12px 0 6px">¿Quién paga?</p><div class="persons" id="payPersons"></div></div>
   <p class="muted" style="margin:12px 0 6px">Toca un método para añadir lo que falta:</p>
   <div class="methods" id="payMethods"></div>
@@ -250,6 +255,16 @@
     <div class="row between dfoot"><div class="row"><button type="button" id="payCancel">Cancelar</button><button type="button" id="paySplit">Partes iguales</button><button type="button" id="payByPerson">Por persona</button></div>
       <div class="row"><button type="button" class="hidden" id="payPartial">Cobrar solo esta parte</button><button type="button" class="ok big" id="payOk">Confirmar cobro</button></div></div>
   </div>
+</dialog>
+
+<!-- Tarjeta de puntos: canje del premio (2 bebidas, 2 ramen pequeños o 6 taiyakis) -->
+<dialog id="canjeDlg" style="width:min(560px, calc(100vw - 20px))">
+  <h2 style="margin:0 0 4px">Canje de tarjeta</h2>
+  <p class="muted" style="margin:0 0 10px">Con 3 sellos se lleva <b>2 bebidas</b>, <b>2 ramen pequeños</b> o <b>6 taiyakis</b>. El premio tiene que estar en la cuenta: marca cuántos van de regalo y quedan en Ref 0.</p>
+  <div id="canjeList" class="canjelist"></div>
+  <p id="canjeErr" class="muted" style="color:var(--danger);margin:8px 0 0"></p>
+  <div class="row between dfoot"><div class="row"><button type="button" id="canjeCancel">Cancelar</button><button type="button" class="danger hidden" id="canjeQuitar">Quitar el canje</button></div>
+    <button type="button" class="ok big" id="canjeOk" disabled>Canjear</button></div>
 </dialog>
 
 <!-- Pagos recibidos en Binance / PayPal (verificados por la laptop de caja) -->

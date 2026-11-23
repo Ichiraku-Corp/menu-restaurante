@@ -90,6 +90,8 @@ alter table public.pos_orders add column if not exists customer_id  bigint refer
 alter table public.pos_orders add column if not exists split        jsonb;
 -- Delivery propio (se le paga a la empresa de delivery cada lunes) o pedido que llega por Yummy
 alter table public.pos_orders add column if not exists channel      text not null default 'propio' check (channel in ('propio', 'yummy'));
+-- Tarjeta de puntos: «Tarjeta entregada» al cobrar = un sello por esta compra (uno por compra de Ref 20 o más)
+alter table public.pos_orders add column if not exists sello        boolean not null default false;
 update public.pos_orders set channel = 'yummy' where kind = 'delivery' and channel = 'propio' and label ilike '%yummy%';
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
@@ -603,7 +605,7 @@ begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   select jsonb_build_object(
     'id', o.id, 'kind', o.kind, 'table_id', o.table_id, 'label', public.pos_order_label(o.id), 'status', o.status, 'day_number', o.day_number,
-    'service_pct', o.service_pct, 'discount_reason', o.discount_reason, 'opened_at', o.opened_at,
+    'service_pct', o.service_pct, 'discount_reason', o.discount_reason, 'opened_at', o.opened_at, 'sello', o.sello,
     'customer', o.label, 'phone', o.phone, 'address', o.address, 'delivery_fee', o.delivery_fee, 'precuenta_at', o.precuenta_at,
     'client', (select jsonb_build_object('id', c.id, 'name', c.name, 'doc_id', c.doc_id, 'phone', c.phone, 'email', c.email) from public.customers c where c.id = o.customer_id),
     'opened_by', public.pos_emp_name(o.opened_by),
@@ -611,7 +613,7 @@ begin
     'items', (select coalesce(jsonb_agg(jsonb_build_object(
                 'id', i.id, 'dish_id', i.dish_id, 'name', i.name, 'variant', i.variant, 'option', i.option, 'notes', i.notes,
                 'qty', i.qty, 'unit_price', i.unit_price, 'promo', i.promo, 'status', i.status, 'void_reason', i.void_reason,
-                'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
+                'canje', i.canje is not null, 'by', public.pos_emp_name(i.created_by)) order by i.id), '[]'::jsonb)
               from public.pos_items i where i.order_id = o.id),
     'split', o.split, 'channel', o.channel,
     'split_totals', (select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) from public.pos_split(o.id) x),
@@ -677,6 +679,8 @@ revoke all on public.promos from anon;
 revoke insert, update, delete, truncate on public.promos from authenticated;
 alter table public.pos_items add column if not exists promo text not null default '';
 alter table public.pos_items add column if not exists list_price numeric(10,2);
+-- Premio de la tarjeta de puntos cobrado en Ref 0: lo que costaba antes del canje ({precio, promo, list_price, de})
+alter table public.pos_items add column if not exists canje jsonb;
 
 -- La mejor promoción que aplica a un plato en un momento (ninguna fila si no hay)
 create or replace function public.promo_de(p_dish bigint, p_at timestamptz default now())
@@ -787,6 +791,83 @@ begin
   if not found then raise exception 'El pedido ya está cerrado'; end if;
   insert into public.pos_log (employee_id, action, order_id, detail)
   values (p_emp, 'descuento', p_order, jsonb_build_object('monto', p_amount, 'motivo', trim(coalesce(p_reason, ''))));
+end $$;
+
+-- ---------------------------------------------------------------- Tarjeta de puntos: canje del premio
+-- Con 3 sellos regalan 2 bebidas, 2 ramen pequeños o 6 taiyakis. El premio ya está en la cuenta: el canje lo deja en Ref 0
+-- (si la línea tiene más unidades, el premio pasa a su propia línea) y guarda lo que costaba para poder quitarlo.
+-- p_items: [{"id": <plato de la cuenta>, "qty": 2}, …]
+create or replace function public.pos_canje(p_emp bigint, p_pin text, p_order bigint, p_items jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare o record; x record; it record; n int := 0; tipo text := null; t text; valor numeric := 0; det jsonb := '[]'::jsonb;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  select * into o from public.pos_orders where id = p_order for update;
+  if o.id is null or o.status <> 'abierta' then raise exception 'El pedido ya está cerrado'; end if;
+  if coalesce((o.split ->> 'n')::int, 0) >= 2 then raise exception 'Quita la división de la cuenta antes del canje'; end if;
+  for x in select (e ->> 'id')::bigint as id, coalesce((e ->> 'qty')::numeric, 0) as qty from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) e loop
+    if x.qty <= 0 then continue; end if;
+    select i.*, c.name as cat into it from public.pos_items i
+      left join public.dishes d on d.id = i.dish_id left join public.categories c on c.id = d.category_id
+    where i.id = x.id and i.order_id = p_order for update of i;
+    if it.id is null or it.status = 'anulado' then raise exception 'Ese plato ya no está en la cuenta'; end if;
+    if it.canje is not null then raise exception '«%» ya es un canje', it.name; end if;
+    if x.qty <> trunc(x.qty) or x.qty > it.qty then raise exception 'Cantidad no válida para «%»', it.name; end if;
+    t := case when lower(coalesce(it.cat, '')) = 'bebidas' then 'bebida'
+              when lower(coalesce(it.cat, '')) = 'ramen' and it.variant = 'Peq' then 'ramen'
+              when lower(it.name) = 'taiyaki' then 'taiyaki' end;
+    if t is null then
+      raise exception '«%» no entra en el canje: son 2 bebidas, 2 ramen pequeños o 6 taiyakis', it.name || case when it.variant <> '' then ' ' || it.variant else '' end;
+    end if;
+    if tipo is not null and tipo <> t then raise exception 'El canje es de un solo tipo: 2 bebidas, 2 ramen pequeños o 6 taiyakis'; end if;
+    tipo := t; n := n + x.qty::int;
+    if x.qty < it.qty then
+      update public.pos_items set qty = qty - x.qty where id = it.id;
+      insert into public.pos_items (order_id, dish_id, name, variant, option, notes, qty, unit_price, status, created_by, created_at, sent_at, ready_at, served_at,
+                                    promo, list_price, canje)
+      values (p_order, it.dish_id, it.name, it.variant, it.option, it.notes, x.qty, 0, it.status, it.created_by, it.created_at, it.sent_at, it.ready_at, it.served_at,
+              'Canje tarjeta de puntos', coalesce(it.list_price, it.unit_price),
+              jsonb_build_object('precio', it.unit_price, 'promo', it.promo, 'list_price', it.list_price, 'de', it.id));
+    else
+      update public.pos_items set unit_price = 0, promo = 'Canje tarjeta de puntos', list_price = coalesce(it.list_price, it.unit_price),
+        canje = jsonb_build_object('precio', it.unit_price, 'promo', it.promo, 'list_price', it.list_price)
+      where id = it.id;
+    end if;
+    valor := valor + x.qty * it.unit_price;
+    det := det || jsonb_build_object('plato', it.name || case when it.variant <> '' then ' ' || it.variant else '' end, 'cantidad', x.qty);
+  end loop;
+  if n = 0 then raise exception 'Elige el premio'; end if;
+  if (tipo in ('bebida', 'ramen') and n <> 2) or (tipo = 'taiyaki' and n <> 6) then
+    raise exception 'El premio es de % y elegiste %', case tipo when 'bebida' then '2 bebidas' when 'ramen' then '2 ramen pequeños' else '6 taiyakis' end, n;
+  end if;
+  insert into public.pos_log (employee_id, action, order_id, detail)
+  values (p_emp, 'canje_tarjeta', p_order, jsonb_build_object('premio', tipo, 'platos', det, 'valor', round(valor, 2)));
+  return jsonb_build_object('premio', tipo, 'unidades', n, 'valor', round(valor, 2));
+end $$;
+
+-- Deshacer el canje de una cuenta abierta: cada premio vuelve a su precio (y a su línea de origen, si salió de una)
+create or replace function public.pos_canje_quitar(p_emp bigint, p_pin text, p_order bigint)
+returns int language plpgsql security definer set search_path = public as $$
+declare it record; n int := 0; de bigint;
+begin
+  perform public.pos_auth_charge(p_emp, p_pin);
+  if not exists (select 1 from public.pos_orders where id = p_order and status = 'abierta' for update) then raise exception 'El pedido ya está cerrado'; end if;
+  for it in select * from public.pos_items where order_id = p_order and canje is not null order by id for update loop
+    de := nullif(it.canje ->> 'de', '')::bigint;
+    if de is not null and exists (select 1 from public.pos_items x where x.id = de and x.order_id = p_order and x.canje is null and x.status = it.status
+                                  and x.unit_price = (it.canje ->> 'precio')::numeric) then
+      update public.pos_items set qty = qty + it.qty where id = de;
+      delete from public.pos_items where id = it.id;
+    else
+      update public.pos_items set unit_price = (it.canje ->> 'precio')::numeric, promo = coalesce(it.canje ->> 'promo', ''),
+        list_price = (it.canje ->> 'list_price')::numeric, canje = null
+      where id = it.id;
+    end if;
+    n := n + 1;
+  end loop;
+  if n = 0 then raise exception 'Esta cuenta no tiene canje'; end if;
+  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'quitar_canje', p_order, jsonb_build_object('lineas', n));
+  return n;
 end $$;
 
 -- Dividir la cuenta por persona (lo hace caja al cobrar). p_split null o n < 2 = quitar la división.
@@ -1088,11 +1169,17 @@ begin
 end $$;
 revoke execute on function public.pos_pay_core(bigint, bigint, jsonb, text, boolean, timestamptz, boolean) from anon, public, authenticated;
 
-create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false)
+-- p_sello: la casilla «Tarjeta entregada» (un sello por compra). null = no se toca (las tablets viejas no la mandan).
+drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text, boolean);
+create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false,
+                                          p_sello boolean default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
+declare r jsonb;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
-  return public.pos_pay_core(p_emp, p_order, p_payments, p_change_currency, p_partial, now(), false);
+  r := public.pos_pay_core(p_emp, p_order, p_payments, p_change_currency, p_partial, now(), false);
+  if p_sello is not null then update public.pos_orders set sello = p_sello where id = p_order; end if;
+  return r;
 end $$;
 
 create or replace function public.pos_cancel(p_emp bigint, p_pin text, p_order bigint, p_reason text default '')
@@ -1184,6 +1271,10 @@ begin
                  from public.pos_payments p where p.session_id = s.id and p.method <> 'cuenta'),
     'outs', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'amount', -amount, 'reason', cash_out_reason, 'by', public.pos_emp_name(created_by), 'at', created_at) order by created_at), '[]'::jsonb)
              from public.pos_payments where session_id = s.id and cash_out_reason <> ''),
+    'sellos', (select count(*) from public.pos_orders where session_id = s.id and status = 'cobrada' and sello),
+    'canjes', (select jsonb_build_object('cuentas', count(distinct i.order_id), 'valor', coalesce(round(sum(i.qty * (i.canje ->> 'precio')::numeric), 2), 0))
+               from public.pos_items i join public.pos_orders o on o.id = i.order_id
+               where o.session_id = s.id and o.status = 'cobrada' and i.canje is not null and i.status <> 'anulado'),
     'expected', s.expected, 'counted', s.counted, 'notes', s.notes
   ) into r;
   return r;
@@ -2152,7 +2243,8 @@ begin
     'pos_print(text, text)', 'pos_next_number()', 'pos_staff()', 'pos_check_pin(bigint, text)', 'pos_pin_login(text, boolean)', 'pos_state()', 'pos_order(bigint)',
     'pos_open(bigint, text, bigint, text)', 'pos_add(bigint, text, bigint, jsonb)', 'pos_send(bigint, text, bigint)',
     'pos_void(bigint, text, bigint, text)', 'pos_discount(bigint, text, bigint, numeric, text)', 'pos_move(bigint, text, bigint, bigint)',
-    'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean)',
+    'pos_bill_text(bigint, text)', 'pos_precuenta(bigint, text, bigint)', 'pos_pay(bigint, text, bigint, jsonb, text, boolean, boolean)',
+    'pos_canje(bigint, text, bigint, jsonb)', 'pos_canje_quitar(bigint, text, bigint)',
     'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
     'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',

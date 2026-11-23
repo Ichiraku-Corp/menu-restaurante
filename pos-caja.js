@@ -38,6 +38,9 @@ function openCash() {
         (sm.open_orders ? '<div class="banner warn">' + (sm.open_orders === 1 ? "Hay 1 pedido abierto: cóbralo o anúlalo" : "Hay " + sm.open_orders + " pedidos abiertos: cóbralos o anúlalos") + " antes de cerrar.</div>" : "") + bsReminder() + outs +
         "<h3>Anulaciones (" + sm.voids.length + ")</h3>" + (sm.voids.length ? sm.voids.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + fmtQ(v.qty) + " " + esc(v.item) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + "<br>Motivo: " + esc(v.reason) + "</div>"; }).join("<hr>") : '<p class="muted">Ninguna</p>') +
         "<h3>Descuentos (" + sm.discounts.length + ")</h3>" + (sm.discounts.length ? sm.discounts.map(function (v) { return '<div class="muted">' + esc(v.order) + " · " + ref(num(v.amount)) + " · " + esc(v.by || "") + " · " + esc(v.reason) + "</div>"; }).join("") : '<p class="muted">Ninguno</p>') +
+        "<h3>Tarjeta de puntos</h3><p class=\"muted\">" + (sm.sellos || 0) + (sm.sellos === 1 ? " sello entregado" : " sellos entregados") + " · " +
+          ((sm.canjes && sm.canjes.cuentas) || 0) + (((sm.canjes && sm.canjes.cuentas) || 0) === 1 ? " canje" : " canjes") +
+          (sm.canjes && num(sm.canjes.valor) ? " (" + ref(num(sm.canjes.valor)) + " en premios)" : "") + "</p>" +
         "</div>";
       // Pestaña 2: Cerrar caja, por pasos (efectivo → bolívares en banco → divisas digitales → afuera → revisar)
       var steps = CSTEPS.filter(function (x) { return x.k !== 4 || OUTS.length; });

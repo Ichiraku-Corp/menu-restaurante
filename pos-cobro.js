@@ -25,6 +25,7 @@ $("pay").addEventListener("click", function () {
       '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
     TABS = []; if (!off) q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
     $("payErr").textContent = off ? "Sin internet: el recibo sale en la laptop y el cobro se sube cuando vuelva la conexión." : "";
+    $("selloChk").checked = !!cur.data.sello; show("canjeBtn", !off); drawSello();
     drawPayPersons(); drawPays(); $("payDlg").showModal();
   }).catch(fail);
 });
@@ -243,7 +244,7 @@ function doPay(partial) {
   // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
   if (list.some(function (p) { return p.method === "cuenta" && !p.tab_employee_id; })) { $("payErr").textContent = "Elige a qué empleado se carga la cuenta."; paying = false; updatePaySums(); return; }
   if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + (p.tip ? 0 : payRef(p)); }, 0); partial = restAll > 0.02; }
-  rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial }).then(function (r) {
+  rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial, p_sello: $("selloChk").checked }).then(function (r) {
     $("payDlg").close();
     if (r && r.closed === false) {
       chgAlert(r.change);
@@ -256,3 +257,81 @@ function doPay(partial) {
   }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
     .then(function () { paying = false; if (cur.data) updatePaySums(); });
 }
+
+// ---------------------------------------------------------------- Tarjeta de puntos
+// Un sello por compra de Ref 20 o más (uno por compra): la caja marca «Tarjeta entregada». Desde Ref 20 la casilla se resalta.
+// Con 3 sellos regalan 2 bebidas, 2 ramen pequeños o 6 taiyakis: el premio se agrega a la cuenta y «Canje» lo deja en Ref 0.
+var SELLO_DESDE = 20;
+function drawSello() {
+  if (!cur.data) return;
+  var marcada = $("selloChk").checked, lleva = num(cur.data.totals.total) >= SELLO_DESDE - 0.005;
+  $("selloBox").classList.toggle("marcada", marcada);
+  $("selloBox").classList.toggle("lleva", lleva && !marcada);
+  $("selloHint").textContent = marcada ? "Se anota un sello en esta compra"
+    : lleva ? "Esta compra lleva sello: márcala si entregaste la tarjeta o el sello" : "Un sello por compra de Ref " + SELLO_DESDE + " o más";
+  var hay = (cur.data.items || []).some(function (i) { return i.canje && i.status !== "anulado"; });
+  $("canjeBtn").classList.toggle("hay", hay);
+  $("canjeBtn").textContent = hay ? "Canje ✓" : "Canje de tarjeta";
+}
+$("selloChk").addEventListener("change", drawSello);
+var CJ_META = { bebida: { n: 2, t: "2 bebidas" }, ramen: { n: 2, t: "2 ramen pequeños" }, taiyaki: { n: 6, t: "6 taiyakis" } }, CJ = {};
+function canjeTipo(i) {
+  if (!i) return null;
+  var d = MENU.dishes.find(function (x) { return x.id === i.dish_id; }), c = d && MENU.cats.find(function (x) { return x.id === d.category_id; });
+  var cat = c ? String(c.name).toLowerCase() : "";
+  if (cat === "bebidas") return "bebida";
+  if (cat === "ramen" && i.variant === "Peq") return "ramen";
+  if (String(i.name).toLowerCase() === "taiyaki") return "taiyaki";
+  return null;
+}
+function itemOf(id) { return (cur.data.items || []).find(function (x) { return x.id === Number(id); }); }
+function canjeElegido() { var tipo = null, n = 0; Object.keys(CJ).forEach(function (id) { if (CJ[id] > 0) { tipo = canjeTipo(itemOf(id)); n += CJ[id]; } }); return { tipo: tipo, n: n }; }
+$("canjeBtn").addEventListener("click", function () {
+  CJ = {}; $("canjeErr").textContent = "";
+  var items = (cur.data.items || []).filter(function (i) { return i.status !== "anulado"; });
+  var hay = items.filter(function (i) { return i.canje; }), elig = items.filter(function (i) { return !i.canje && canjeTipo(i); });
+  show("canjeQuitar", hay.length > 0);
+  var html = hay.length ? '<div class="cjya">Ya tiene canje: ' + hay.map(function (i) { return fmtQ(i.qty) + " " + esc(i.name + (i.variant ? " " + i.variant : "")); }).join(", ") + " en Ref 0</div>" : "";
+  html += ["bebida", "ramen", "taiyaki"].map(function (k) {
+    var list = elig.filter(function (i) { return canjeTipo(i) === k; }); if (!list.length) return "";
+    return '<div class="cjg" data-k="' + k + '"><div class="cjh">' + CJ_META[k].t + ' <small data-cnt="' + k + '"></small></div>' + list.map(function (i) {
+      return '<div class="cjrow" data-id="' + i.id + '"><span><b>' + esc(i.name) + (i.variant ? " " + esc(i.variant) : "") + "</b><small>" + fmtQ(i.qty) + " en la cuenta · " + ref(num(i.unit_price)) + " c/u</small></span>" +
+        '<span class="stepper"><button type="button" data-cj="-1" aria-label="Uno menos">−</button><b class="n" data-q="' + i.id + '">0</b><button type="button" data-cj="1" aria-label="Uno más">+</button></span></div>';
+    }).join("") + "</div>";
+  }).join("");
+  if (!elig.length && !hay.length) html = '<p class="muted">En la cuenta no hay bebidas, ramen pequeños ni taiyakis. Agrega primero el premio al pedido (va a cocina como siempre) y luego haz el canje aquí.</p>';
+  $("canjeList").innerHTML = html; drawCanje(); $("canjeDlg").showModal();
+});
+function drawCanje() {
+  var s = canjeElegido();
+  document.querySelectorAll("#canjeList [data-q]").forEach(function (b) { b.textContent = CJ[b.dataset.q] || 0; });
+  document.querySelectorAll("#canjeList .cjg").forEach(function (g) {
+    var k = g.dataset.k; g.classList.toggle("off", !!s.tipo && s.tipo !== k);
+    g.querySelector("[data-cnt]").textContent = s.tipo === k ? "· " + s.n + " de " + CJ_META[k].n + (s.n === CJ_META[k].n ? " ✓" : "") : "";
+  });
+  var ok = !!s.tipo && s.n === CJ_META[s.tipo].n;
+  $("canjeOk").disabled = !ok; $("canjeOk").textContent = ok ? "Canjear " + CJ_META[s.tipo].t : "Canjear";
+}
+$("canjeList").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-cj]"); if (!b) return;
+  var id = Number(b.closest("[data-id]").dataset.id), it = itemOf(id), k = canjeTipo(it), d = Number(b.dataset.cj), s = canjeElegido();
+  if (d > 0 && s.tipo && s.tipo !== k) { $("canjeErr").textContent = "El canje es de un solo tipo: " + CJ_META[s.tipo].t + "."; return; }
+  if (d > 0 && s.n >= CJ_META[k].n) { $("canjeErr").textContent = "El premio es de " + CJ_META[k].t + "."; return; }
+  var qn = (CJ[id] || 0) + d; if (qn < 0 || qn > num(it.qty)) return;
+  CJ[id] = qn; $("canjeErr").textContent = ""; drawCanje();
+});
+$("canjeCancel").addEventListener("click", function () { $("canjeDlg").close(); });
+function reabrirCobro() { $("payDlg").close(); return loadOrder().then(function () { if (cur.data) $("pay").click(); }); }
+$("canjeOk").addEventListener("click", function () {
+  var list = Object.keys(CJ).filter(function (x) { return CJ[x] > 0; }).map(function (x) { return { id: Number(x), qty: CJ[x] }; });
+  $("canjeOk").disabled = true;
+  rpc("pos_canje", { p_order: cur.order, p_items: list }).then(function (r) {
+    $("canjeDlg").close(); toast("Canje listo: " + CJ_META[r.premio].t + " en Ref 0 (valían " + ref(num(r.valor)) + ")");
+    return reabrirCobro();
+  }).catch(function (e) { $("canjeErr").textContent = errMsg(e); drawCanje(); if (/PIN incorrecto/.test(errMsg(e))) lock(); });
+});
+$("canjeQuitar").addEventListener("click", function () {
+  if (!confirm("¿Quitar el canje? El premio vuelve a su precio.")) return;
+  rpc("pos_canje_quitar", { p_order: cur.order }).then(function () { $("canjeDlg").close(); toast("Canje quitado: el premio vuelve a su precio"); return reabrirCobro(); })
+    .catch(function (e) { $("canjeErr").textContent = errMsg(e); });
+});
