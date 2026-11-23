@@ -39,6 +39,7 @@ async function esperar(page, fn, arg, ms = 8000) { const t = Date.now(); while (
     await esperar(page, () => !/15/.test(document.getElementById("ready").textContent));
     ok(true, "al entregarlo en la caja, el 15 sale de la pantalla");
     ok(/\d{1,2}:\d{2}/.test(await page.textContent("#clock")), "muestra la hora");
+    ok(await page.evaluate(() => { const i = document.querySelector(".maidmoto"); return !!i && i.complete && i.naturalWidth > 0; }), "Dango en su moto está en la pantalla");
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]); }
   ok(errores.length === 0, "sin errores de JavaScript" + (errores.length ? ": " + errores.join(" | ") : ""));
   await browser.close(); server.close();

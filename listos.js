@@ -46,7 +46,7 @@
       return '<span class="num' + (isNew ? " new" : "") + '">' + n + "</span>";
     }).join("") : '<p class="empty">—</p>';
   }
-  function draw(d) { $("prep").innerHTML = nums(d.preparando || [], false); $("ready").innerHTML = nums(d.listos || [], true); }
+  function draw(d) { $("prep").innerHTML = nums(d.preparando || [], false); $("ready").innerHTML = nums(d.listos || [], true); $("readyBub").hidden = !(d.listos || []).length; }
   function tick() { $("clock").textContent = new Date(Date.now() + skew).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }); }
 
   // ---------------------------------------------------------------- Sonido, pantalla encendida y pantalla completa

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Im/YMmDWeV7k4E2eYw0t5YLq7OS4nMFqws+ZIYdUwII='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-wd724wVboZ4+AJtPEOf9GPsholm6dBf2J39tSCiZ1w0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -91,6 +91,21 @@
   .dibujo { position: absolute; right: 10px; top: 50%; width: 98px; height: 98px; transform: translateY(-50%) rotate(-7deg);
     filter: drop-shadow(2.5px 0 0 #fff) drop-shadow(-2.5px 0 0 #fff) drop-shadow(0 2.5px 0 #fff) drop-shadow(0 -2.5px 0 #fff) drop-shadow(3px 4px 0 rgba(27,45,107,.85)); }
   section.con-dibujo:nth-of-type(even) .dibujo { transform: translateY(-50%) rotate(6deg); }
+  /* Bienvenida: las tres maids (Miso, Dango e Imo); al tocar una, la carta baja a su parte */
+  .bienvenida { position: relative; margin: 18px 0 6px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 26px; box-shadow: 5px 6px 0 var(--ink); overflow: hidden; }
+  .bienvenida .fondo { position: relative; height: 300px; overflow: hidden; border-bottom: 2.5px solid var(--ink);
+    background: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px), linear-gradient(90deg, var(--miso-t), var(--dango-t) 50%, var(--imo-t)); }
+  .bienvenida .fondo img { position: absolute; bottom: -120px; height: 420px; width: auto; max-width: none; }
+  .bienvenida .m1 { left: -26px; } .bienvenida .m3 { right: -30px; }
+  .bienvenida .m2 { left: 50%; transform: translateX(-50%); height: 450px; bottom: -150px; z-index: 2; }
+  .bienvenida .burbuja { position: absolute; left: 12px; bottom: 14px; z-index: 3; transform: rotate(-4deg); background: #fff; color: var(--ink); border: 2.5px solid var(--ink);
+    border-radius: 18px; padding: 8px 14px; font-size: 16px; font-weight: 900; line-height: 1.2; box-shadow: 3px 4px 0 var(--ink); }
+  .bienvenida .burbuja small { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .bienvenida .nombres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 12px 10px 14px; text-align: center; }
+  .bienvenida .nombres a { display: grid; gap: 2px; align-content: start; text-decoration: none; color: var(--ink); font-size: 15px; font-weight: 900; border-radius: 14px; padding: 2px 0 4px; }
+  .bienvenida .nombres a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .bienvenida .nombres small { font-size: 11.5px; font-weight: 700; line-height: 1.25; color: var(--muted); }
+  .bienvenida .nombres a::before { content: ""; display: block; height: 6px; border-radius: 9px; margin: 0 18px 6px; background: var(--c); }
   .dish { display: flex; gap: 14px; padding: 16px; border-top: 2px dashed var(--line); }
   .dish:first-of-type { border-top: 0; }
   /* La foto, en un platito del color de la maid (el blanco de la foto toma ese color) */
@@ -383,6 +398,20 @@
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
   function platoBlanco(name) { return /postre/.test(norm(name)); }
+  // Bienvenida con las maids: cada una lleva a la primera sección de su color (Miso el ramen; Dango postres y bebidas; Imo lo demás)
+  function bienvenida(firstOf) {
+    if (!firstOf.miso && !firstOf.dango && !firstOf.imo) return "";
+    var link = function (maid, nombre, que, color) {
+      return firstOf[maid] ? '<a href="#' + firstOf[maid] + '" style="--c:' + color + '">' + nombre + "<small>" + que + "</small></a>" : '<span style="--c:' + color + '">' + nombre + "<small>" + que + "</small></span>";
+    };
+    return '<div class="bienvenida" aria-label="Las maids de Ichiraku"><div class="fondo">' +
+      '<img class="m1" src="assets/maids/miso.webp" alt="" width="396" height="800" decoding="async">' +
+      '<img class="m3" src="assets/maids/imo.webp" alt="" width="390" height="800" decoding="async">' +
+      '<img class="m2" src="assets/maids/dango-moto.webp" alt="" width="454" height="800" decoding="async">' +
+      '<p class="burbuja" lang="ja">¡Okaerinasai! <small lang="es">Bienvenido a casa</small></p></div>' +
+      '<div class="nombres">' + link("miso", "Miso", "Ramen", "var(--miso)") + link("dango", "Dango", "Postres y bebidas", "var(--dango)") +
+      link("imo", "Imo", "Entradas, sushi y especiales", "var(--imo)") + "</div></div>";
+  }
   // El dibujo de cada sección (assets/secciones/<nombre>.svg); las secciones nuevas salen sin dibujo
   var DIBUJO = { entradas: "gyoza", ramen: "ramen", sushi: "sushi", especiales: "especial", postres: "dorayaki", bebidas: "boba" };
   var CATNAME = {};
@@ -462,6 +491,9 @@
       html += "</section>";
     });
     $("nav").innerHTML = navHtml;
+    var firstOf = {};
+    cats.forEach(function (c) { if ((byCat[c.id] || []).length) { var m = maidOf(c.name); if (!firstOf[m]) firstOf[m] = "cat-" + c.id; } });
+    if (html) html = bienvenida(firstOf) + html;
     $("menu").innerHTML = (html || '<div class="state">El menú aún está vacío.</div>') +
       '<div class="noresults" id="noresults" hidden>No encontramos nada con esa búsqueda.</div>';
     watchSections();
@@ -499,6 +531,7 @@
       sec.hidden = !shown; if (shown) any = true;
     });
     var nr = $("noresults"); if (nr) nr.hidden = any || !words.length;
+    var bv = document.querySelector(".bienvenida"); if (bv) bv.hidden = words.length > 0;   // al buscar, la bienvenida se aparta
   }
   $("q").addEventListener("input", function () {
     applySearch();

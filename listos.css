@@ -36,3 +36,11 @@ header { display:flex; align-items:center; gap:14px; padding:12px 20px; border-b
 @media (prefers-reduced-motion:reduce) { .ready .num.new { animation:none; } }
 .empty { margin:0; color:var(--muted); font-size:clamp(28px, 4vw, 60px); }
 footer { padding:10px 20px 16px; text-align:center; color:var(--muted); font-size:clamp(18px, 1.8vw, 26px); }
+/* Dango en su moto, abajo a la derecha de «¡Listo!»; con pedidos listos, su globo avisa */
+.ready { position:relative; }
+.ready .nums { position:relative; z-index:1; }
+.maidmoto { position:absolute; right:14px; bottom:0; height:min(52vh, 560px); width:auto; pointer-events:none; z-index:0; }
+.ready .burbuja { position:absolute; right:min(26vw, 470px); bottom:min(40vh, 430px); z-index:2; margin:0; background:#fff; color:#1B2D6B; border:3px solid #1B2D6B; border-radius:20px;
+  padding:12px 20px; font-size:clamp(18px, 2vw, 28px); font-weight:900; line-height:1.2; box-shadow:4px 5px 0 #1B2D6B; }
+.ready .burbuja small { display:block; font-size:.6em; font-weight:700; color:#56628C; }
+@media (orientation:portrait), (max-width:720px) { .maidmoto, .ready .burbuja { display:none; } }

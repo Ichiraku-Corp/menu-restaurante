@@ -8,12 +8,12 @@
 <meta name="theme-color" content="#14110f">
 <title>Pedidos listos · Ichiraku</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="listos.css?v=001a7fd444">
+<link rel="stylesheet" href="listos.css?v=3b74e72f3f">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="listos.js?v=af8b1551d1" defer></script>
+<script src="listos.js?v=07f57bd48f" defer></script>
 </head>
 <body>
 <form id="login" class="login hidden">
@@ -37,7 +37,9 @@
   <p id="net" class="net hidden">Sin conexión: reintentando…</p>
   <main class="cols">
     <section class="col prep"><h2>Preparando</h2><div id="prep" class="nums" aria-live="polite"></div></section>
-    <section class="col ready"><h2>¡Listo! Pasa a retirar</h2><div id="ready" class="nums" aria-live="assertive"></div></section>
+    <section class="col ready"><h2>¡Listo! Pasa a retirar</h2><div id="ready" class="nums" aria-live="assertive"></div>
+      <img class="maidmoto" src="assets/maids/dango-moto.webp" alt="" width="454" height="800">
+      <p class="burbuja" id="readyBub" hidden>¡Tu pedido está listo!<small>Pasa a retirar en caja</small></p></section>
   </main>
   <footer>Busca el número de tu ticket · ¡Gracias por tu paciencia!</footer>
 </div>
