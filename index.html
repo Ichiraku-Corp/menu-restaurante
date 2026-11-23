@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-QiRKu93v24Rsi3sT1C1BMnPY0wH6dmOlgomrYmReG3U='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NOkKxrQ1a2FSaY05m2FvJKfDRtc54ju99fwmJJGMoTk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -91,6 +91,8 @@
     border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink); }
   .dish:nth-of-type(even) .plate { transform: rotate(3deg); }
   .photo { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; background: transparent; mix-blend-mode: multiply; }
+  /* Postres: el platito va blanco (las fotos de postres tienen fondo blanco y con el rosado se veían rosadas) */
+  [data-plato="blanco"] .plate, [data-plato="blanco"] .herobox { background: #fff; }
   .info { flex: 1; min-width: 0; }
   .dish h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.2; letter-spacing: -0.01em; }
   .jp { display: block; font-size: 11px; color: var(--pink); font-weight: 900; margin-top: 3px; letter-spacing: .04em; }
@@ -373,6 +375,7 @@
     var n = norm(name);
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
+  function platoBlanco(name) { return /postre/.test(norm(name)); }
   var CATNAME = {};
   // Cada precio en Ref y, con la tasa del día, su equivalente en Bs debajo (con la promoción, si la hay)
   function priceHtml(d) {
@@ -423,7 +426,7 @@
       var sid = "cat-" + c.id, maid = maidOf(c.name);
       CATNAME[c.id] = c.name;
       navHtml += '<li><a href="#' + sid + '" data-maid="' + maid + '">' + esc(c.name) + "</a></li>";
-      html += '<section id="' + sid + '" data-maid="' + maid + '"><h2>' + esc(c.name) +
+      html += '<section id="' + sid + '" data-maid="' + maid + '"' + (platoBlanco(c.name) ? ' data-plato="blanco"' : "") + "><h2>" + esc(c.name) +
         (c.subtitle ? " <small lang=\"ja\">" + esc(c.subtitle) + "</small>" : "") + "</h2>";
       items.forEach(function (d) {
         var photo = safeUrl(d.photo_url);
@@ -655,6 +658,7 @@
     current = d; qty = 1;
     var photo = safeUrl(d.photo_url), v = variants(d), opts = d.options || [], tags = d.tags || [];
     $("dishSheet").setAttribute("data-maid", maidOf(CATNAME[d.category_id]));
+    if (platoBlanco(CATNAME[d.category_id])) $("dishSheet").setAttribute("data-plato", "blanco"); else $("dishSheet").removeAttribute("data-plato");
     $("dsBody").innerHTML =
       (photo && C.BIG_PHOTOS ? '<div class="herobox"><img class="hero" src="' + esc(photo) + '" alt="' + esc(d.name) + '"></div>' : '<div style="height:22px"></div>') +
       '<div class="sheet-head">' +
