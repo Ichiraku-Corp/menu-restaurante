@@ -43,7 +43,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/Meta de hoy/.test(ini) && /Ref 320,45 de Ref 620,00 · 52 %/.test(ini) && /Faltan Ref 299,55/.test(ini) && /promedio de los últimos 8 (lunes|martes|miércoles|jueves|viernes|sábados|domingos) \(Ref 617,94\)/.test(ini),
       "Inicio muestra la meta del día: lo cobrado, la meta, cuánto falta y de dónde sale");
     // Indicadores (KPI): cuatro grupos, cada número con su comparación (flecha y texto; verde si mejora, rojo si empeora)
-    await page.waitForSelector("#indBody .indg", { timeout: 3000 });
+    await page.waitForSelector("#indBody .indg", { state: "attached", timeout: 3000 });
     const ind = await page.evaluate(() => ({ grupos: [...document.querySelectorAll("#indBody .indg h3")].map((h) => h.textContent).join(","),
       texto: document.querySelector("#iniInd").textContent.replace(/\s+/g, " ") }));
     const ficha = (t) => page.locator("#indBody .kpi").filter({ has: page.locator("span", { hasText: new RegExp("^" + t + "$") }) }).first()
@@ -55,7 +55,42 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(fc.valor === "1 de 7 no cuadran" && /neg/.test(fc.b) && /▼ 1 vs\. antes/.test(fc.cmp), "cierres que no cuadran, en rojo, y que bajaron de 2 a 1 (" + fc.cmp + ")");
     ok(/▲ 2,0 min vs\. antes/.test(fm.cmp) && !/good|bad/.test(fm.cls), "el tiempo por mesa no se pinta: más largo no es bueno ni malo (" + fm.cmp + ")");
     ok(/con recetas para el 88 % de las ventas/.test(ind.texto) && /23 de 180 recibos con QR/.test(ind.texto) && /68 % mesa/.test(ind.texto), "dice de dónde sale cada número");
+    // Panel: seis semáforos con su meta (cada estado con ícono y palabra), «Qué mirar», ventas contra el año pasado, cobros, canales, horas y platos
+    await page.waitForSelector("#pnSem .s", { timeout: 3000 });
+    const sem = await page.evaluate(() => [...document.querySelectorAll("#pnSem .s")].map((s) => ({ lb: s.querySelector(".lb").textContent, cls: s.className, st: s.querySelector(".st").textContent,
+      txt: s.textContent.replace(/\s+/g, " ") })));
+    ok(sem.map((x) => x.lb).join(",") === "Costo de insumos,Nómina,Comisiones del banco,Cierres de caja,Tiempo de cocina,Calificación", "el panel tiene seis semáforos (" + sem.map((x) => x.lb).join(", ") + ")");
+    ok(/bad/.test(sem[0].cls) && sem[0].st === "✕ Fuera de meta" && /41 %/.test(sem[0].txt) && /meta: hasta 35 % de lo vendido/.test(sem[0].txt),
+      "insumos en 41 % con meta de 35 %: en rojo, con «✕ Fuera de meta» y la meta al lado");
+    ok(/good/.test(sem[1].cls) && sem[1].st === "✓ Bien" && /1,2 %/.test(sem[2].txt) && /good/.test(sem[2].cls), "nómina 16 % y comisiones 1,2 %: bien (meta 25 % y 2 %)");
+    ok(/warn/.test(sem[3].cls) && sem[3].st === "! Atento" && /1 de 7 no cuadran/.test(sem[3].txt) && /faltan Ref 12,40/.test(sem[3].txt), "un cierre que no cuadra: ámbar, con lo que falta");
+    ok(/good/.test(sem[4].cls) && /14,2 min/.test(sem[4].txt) && /good/.test(sem[5].cls) && /23 de 180 recibos con QR opinaron/.test(sem[5].txt), "cocina 14,2 min y calificación 4,6: bien");
+    const mirar = await page.evaluate(() => [...document.querySelectorAll("#pnMirar li")].map((li) => li.textContent.replace(/\s+/g, " ").trim()));
+    ok(mirar.length >= 3 && mirar.length <= 5 && /^✕ El costo de insumos va en 41 % de lo vendido \(meta 35 %\)\. Lo que más lo sube: Teuchi Peq \(68 %\), Luffy \(57 %\), Amaterasu Peq \(48 %\)\./.test(mirar[0]),
+      "«Qué mirar» empieza por lo que está fuera de meta y nombra los platos que suben el costo (" + mirar[0] + ")");
+    ok(mirar.some((t) => /Teuchi Peq, el que más vende, deja Ref 2,18 por plato \(68 % de costo\)\. Subirlo Ref 1,00 serían unos Ref 386,00 más al mes/.test(t)),
+      "dice cuánto dejaría subir Ref 1 el plato que más vende (90 en 7 días → unos 386 al mes)");
+    ok(mirar.some((t) => /^! 1 de 7 cierres no cuadraron \(faltan Ref 12,40 en total\)\.$/.test(t)) && mirar.some((t) => /Vendiste 9 % menos que los mismos días del año pasado/.test(t)),
+      "también los cierres y la comparación con el año pasado (" + mirar.slice(2).join(" | ") + ")");
+    const graf = await page.evaluate(() => ({ barras: document.querySelectorAll("#pnVentas path.real").length, linea: !!document.querySelector("#pnVentas path.ant"),
+      puntos: document.querySelectorAll("#pnVentas circle.antdot").length, leyenda: document.querySelector("#pnVentas .legend").textContent, filas: document.querySelectorAll("#pnVentas .tview tbody tr").length }));
+    ok(graf.barras === 6 && graf.linea && graf.puntos === 6 && /Este período/.test(graf.leyenda) && /Mismo día del año pasado/.test(graf.leyenda) && graf.filas === 7,
+      "ventas por día: 6 barras (un día sin ventas queda vacío), la línea del año pasado con leyenda y la tabla de los 7 días");
+    await page.hover('#pnVentas .hit[data-i="0"]');
+    ok(/Año pasado: Ref 336,00 · ▼ 9 %/.test(await page.textContent("#pnVentas .tip")), "al pasar por un día dice lo vendido, lo del año pasado y el cambio (" + (await page.textContent("#pnVentas .tip")) + ")");
+    const met = await page.evaluate(() => [...document.querySelectorAll("#pnMetodos .r")].map((r) => r.textContent.replace(/\s+/g, " ").trim()));
+    ok(met.length === 4 && /^Punto débito\s*Ref 2\.311,50 · 65 %$/.test(met[0]) && /^Otros/.test(met[3]) && /Otros: Binance, PayPal, Zelle/.test(await page.textContent("#pnMetodos")),
+      "cobros por método de mayor a menor, con monto y % (" + met[0] + ")");
+    ok(/^Mesa\s*68 % · ticket Ref /.test(await page.textContent("#pnCanales .r")), "y por canal, con el ticket promedio de cada uno");
+    const plt = await page.evaluate(() => [...document.querySelectorAll("#pnPlatos tbody tr")].map((tr) => ({ t: [...tr.cells].map((c) => c.textContent.trim()).join(" "), st: (tr.querySelector(".st") || {}).className || "" })));
+    ok(plt.length === 10 && /^Teuchi Peq 90 Ref 720,00 ✕ 68 % Ref 2,18$/.test(plt[0].t) && /bad/.test(plt[0].st), "platos: el que más vende primero, con su costo en rojo y lo que deja (" + plt[0].t + ")");
+    ok(/good/.test(plt[2].st) && /✓ 19 %/.test(plt[2].t) && /sin receta/.test(plt[9].t) && /warn/.test(plt[3].st), "verde, ámbar o rojo según la meta; sin receta no inventa un costo");
+    await page.waitForSelector("#pnHoras .vh-grid", { timeout: 3000 }).catch(() => {});
+    ok(await page.isVisible("#pnHoras .vh-grid") && await page.evaluate(() => window.__G.calls.some((c) => c.rpc === "gestion_ventas_hora" && c.args.p_weeks === 4)), "y el mapa de horas fuertes de las últimas 4 semanas");
+    ok(!(await page.locator("#indBody .indg").first().isVisible()) && /Todos los números del período/.test(await page.textContent("#iniInd details.pn-det summary")), "los números de siempre quedan en «Todos los números del período»");
     await page.click('#indDias [data-d="30"]'); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_panel").pop().args.p_dias) === 30 && await page.evaluate(() => document.querySelectorAll("#pnVentas .tview tbody tr").length) === 30,
+      "con 30 días, el panel también cambia");
     ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_kpis").pop().args.p_dias) === 30 && /contra los 30 días anteriores/.test(await page.textContent("#indRango")),
       "el selector cambia a los últimos 30 días");
     await page.click('#indDias [data-d="7"]'); await page.waitForTimeout(300);
@@ -92,6 +127,13 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.alert_emails === "dueno@ejemplo.test" && c.value.alert_cash_diff === 15)),
       "guarda a quién le llegan las alertas y el límite del cierre");
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.meta_pct === 10)), "guarda la meta del día como «promedio + 10 %»");
+    ok(await page.inputValue("#sMetaIns") === "35" && await page.inputValue("#sMetaCal") === "4.5", "Ajustes muestra las metas del panel (las recomendadas)");
+    await page.fill("#sMetaIns", "30"); await page.click("#saveSettings"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.meta_insumos_pct === 30 && c.value.meta_calificacion === 4.5)),
+      "y se pueden cambiar (insumos hasta 30 %)");
+    await page.fill("#sMetaCal", "7"); await page.click("#saveSettings"); await page.waitForTimeout(300);
+    ok(/La meta de calificación va de 1 a 5/.test(await page.textContent("#toast")), "una meta imposible no se guarda");
+    await page.fill("#sMetaCal", "4.5");
     // Facturas de la caja (Dinero › Gastos)
     await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
     ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidades/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");

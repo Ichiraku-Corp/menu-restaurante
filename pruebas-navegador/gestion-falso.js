@@ -10,7 +10,7 @@
                   { id: 12, name: "Luis Gómez", job_title: "Cocinero", area_id: null, pay_quincena: 180, monthly_extra: 40, active: true },
                   { id: 13, name: "Rosa Díaz", job_title: "Cajera", area_id: null, pay_quincena: 160, monthly_extra: 0, active: false },
                   { id: 14, name: "Marta Socia", job_title: "Socia", area_id: null, pay_quincena: 0, monthly_extra: 0, active: true }],
-      payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0, opinion_qr: true, opinion_google: "", opinion_alerta: true }],
+      payroll_adjustments: [], payroll_payments: [], kitchen_stations: [], gestion_settings: [{ id: 1, iva_pct: 16, report_emails: "", alert_emails: "", alert_cash_diff: 5, meta_pct: 0, meta_insumos_pct: 35, meta_nomina_pct: 25, meta_comisiones_pct: 2, meta_cocina_min: 15, meta_calificacion: 4.5, opinion_qr: true, opinion_google: "", opinion_alerta: true }],
       ingredients: [{ id: 1, name: "Harina de trigo", buy_unit: "kg", buy_qty: 1, buy_price: 1.5, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 2, name: "Cerdo molido", buy_unit: "kg", buy_qty: 1, buy_price: 6, waste_pct: 0, stock_qty: 0, min_qty: 0 },
                     { id: 3, name: "Azúcar", buy_unit: "kg", buy_qty: 1, buy_price: 2, waste_pct: 0, stock_qty: 0, min_qty: 0 },
@@ -121,6 +121,20 @@
       return { dias: n,
         actual: per(dia(n), dia(1), { v: 3520.4, p: 214, ins: 41.2, nom: 15.5, q: 39.8, coc: 14.2, mesa: 48, cal: 4.6, desc: 45.5, anu: 6, cf: 1, dif: -12.4 }),
         anterior: per(dia(2 * n), dia(n + 1), { v: 3210, p: 201, ins: 43, nom: 16.9, q: 36.1, coc: 15.8, mesa: 46, cal: 4.5, desc: 30.2, anu: 9, cf: 2, dif: -20.1 }) };
+    },
+    // Panel de ejemplo: ventas por día contra el año pasado, cobros por método y los 10 platos que más venden (números inventados)
+    gestion_panel: function (a) {
+      G.calls.push({ rpc: "gestion_panel", args: a });
+      var n = a && a.p_dias === 30 ? 30 : 7, f = n / 7, dia = function (k) { return new Date(Date.now() - k * 864e5).toISOString().slice(0, 10); };
+      var base = [305, 341, 372, 415, 1046, 1045, 496], serie = [];   // de martes a lunes, como el promedio real por día de la semana
+      for (var k = n; k >= 1; k--) { var i = (n - k) % 7; serie.push({ dia: dia(k), ventas: k === 3 ? null : base[i], ventas_ant: k === 5 ? null : Math.round(base[i] * 1.1) }); }
+      var pl = function (plato, cant, precio, costo) { var neto = precio / 1.16;
+        return { plato: plato, cant: Math.round(cant * f), ventas: Math.round(cant * f) * precio, precio: precio, costo: costo, costo_pct: costo == null ? null : Math.round(costo / neto * 100),
+                 deja: costo == null ? null : Math.round((neto - costo) * 100) / 100 }; };
+      return { dias: n, desde: dia(n), hasta: dia(1), metas: { insumos_pct: 35, nomina_pct: 25, comisiones_pct: 2, cocina_min: 15, calificacion: 4.5 }, serie: serie,
+        metodos: [{ metodo: "debito", ref: 2311.5 * f }, { metodo: "pago_movil", ref: 885.2 * f }, { metodo: "efectivo", ref: 228.4 * f }, { metodo: "otros", ref: 141.7 * f }],
+        platos: [pl("Teuchi Peq", 90, 8, 4.72), pl("Luffy", 107, 6, 2.94), pl("Jugo Natural", 155, 3, 0.48), pl("Kisame Peq", 44, 10, 3.9), pl("Amaterasu Peq", 44, 10, 4.1),
+                 pl("Hokage", 17, 25, 11.5), pl("Chilly D Ace Peq", 41, 10, 3.3), pl("Pollo Saiyan Peq", 44, 8, 2.32), pl("Tonkotsu Peq", 35, 10, 2.7), pl("Mochi", 40, 4, null)] };
     },
     gestion_meta: function () { return { dia: new Date().toISOString().slice(0, 10), meta: 620, vendido: 320.45, pedidos: 21, promedio: 617.94, dias: 8, pct: 0 }; },
     gestion_inicio: function () { return { hoy: new Date().toISOString().slice(0, 10), ventas: 352.5, pedidos: 21, ventas_semana_pasada: 300, pedidos_semana_pasada: 18, abiertas: 3, abiertas_monto: 41.8,
