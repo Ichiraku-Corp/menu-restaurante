@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ll3BqLNmnbIAnN7qDlFeNYL+CU+9NCZ3t3UG2gELuDY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-6OiU1J1Rx8Di7p1N7PRNfK2UUMW9vVYz8MvigCs2ejo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -163,11 +163,11 @@
   .perfrules label { font-size:13px; display:flex; flex-direction:column; gap:2px; }
   .perfrules input { width:110px; }
   /* Secciones arriba (Inicio · Dinero · Personal · Cocina · Clientes · Ajustes) y sus pestañas abajo */
-  .secs { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:4px; padding:4px; border-radius:16px; background:var(--chip); margin:4px 0 8px; }
+  .secs { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; padding:4px; border-radius:16px; background:var(--chip); margin:4px 0 8px; }
   .secs button { border:0; background:transparent; font-weight:800; border-radius:12px; padding:9px 6px; min-height:42px; }
   .secs button.on { background:var(--surface); box-shadow:0 1px 4px rgba(0,0,0,.12); color:var(--accent); }
   .tabs button.on { background:var(--text); border-color:var(--text); color:var(--bg); }
-  @media (max-width:560px) { .secs { grid-template-columns:repeat(3, minmax(0, 1fr)); } }
+  @media (max-width:560px) { .secs { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
   /* Inicio */
   .grid2.ini { gap:0 12px; }
   .metacard .row b { font-size:20px; font-variant-numeric:tabular-nums; }
@@ -269,11 +269,40 @@
   .tbl th { color:var(--ink); }
   .tbl tr.total td { border-top-color:var(--ink); }
   input, select, textarea { border-width:1.5px; border-color:#D9CBBE; background:#fff; }
+  /* Inicio › Panel: enlace a la pestaña con el detalle */
+  .vermas { float:right; text-transform:none; letter-spacing:0; font-size:13px; font-weight:700; color:var(--sky); text-decoration:none; }
+  .vermas:hover { text-decoration:underline; }
+  /* Carta › Platos (antes Panel de la carta) */
+  .cat-title { margin:18px 0 4px; font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .dish-row { display:flex; gap:12px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
+  .cat-title + .dish-row { border-top:0; }
+  .pl-thumb { width:52px; height:52px; border-radius:10px; object-fit:cover; background:var(--chip); flex:none; }
+  .dish-row .name { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .dish-row .grow { flex:1; min-width:0; }
+  .dish-row .avl { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); margin:0; }
+  .dish-row .prices { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+  .dish-row .pr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .dish-row .pr label { display:flex; align-items:center; gap:4px; margin:0; font-size:12px; }
+  .dish-row input.price { width:84px; text-align:right; padding:7px 6px; }
+  .dish-row .pp { display:flex; align-items:center; gap:6px; min-width:132px; justify-content:flex-end; font-size:12px; }
+  .dish-row .sold { color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .cat-row { display:flex; gap:8px; align-items:center; padding:6px 0; }
+  .cat-row input.pos { width:64px; } .cat-row input.sub { width:140px; }
+  .pl-preview { width:110px; height:110px; border-radius:12px; object-fit:cover; background:var(--chip); flex:none; }
+  .var-row { display:flex; gap:8px; margin-top:6px; } .var-row input.vl { width:110px; }
+  #plTagQuick button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #qrBox svg { width:220px; height:auto; display:block; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.15); }
+  @media (max-width:560px) {
+    .dish-row { flex-wrap:wrap; gap:8px; } .dish-row .pl-thumb { width:40px; height:40px; }
+    .dish-row .prices { width:100%; } .dish-row .pp { min-width:0; }
+    .cat-row input.sub { width:96px; }
+  }
 </style>
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
+<script src="vendor/qrcode-generator-1.4.4/qrcode.js"></script>
 <script src="mfa.js?v=6cc3aca8ac"></script>
 </head>
 <body>
@@ -281,7 +310,7 @@
   <header class="top">
     <h1>Gestión <small class="muted" style="font-weight:600;font-size:15px">Ichiraku Ramen</small></h1>
     <div class="row">
-      <a class="btn" href="admin.html"><span class="largo">Panel de la carta</span><span class="corto">Carta</span></a>
+      <a class="btn" href="./" target="_blank" rel="noopener"><span class="largo">Ver la carta ↗</span><span class="corto">Carta ↗</span></a>
       <button id="logout" class="hidden">Salir</button>
     </div>
   </header>
@@ -306,33 +335,37 @@
   <div id="mfa" class="card hidden" style="max-width:420px"></div>
 
   <div id="app" class="hidden">
-    <!-- Secciones (arriba) y sus pestañas (abajo): de 16 pestañas en una fila a 6 secciones -->
+    <!-- Secciones (arriba) y sus pestañas (abajo): 7 secciones, cada dato en un solo lugar -->
     <nav class="secs" id="secs" aria-label="Secciones">
       <button type="button" data-sec="inicio" class="on">Inicio</button>
       <button type="button" data-sec="dinero">Dinero</button>
-      <button type="button" data-sec="personal">Personal</button>
+      <button type="button" data-sec="carta">Carta</button>
       <button type="button" data-sec="cocina">Cocina</button>
+      <button type="button" data-sec="equipo">Equipo</button>
       <button type="button" data-sec="clientes">Clientes</button>
       <button type="button" data-sec="ajustes">Ajustes</button>
     </nav>
     <nav class="tabs" id="tabs">
       <button data-tab="inicio" class="on" hidden>Inicio</button>
-      <button data-tab="resumen">Costos del mes</button>
-      <button data-tab="nomina">Nómina</button>
-      <button data-tab="asistencia">Asistencia</button>
       <button data-tab="ventas">Ventas</button>
       <button data-tab="historico">Histórico</button>
-      <button data-tab="clientes">Clientes</button>
-      <button data-tab="servicio">Servicio y bonos</button>
-      <button data-tab="avisos">Avisos</button>
-      <button data-tab="whatsapp">WhatsApp</button>
-      <button data-tab="promos">Promociones</button>
-      <button data-tab="opiniones">Opiniones</button>
+      <button data-tab="resumen">Ganancia</button>
       <button data-tab="gastos">Gastos</button>
-      <button data-tab="inventario">Inventario</button>
-      <button data-tab="insumos">Insumos</button>
+      <button data-tab="platos">Platos</button>
       <button data-tab="recetas">Recetas</button>
+      <button data-tab="promos">Promociones</button>
+      <button data-tab="insumos">Insumos</button>
+      <button data-tab="inventario">Inventario</button>
       <button data-tab="estaciones">Estaciones</button>
+      <button data-tab="nomina">Nómina</button>
+      <button data-tab="asistencia">Asistencia</button>
+      <button data-tab="servicio">Servicio y bonos</button>
+      <button data-tab="cuentas">Cuentas</button>
+      <button data-tab="avisos">Avisos</button>
+      <button data-tab="clientes">Clientes</button>
+      <button data-tab="opiniones">Opiniones</button>
+      <button data-tab="whatsapp">WhatsApp</button>
+      <button data-tab="general">General</button>
       <button data-tab="areas">Áreas</button>
       <button data-tab="importar">Cargar datos</button>
     </nav>
@@ -349,11 +382,11 @@
         <div class="sem" id="pnSem"></div>
         <div id="pnMirar"></div>
         <div class="pn-grid">
-          <div class="pn-box"><h3>Ventas por día</h3><div id="pnVentas"></div></div>
+          <div class="pn-box"><h3>Ventas por día <a class="vermas" href="#ventas" data-go="ventas">Ver más →</a></h3><div id="pnVentas"></div></div>
           <div class="pn-box"><h3>Cobros por método</h3><div id="pnMetodos"></div><h3 style="margin-top:16px">Por canal</h3><div id="pnCanales"></div></div>
         </div>
-        <div class="pn-box"><h3>Horas fuertes <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:600">· últimas 4 semanas</span></h3><div id="pnHoras"></div></div>
-        <div class="pn-box"><h3>Platos que más venden y lo que dejan</h3><div id="pnPlatos"></div></div>
+        <div class="pn-box"><h3>Horas fuertes <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:600">· últimas 4 semanas</span> <a class="vermas" href="#historico" data-go="historico">Ver más →</a></h3><div id="pnHoras"></div></div>
+        <div class="pn-box"><h3>Platos que más venden y lo que dejan <a class="vermas" href="#platos" data-go="platos">Ver más →</a></h3><div id="pnPlatos"></div></div>
         <details class="pn-det"><summary>Todos los números del período</summary><div id="indBody"></div></details>
       </div>
       <div class="grid2 ini">
@@ -363,16 +396,17 @@
       <div class="card"><h2>Lo más pedido hoy</h2><div id="iniTop"></div></div>
     </section>
 
-    <!-- Resumen -->
+    <!-- Dinero › Ganancia: el resultado del mes en un solo lugar (antes repartido entre Costos del mes, Ventas e Histórico) -->
     <section data-panel="resumen" hidden>
       <div class="row between">
-        <p class="muted" style="margin:0">Costo del mes por área: nómina + gastos fijos + gastos variables del mes elegido.</p>
-        <input type="month" id="month" style="width:auto" aria-label="Mes">
+        <p class="muted" style="margin:0">Lo que dejó el mes: ventas menos costos. Abajo, el costo por área, el punto de equilibrio y los últimos 12 meses.</p>
+        <div class="row"><input type="month" id="month" style="width:auto" aria-label="Mes"><button id="xlsContador" title="Ventas por día con IVA, cobros por método, gastos y nómina del mes">Excel para el contador</button></div>
       </div>
       <div class="kpis" style="margin-top:12px" id="kpis"></div>
-      <div class="card"><h2>Por área</h2><div class="scroll" id="byArea"></div></div>
-      <div class="card"><h2>Recetas y márgenes</h2><div id="recSummary"></div></div>
+      <div class="card"><h2>Estado de resultados del mes</h2><div id="salesResult"></div></div>
+      <div class="card"><h2>Costo por área</h2><p class="muted" style="margin-top:0">Nómina + gastos fijos + gastos variables del mes.</p><div class="scroll" id="byArea"></div></div>
       <div class="card"><h2>Punto de equilibrio</h2><div id="breakeven"></div></div>
+      <div class="card"><h2>Lo que se gana · últimos 12 meses</h2><div id="histProfit"></div></div>
     </section>
 
     <!-- Nómina -->
@@ -398,7 +432,7 @@
         <div class="row between"><h2 style="margin:0">Asistencia de la quincena</h2>
           <div class="row"><input type="month" id="attMonth" style="width:auto" aria-label="Mes">
             <select id="attHalf" style="width:auto" aria-label="Quincena"><option value="1">1 – 15</option><option value="2">16 – fin de mes</option></select></div></div>
-        <p class="muted">Las marcaciones llegan del equipo de reconocimiento facial vía n8n. Tolerancia de <b id="attTol">5</b> min · horas extra a <b id="attOt">1.5</b>× · descuentos proporcionales. Toca un empleado para ver el detalle por día.</p>
+        <p class="muted">Las marcaciones llegan del equipo de reconocimiento facial vía n8n. Tolerancia de <b id="attTol">5</b> min · horas extra a <b id="attOt">1.5</b>× · descuentos proporcionales (se cambian en Ajustes › General). Toca un empleado para ver el detalle por día.</p>
         <div class="scroll" id="attList"></div>
         <p class="help">Para calcular, cada empleado necesita su <b>horario</b> y su <b>nº en el equipo facial</b> (Nómina → editar empleado). La marcación más temprana del día cuenta como entrada y la más tardía como salida.</p>
       </div>
@@ -407,39 +441,16 @@
     <!-- Ventas -->
     <section data-panel="ventas" hidden>
       <div class="row between">
-        <p class="muted" style="margin:0">Ventas del mes, comisiones del banco, reparto del servicio y resultado.</p>
-        <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button id="xlsContador" title="Ventas por día con IVA, cobros por método, gastos y nómina del mes">Excel para el contador</button><button class="primary" id="addSale">+ Día</button></div>
+        <p class="muted" style="margin:0">Lo vendido en el mes, día por día. Toca un día para ver o corregir sus números.</p>
+        <div class="row"><input type="month" id="salesMonth" style="width:auto" aria-label="Mes"><button class="primary" id="addSale">+ Día</button></div>
       </div>
       <div class="kpis" style="margin-top:12px" id="salesKpis"></div>
-      <div class="card"><h2>Estado de resultados del mes</h2><div id="salesResult"></div></div>
-      <div class="card"><h2>Platos más vendidos</h2><div class="scroll" id="salesTop"></div></div>
-      <div class="card"><h2>Ventas por día</h2><div class="scroll" id="salesDays"></div></div>
-      <div class="card">
-        <h2>Ajustes</h2>
-        <div class="grid2">
-          <div><label for="sIva">IVA incluido en los precios (%)</label><input id="sIva" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
-          <div><label for="sStaff">% del servicio para el personal</label><input id="sStaff" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
-          <div><label for="sDeb">Comisión débito (%)</label><input id="sDeb" type="number" step="0.01" min="0" inputmode="decimal"></div>
-          <div><label for="sCre">Comisión crédito (%)</label><input id="sCre" type="number" step="0.01" min="0" inputmode="decimal"></div>
-          <div><label for="sPm">Comisión pago móvil (%)</label><input id="sPm" type="number" step="0.01" min="0" inputmode="decimal"></div>
-          <div><label for="sTol">Tolerancia de llegada (min)</label><input id="sTol" type="number" step="1" min="0" inputmode="numeric"></div>
-          <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
-          <div style="grid-column:1 / -1"><label for="sMails">Correos que reciben el cierre de caja detallado</label><input id="sMails" type="text" placeholder="dueno@gmail.com, socio@gmail.com" autocomplete="off">
-            <div class="muted">Separados por comas. El puente de la laptop de caja los envía al cerrar caja.</div></div>
-          <div class="alertset" style="grid-column:1 / -1"><label for="sAlerts">Correos que reciben las alertas</label><input id="sAlerts" type="text" placeholder="Vacío: van a los mismos del cierre" autocomplete="off">
-            <div class="muted">Avisa al momento: cierre que no cuadra, platos anulados después de ir a cocina, descuentos grandes y laptop de caja sin conexión con la caja abierta.</div></div>
-          <div class="alertset"><label for="sAlertDiff">Avisar si el cierre no cuadra por más de (Ref)</label><input id="sAlertDiff" type="number" step="1" min="0" inputmode="decimal"></div>
-          <div class="panelset" style="grid-column:1 / -1"><b>Metas del panel de Inicio</b> <span class="muted">(el semáforo se pone en ámbar cerca de la meta y en rojo lejos de ella)</span></div>
-          <div class="panelset"><label for="sMetaIns">Costo de insumos: hasta (% de lo vendido)</label><input id="sMetaIns" type="number" step="1" min="1" max="100" inputmode="decimal"></div>
-          <div class="panelset"><label for="sMetaNom">Nómina: hasta (% de lo vendido)</label><input id="sMetaNom" type="number" step="1" min="1" max="100" inputmode="decimal"></div>
-          <div class="panelset"><label for="sMetaCom">Comisiones del banco: hasta (% de las ventas)</label><input id="sMetaCom" type="number" step="0.1" min="0" max="20" inputmode="decimal"></div>
-          <div class="panelset"><label for="sMetaCoc">Tiempo de cocina: hasta (minutos)</label><input id="sMetaCoc" type="number" step="1" min="1" max="120" inputmode="decimal"></div>
-          <div class="panelset"><label for="sMetaCal">Calificación de los clientes: desde (de 1 a 5)</label><input id="sMetaCal" type="number" step="0.1" min="1" max="5" inputmode="decimal"></div>
-          <div class="metaset"><label for="sMetaPct">Meta del día: promedio + (%)</label><input id="sMetaPct" type="number" step="1" min="-50" max="200" inputmode="decimal">
-            <div class="muted">La meta es lo que se vende en promedio ese mismo día de la semana (últimas 8 semanas). Súbela un % para crecer.</div></div>
-        </div>
-        <p style="margin-top:12px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
+      <div class="card hidden" id="pagosCard" style="border-color:var(--warn)">
+        <h2>Pagos por comprobar <span class="pill warn" id="pagosN">0</span></h2>
+        <p class="muted">Binance y PayPal de los últimos 2 días que nadie comprobó. Revisa en el teléfono que llegaron; en la caja se marcan con «Ya lo vi, llegó».</p>
+        <div class="scroll" id="pagosList"></div>
       </div>
+      <div class="card"><h2>Ventas por día</h2><div class="scroll" id="salesDays"></div></div>
     </section>
 
     <!-- Histórico -->
@@ -448,7 +459,6 @@
       <p class="muted" style="margin:0" id="histIntro">Ventas con IVA y sin el 10 % de servicio. Incluye lo importado del sistema anterior (Syth Software).</p>
       <div class="kpis" style="margin-top:12px" id="histKpis"></div>
       <div class="card"><h2>Ventas por mes</h2><div id="histMonths"></div></div>
-      <div class="card"><h2>Lo que se gana</h2><div id="histProfit"></div></div>
       <div class="card"><h2>Promedio por día de la semana</h2><p class="muted" style="margin-top:0">Últimos 12 meses, solo días con ventas.</p><div id="histWeek"></div></div>
       <div class="card" id="vhCard">
         <div class="row between"><h2 style="margin:0">Ventas por hora y día</h2>
@@ -456,7 +466,6 @@
         <p class="muted" id="vhNote">Cargando…</p>
         <div id="vhMap"></div>
       </div>
-      <div class="card"><h2>Platos más vendidos</h2><p class="muted" style="margin-top:0" id="histTopNote"></p><div class="scroll" id="histTop"></div></div>
       <div class="card"><h2>Ventas por grupo</h2><div class="scroll" id="histGroups"></div></div>
     </section>
 
@@ -477,21 +486,10 @@
         <div class="card hidden" id="opPuente" style="border-color:var(--warn)"><p style="margin:0"><b>La laptop de caja todavía no imprime el QR.</b> El puente se actualiza solo en unos minutos; si no, ciérralo y ábrelo de nuevo. Mientras tanto, los recibos salen sin QR.</p></div>
         <div class="kpis" style="margin-top:10px" id="opKpis"></div>
         <div class="card"><h2>Estrellas</h2><div id="opStars"></div></div>
-        <div class="card"><h2>Por mesonero</h2><p class="muted" style="margin-top:0">Quién abrió la mesa. Con pocas opiniones, el promedio todavía dice poco.</p><div class="scroll" id="opMes"></div></div>
         <div class="card">
           <div class="row between"><h2 style="margin:0">Opiniones</h2>
             <div class="row opfil" id="opFiltro" role="group" aria-label="Filtrar opiniones"><button type="button" class="small on" data-f="todas">Todas</button><button type="button" class="small" data-f="bajas">1–2 ★</button><button type="button" class="small" data-f="medias">3 ★</button><button type="button" class="small" data-f="altas">4–5 ★</button><button type="button" class="small" data-f="contacto">Con contacto</button></div></div>
           <div id="opList" style="margin-top:6px"></div>
-        </div>
-        <div class="card">
-          <h2>Ajustes de opiniones</h2>
-          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="opQr" style="margin-top:3px"><span>Imprimir el QR de opinión al final del recibo</span></label>
-          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="opAlerta" style="margin-top:3px"><span>Avisarme al correo cuando alguien califique con 1 o 2 estrellas</span></label>
-          <p class="muted" style="margin:2px 0 0" id="opAlertaA"></p>
-          <label for="opGoogle">Enlace para dejar reseña en Google (se ofrece a todos después de calificar)</label>
-          <input id="opGoogle" type="url" inputmode="url" placeholder="https://g.page/r/…/review">
-          <p class="muted">Dónde está: busca «Ichiraku Ramen» en Google con tu cuenta de la ficha → «Pedir reseñas» → copiar el enlace. Vacío = la página solo da las gracias.</p>
-          <div class="row" style="justify-content:flex-end"><button type="button" class="primary" id="opSave">Guardar</button></div>
         </div>
       </div>
     </section>
@@ -509,6 +507,15 @@
 
     <!-- Gastos -->
     <!-- Servicio y bonos -->
+    <!-- Equipo › Cuentas: lo que cada persona consume a cuenta y sus abonos (antes al final de Servicio y bonos) -->
+    <section data-panel="cuentas" hidden>
+      <div class="card">
+        <h2>Cuentas del personal</h2>
+        <p class="muted">Consumos a cuenta (se cargan en caja con el método «A cuenta») y abonos. Tope por persona: Ref 100.</p>
+        <div class="scroll" id="svcTabs"></div>
+      </div>
+    </section>
+
     <!-- Avisos al personal -->
     <section data-panel="avisos" hidden>
       <div class="card">
@@ -548,10 +555,11 @@
         <p id="svcErr" class="muted" style="color:var(--danger)"></p>
         <div class="row between" id="svcActions"></div>
       </div>
-      <div class="card">
-        <h2>Cuentas del personal</h2>
-        <p class="muted">Consumos a cuenta (se cargan en caja con el método «A cuenta») y abonos. Tope por persona: Ref 100.</p>
-        <div class="scroll" id="svcTabs"></div>
+      <div class="card hidden" id="mesCard">
+        <div class="row between"><h2 style="margin:0">Calificación por mesonero</h2>
+          <select id="mesDias" style="width:auto" aria-label="Período"><option value="30" selected>Últimos 30 días</option><option value="90">Últimos 90 días</option><option value="365">12 meses</option></select></div>
+        <p class="muted">De las opiniones del QR del recibo: quién abrió la mesa. Con pocas opiniones, el promedio todavía dice poco.</p>
+        <div class="scroll" id="opMes"></div>
       </div>
     </section>
 
@@ -590,10 +598,8 @@
     <section data-panel="insumos" hidden>
       <div class="card hidden" id="priceSetup"><p class="muted" style="margin:0">Para activar <b>proveedores y precios automáticos</b>, vuelve a ejecutar <code>supabase/gestion.sql</code> en Supabase → SQL Editor.</p></div>
       <div class="card" id="pendCard">
-        <div class="row between"><h2 style="margin:0">Precios pendientes <span class="pill" id="pendCount">0</span></h2>
-          <label class="row" style="margin:0;color:var(--text)">Aplicar automáticamente si cambian hasta
-            <input id="autoPct" type="number" min="0" max="100" step="0.5" style="width:72px" inputmode="decimal"> %</label></div>
-        <p class="muted">Los precios nuevos (de n8n o de un proveedor) que cambian más que ese porcentaje esperan tu aprobación aquí.</p>
+        <h2>Precios pendientes <span class="pill" id="pendCount">0</span></h2>
+        <p class="muted">Los precios nuevos (de n8n o de un proveedor) que cambian más de <b id="autoPctTxt">5 %</b> esperan tu aprobación aquí. Ese límite se cambia en Ajustes › General.</p>
         <div class="scroll" id="pendList"></div>
       </div>
       <div class="card">
@@ -634,25 +640,115 @@
       </div>
     </section>
 
-    <section data-panel="recetas" hidden>
+    <!-- Carta › Platos: la carta (antes «Panel de la carta», admin.html) con lo que cuesta, lo que se vende y lo que deja cada plato -->
+    <section data-panel="platos" hidden>
       <div class="card">
-        <h2>Costo por receta</h2>
-        <p class="muted">Toca un plato para cargar sus ingredientes. Costo de insumos sobre el precio de venta <b>sin IVA</b>: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
-        <div class="scroll" id="recList"></div>
+        <div class="row between"><h2 style="margin:0">Platos de la carta</h2>
+          <div class="row"><a class="btn" href="./" target="_blank" rel="noopener">Ver la carta ↗</a><button class="primary" id="plNew">+ Nuevo plato</button></div></div>
+        <p class="muted">Cambia el precio en la lista y se guarda solo. Al lado de cada precio ves el <b>% de costo</b> de los insumos (sobre el precio sin IVA) y cuántos se vendieron en el período de «Lo que vende y lo que deja». Desmarca «Disponible» para mostrarlo como agotado.</p>
+        <div id="plList"></div>
       </div>
       <div class="card">
-        <div class="row between"><h2 style="margin:0">Rentabilidad del menú</h2>
+        <div class="row between"><h2 style="margin:0">Lo que vende y lo que deja</h2>
           <select id="meDays" style="width:auto" aria-label="Período"><option value="30">Últimos 30 días</option><option value="60">Últimos 60 días</option><option value="90">Últimos 90 días</option><option value="hist">2 años (sistema anterior + caja)</option></select></div>
         <p class="muted">Cruza lo vendido con el costo de cada receta (precios sin IVA). Cada plato se compara con los de su categoría (ramen con ramen, bebidas con bebidas): es <b>popular</b> si vende al menos el 70 % del promedio de su categoría, y <b>deja bien</b> si su ganancia por plato supera la media de su categoría. Con «2 años» se suma lo vendido en el sistema anterior.</p>
         <p class="muted" id="mePeriod"></p>
         <div class="kpis" id="meKpis"></div>
         <div class="scroll" id="meList" style="margin-top:10px"></div>
       </div>
+      <div class="card">
+        <h2>Categorías</h2>
+        <p class="muted">El número define el orden en la carta.</p>
+        <div id="plCats"></div>
+        <form id="plNewCat" class="row" style="margin-top:10px">
+          <input class="grow" id="plNewCatName" placeholder="Nueva categoría (p. ej. Vinos)" required style="flex:1">
+          <button type="submit">Añadir</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>Código QR de la carta</h2>
+        <div class="grid2">
+          <div><label for="qrUrl">Dirección de la carta</label><input id="qrUrl"></div>
+          <div><label for="qrStyle">Diseño</label><select id="qrStyle"><option value="card">Tarjeta de mesa (con logo y nombre)</option><option value="logo">Solo QR con logo</option><option value="plain">Solo QR simple</option></select></div>
+        </div>
+        <div class="row" style="margin-top:12px;align-items:flex-start">
+          <div id="qrBox"></div>
+          <div>
+            <p class="muted" style="max-width:260px">Prueba siempre el QR con la cámara del teléfono antes de imprimir.</p>
+            <p><button type="button" id="qrPng" class="primary">Descargar PNG</button></p>
+            <p><button type="button" id="qrSvg">Descargar SVG (para imprenta)</button></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section data-panel="recetas" hidden>
+      <div class="card">
+        <h2>Costo por receta</h2>
+        <p class="muted">Toca un plato para cargar sus ingredientes. Los precios y las fotos se cambian en Carta › Platos. Costo de insumos sobre el precio de venta <b>sin IVA</b>: <span class="pill ok">≤ 30 % bien</span> <span class="pill warn">30–40 % revisar</span> <span class="pill bad">&gt; 40 % caro</span></p>
+        <div class="scroll" id="recList"></div>
+      </div>
     </section>
 
     <!-- Cargar datos desde planillas -->
     <!-- WhatsApp: lo dibuja gestion-whatsapp.js -->
     <section data-panel="whatsapp" hidden></section>
+
+    <!-- Ajustes › General: todos los ajustes juntos (antes en Ventas, Opiniones e Insumos) -->
+    <section data-panel="general" hidden>
+      <div class="card">
+        <h2>Ajustes generales</h2>
+        <h3>Ventas y cobros</h3>
+        <div class="grid2">
+          <div><label for="sIva">IVA incluido en los precios (%)</label><input id="sIva" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
+          <div><label for="sStaff">% del servicio para el personal</label><input id="sStaff" type="number" step="0.5" min="0" max="100" inputmode="decimal"></div>
+          <div><label for="sDeb">Comisión débito (%)</label><input id="sDeb" type="number" step="0.01" min="0" inputmode="decimal"></div>
+          <div><label for="sCre">Comisión crédito (%)</label><input id="sCre" type="number" step="0.01" min="0" inputmode="decimal"></div>
+          <div><label for="sPm">Comisión pago móvil (%)</label><input id="sPm" type="number" step="0.01" min="0" inputmode="decimal"></div>
+        </div>
+        <h3>Correos y alertas</h3>
+        <div class="grid2">
+          <div style="grid-column:1 / -1"><label for="sMails">Correos que reciben el cierre de caja detallado</label><input id="sMails" type="text" placeholder="dueno@gmail.com, socio@gmail.com" autocomplete="off">
+            <div class="muted">Separados por comas. El puente de la laptop de caja los envía al cerrar caja.</div></div>
+          <div class="alertset" style="grid-column:1 / -1"><label for="sAlerts">Correos que reciben las alertas</label><input id="sAlerts" type="text" placeholder="Vacío: van a los mismos del cierre" autocomplete="off">
+            <div class="muted">Avisa al momento: cierre que no cuadra, platos anulados después de ir a cocina, descuentos grandes y laptop de caja sin conexión con la caja abierta.</div></div>
+          <div class="alertset"><label for="sAlertDiff">Avisar si el cierre no cuadra por más de (Ref)</label><input id="sAlertDiff" type="number" step="1" min="0" inputmode="decimal"></div>
+        </div>
+        <h3>Metas</h3>
+        <p class="muted panelset" style="margin:0 0 4px">Las del panel de Inicio: el semáforo se pone en ámbar cerca de la meta y en rojo lejos de ella.</p>
+        <div class="grid2">
+          <div class="metaset"><label for="sMetaPct">Meta del día: promedio + (%)</label><input id="sMetaPct" type="number" step="1" min="-50" max="200" inputmode="decimal">
+            <div class="muted">La meta es lo que se vende en promedio ese mismo día de la semana (últimas 8 semanas). Súbela un % para crecer.</div></div>
+          <div class="panelset"><label for="sMetaIns">Costo de insumos: hasta (% de lo vendido)</label><input id="sMetaIns" type="number" step="1" min="1" max="100" inputmode="decimal"></div>
+          <div class="panelset"><label for="sMetaNom">Nómina: hasta (% de lo vendido)</label><input id="sMetaNom" type="number" step="1" min="1" max="100" inputmode="decimal"></div>
+          <div class="panelset"><label for="sMetaCom">Comisiones del banco: hasta (% de las ventas)</label><input id="sMetaCom" type="number" step="0.1" min="0" max="20" inputmode="decimal"></div>
+          <div class="panelset"><label for="sMetaCoc">Tiempo de cocina: hasta (minutos)</label><input id="sMetaCoc" type="number" step="1" min="1" max="120" inputmode="decimal"></div>
+          <div class="panelset"><label for="sMetaCal">Calificación de los clientes: desde (de 1 a 5)</label><input id="sMetaCal" type="number" step="0.1" min="1" max="5" inputmode="decimal"></div>
+        </div>
+        <h3>Asistencia</h3>
+        <div class="grid2">
+          <div><label for="sTol">Tolerancia de llegada (min)</label><input id="sTol" type="number" step="1" min="0" inputmode="numeric"></div>
+          <div><label for="sOt">Horas extra (× hora normal)</label><input id="sOt" type="number" step="0.1" min="0" inputmode="decimal"></div>
+        </div>
+        <p style="margin-top:14px"><button id="saveSettings" class="primary">Guardar ajustes</button></p>
+      </div>
+      <div class="card hidden" id="opSetCard">
+          <h2>Opiniones de los clientes</h2>
+          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="opQr" style="margin-top:3px"><span>Imprimir el QR de opinión al final del recibo</span></label>
+          <label class="row" style="color:var(--text);font-size:15px;margin:6px 0;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="opAlerta" style="margin-top:3px"><span>Avisarme al correo cuando alguien califique con 1 o 2 estrellas</span></label>
+          <p class="muted" style="margin:2px 0 0" id="opAlertaA"></p>
+          <label for="opGoogle">Enlace para dejar reseña en Google (se ofrece a todos después de calificar)</label>
+          <input id="opGoogle" type="url" inputmode="url" placeholder="https://g.page/r/…/review">
+          <p class="muted">Dónde está: busca «Ichiraku Ramen» en Google con tu cuenta de la ficha → «Pedir reseñas» → copiar el enlace. Vacío = la página solo da las gracias.</p>
+          <div class="row" style="justify-content:flex-end"><button type="button" class="primary" id="opSave">Guardar</button></div>
+      </div>
+      <div class="card hidden" id="autoCard">
+        <h2>Precios de insumos</h2>
+        <label for="autoPct">Aplicar solos los precios nuevos que cambian hasta (%)</label>
+        <input id="autoPct" type="number" min="0" max="100" step="0.5" style="max-width:140px" inputmode="decimal">
+        <p class="muted">Los precios nuevos de n8n o de un proveedor que cambian más que eso esperan tu aprobación en Cocina › Insumos.</p>
+      </div>
+    </section>
 
     <section data-panel="importar" hidden>
       <div class="card">
@@ -696,6 +792,43 @@
   <div class="row between" style="margin-top:14px">
     <button type="button" id="dlgDelete" class="danger">Eliminar</button>
     <div class="row"><button type="button" id="dlgCancel">Cancelar</button><button type="submit" class="primary">Guardar</button></div>
+  </div>
+</form></dialog>
+
+<!-- Carta › Platos: un plato (foto, nombre, precio o tamaños, opciones, etiquetas) -->
+<dialog id="plDlg" style="width:min(560px, calc(100vw - 24px))"><form id="plForm" method="dialog">
+  <h2 id="plTitle">Plato</h2>
+  <div class="row" style="align-items:flex-start;flex-wrap:nowrap">
+    <img id="plPhotoPrev" class="pl-preview" alt="">
+    <div class="grow">
+      <label for="plPhoto">Foto (se achica sola)</label>
+      <input id="plPhoto" type="file" accept="image/*">
+      <p><button type="button" id="plRemovePhoto" class="danger small">Quitar foto</button></p>
+    </div>
+  </div>
+  <label for="plCat">Categoría</label><select id="plCat" required></select>
+  <label for="plName">Nombre</label><input id="plName" required maxlength="120">
+  <label for="plSub">Subtítulo (p. ej. en japonés)</label><input id="plSub" maxlength="120" lang="ja">
+  <label for="plDesc">Descripción</label><textarea id="plDesc" maxlength="600"></textarea>
+  <div class="grid2">
+    <div id="plSingle"><label for="plPrice">Precio</label><input id="plPrice" type="number" step="0.01" min="0" inputmode="decimal"></div>
+    <div><label for="plPos">Orden</label><input id="plPos" type="number" step="1" value="0" inputmode="numeric"></div>
+  </div>
+  <label>Tamaños con precio propio (opcional)</label>
+  <div id="plVars"></div>
+  <p style="margin:6px 0 0"><button type="button" id="plAddVar" class="small">+ Añadir tamaño</button> <button type="button" id="plAddPG" class="small">Usar Peq / Gr</button></p>
+  <label for="plOpts">Sabores u opciones (separados por comas)</label><input id="plOpts" placeholder="Fresa, Mora, Taro">
+  <label for="plTags">Etiquetas (separadas por comas)</label><input id="plTags" placeholder="Picante, Nuevo">
+  <div class="row" id="plTagQuick" style="margin-top:6px">
+    <button type="button" class="small" data-tag="Recomendado">⭐ Recomendado</button>
+    <button type="button" class="small" data-tag="Picante">🌶️ Picante</button>
+    <button type="button" class="small" data-tag="Nuevo">🆕 Nuevo</button>
+    <button type="button" class="small" data-tag="Vegetariano">🌱 Vegetariano</button>
+  </div>
+  <label class="row" style="margin-top:12px;color:var(--text);font-size:15px"><input id="plAvail" type="checkbox" checked> Disponible</label>
+  <div class="row between" style="margin-top:16px">
+    <button type="button" id="plDelete" class="danger">Eliminar</button>
+    <div class="row"><button type="button" id="plCancel">Cancelar</button><button type="submit" class="primary" id="plSave">Guardar</button></div>
   </div>
 </form></dialog>
 
@@ -898,8 +1031,8 @@
       q(sb.from("expenses").select("*").order("expense_date", { ascending: false })),
       q(sb.from("ingredients").select("*").order("name")),
       q(sb.from("recipe_items").select("*").order("position")),
-      q(sb.from("dishes").select("id,category_id,name,price,variants,position").order("position")),
-      q(sb.from("categories").select("id,name,position").order("position")),
+      q(sb.from("dishes").select("*").order("position")),
+      q(sb.from("categories").select("*").order("position")),
       opt(sb.from("suppliers").select("*").order("name")),
       opt(sb.from("gestion_settings").select("*")),
       opt(sb.from("price_updates").select("*").order("created_at", { ascending: false }).limit(60)),
@@ -1175,9 +1308,13 @@
       : '<p class="muted" style="margin:0">Todavía no hay pedidos hoy.</p>';
   }
   $("iniRefresh").addEventListener("click", function () { IND.at = 0; loadInicio(); });
+  $("iniInd").addEventListener("click", function (e) {
+    var a = e.target.closest("a[data-go]"); if (!a) return; e.preventDefault();
+    var t = document.querySelector('#tabs [data-tab="' + a.dataset.go + '"]'); if (t) { t.click(); window.scrollTo(0, 0); }
+  });
   $("iniAlertas").addEventListener("click", function (e) { var b = e.target.closest("[data-go]"); if (!b) return; var t = document.querySelector('#tabs [data-tab="' + b.dataset.go + '"]'); if (t) t.click(); });
   setInterval(function () { if (!document.hidden) loadInicio(); }, 60000);
-  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); renderEstaciones(); loadServicio(); }
+  function renderAll() { loadInicio(); renderResumen(); renderNomina(); renderGastos(); renderInsumos(); renderPrecios(); renderRecetas(); renderCarta(); renderAreas(); renderAsistencia(); renderVentas(); renderInventario(); renderHistorico(); renderClientes(); renderPromos(); renderEstaciones(); loadServicio(); renderAjustes(); loadMesoneros(); }
 
   // ---------------------------------------------------------------- Servicio y bonos
   var SV = { months: [], m: null, data: null, tabs: [] };
@@ -1404,12 +1541,23 @@
     var st = S.settings || {}, listo = st.opinion_qr !== undefined;
     $("opSetup").classList.toggle("hidden", listo); $("opMain").classList.toggle("hidden", !listo);
     if (!listo) return Promise.resolve();
-    $("opQr").checked = !!st.opinion_qr; $("opAlerta").checked = !!st.opinion_alerta; $("opGoogle").value = st.opinion_google || "";
-    var dest = String(st.alert_emails || st.report_emails || "").trim();
-    $("opAlertaA").innerHTML = dest ? "Llegan a " + esc(dest) + " (se cambia en Dinero › Ventas › Ajustes)." : '<b style="color:var(--warn)">Falta el correo:</b> escríbelo en Dinero › Ventas › Ajustes.';
     $("opKpis").innerHTML = '<div class="kpi"><span>Cargando…</span></div>';
     return q(sb.rpc("gestion_opiniones", { p_dias: Number($("opDias").value) })).then(function (d) { OP.d = d; drawOpiniones(); }).catch(fail);
   }
+  // Equipo › Servicio y bonos: calificación por mesonero (las mismas opiniones del QR, en su propio período)
+  function loadMesoneros() {
+    if (!mfaOk) return;
+    var listo = (S.settings || {}).opinion_qr !== undefined; show("mesCard", listo);
+    if (!listo) return;
+    opt(sb.rpc("gestion_opiniones", { p_dias: Number($("mesDias").value) })).then(function (d) {
+      if (!d) { $("opMes").innerHTML = '<div class="empty">No se pudo cargar.</div>'; return; }
+      var mes = d.por_mesonero || [];
+      $("opMes").innerHTML = mes.length ? '<table class="tbl"><thead><tr><th>Mesonero</th><th class="n">Opiniones</th><th class="n">Promedio</th><th class="n">1–2 ★</th></tr></thead><tbody>' +
+      mes.map(function (m) { return "<tr><td>" + esc(m.nombre) + '</td><td class="n">' + num(m.n) + '</td><td class="n">' + opDec(m.promedio) + ' ★</td><td class="n">' + (num(m.bajas) ? '<b style="color:var(--danger)">' + num(m.bajas) + "</b>" : "0") + "</td></tr>"; }).join("") +
+      "</tbody></table>" : '<div class="empty">Sin opiniones todavía.</div>';
+    });
+  }
+  $("mesDias").addEventListener("change", loadMesoneros);
   function drawOpiniones() {
     var d = OP.d || {}, st = S.settings || {}, lista = d.lista || [], est = d.estrellas || [0, 0, 0, 0, 0];
     var resp = num(d.respondidas), imp = num(d.impresos), bajas = num(est[0]) + num(est[1]);
@@ -1425,10 +1573,6 @@
       var c = num(est[n - 1]), p = resp ? Math.round(c / resp * 100) : 0;
       return '<div class="oprow" title="' + n + (n === 1 ? " estrella: " : " estrellas: ") + c + (c === 1 ? " opinión" : " opiniones") + " (" + p + ' %)"><b>' + n + ' ★</b><div class="bar"><i style="width:' + (c / mx * 100).toFixed(1) + '%"></i></div><span>' + c + " · " + p + " %</span></div>";
     }).join("") : '<div class="empty">' + (imp ? "Todavía nadie respondió en este período." : "Aún no se imprimieron recibos con QR en este período.") + "</div>";
-    var mes = d.por_mesonero || [];
-    $("opMes").innerHTML = mes.length ? '<table class="tbl"><thead><tr><th>Mesonero</th><th class="n">Opiniones</th><th class="n">Promedio</th><th class="n">1–2 ★</th></tr></thead><tbody>' +
-      mes.map(function (m) { return "<tr><td>" + esc(m.nombre) + '</td><td class="n">' + num(m.n) + '</td><td class="n">' + opDec(m.promedio) + ' ★</td><td class="n">' + (num(m.bajas) ? '<b style="color:var(--danger)">' + num(m.bajas) + "</b>" : "0") + "</td></tr>"; }).join("") +
-      "</tbody></table>" : '<div class="empty">Sin opiniones todavía.</div>';
     var F = { todas: function () { return true; }, bajas: function (o) { return o.rating <= 2; }, medias: function (o) { return o.rating === 3; },
               altas: function (o) { return o.rating >= 4; }, contacto: function (o) { return o.name || o.phone; } };
     var ver = lista.filter(F[OP.f] || F.todas);
@@ -1457,9 +1601,10 @@
 
   // ---------------------------------------------------------------- Pestañas
   // Cada pestaña pertenece a una sección; la barra de abajo muestra solo las de la sección elegida
-  var TAB_SEC = { inicio: "inicio", resumen: "dinero", ventas: "dinero", historico: "dinero", gastos: "dinero", servicio: "dinero",
-    nomina: "personal", asistencia: "personal", avisos: "personal", recetas: "cocina", estaciones: "cocina", insumos: "cocina", inventario: "cocina",
-    clientes: "clientes", whatsapp: "clientes", promos: "clientes", opiniones: "clientes", areas: "ajustes", importar: "ajustes" };
+  var TAB_SEC = { inicio: "inicio", ventas: "dinero", historico: "dinero", resumen: "dinero", gastos: "dinero",
+    platos: "carta", recetas: "carta", promos: "carta", insumos: "cocina", inventario: "cocina", estaciones: "cocina",
+    nomina: "equipo", asistencia: "equipo", servicio: "equipo", cuentas: "equipo", avisos: "equipo",
+    clientes: "clientes", opiniones: "clientes", whatsapp: "clientes", general: "ajustes", areas: "ajustes", importar: "ajustes" };
   var SEC_LAST = {};
   function syncSecs(tab) {
     var sec = TAB_SEC[tab] || "dinero"; SEC_LAST[sec] = tab;
@@ -1489,8 +1634,13 @@
     if (b.getAttribute("data-tab") === "gastos") loadFacturas();
     if (b.getAttribute("data-tab") === "avisos") loadAvisos();
     if (b.getAttribute("data-tab") === "opiniones") loadOpiniones();
+    if (b.getAttribute("data-tab") === "servicio") loadMesoneros();
+    if (b.getAttribute("data-tab") === "ventas") loadPagos();
   });
-  try { var t0 = sessionStorage.getItem("gestion-tab"); var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio"); } catch (e) { syncSecs("inicio"); }
+  // Un enlace con #pestaña (p. ej. el viejo Panel de la carta → #platos) abre esa pestaña; si no, la última que se usó
+  function tabDeHash() { var h = location.hash.replace("#", ""); return /^[a-z]+$/.test(h) && document.querySelector('#tabs [data-tab="' + h + '"]') ? h : null; }
+  var t0 = tabDeHash(); try { t0 = t0 || sessionStorage.getItem("gestion-tab"); } catch (e) { /* sin almacenamiento */ }
+  var b0 = t0 && document.querySelector('#tabs [data-tab="' + t0 + '"]'); if (b0) b0.click(); else syncSecs("inicio");
   $("month").value = $("expMonth").value = ymNow();
   $("month").addEventListener("change", renderResumen);
   $("expMonth").addEventListener("change", renderGastos);
@@ -1542,13 +1692,14 @@
     if (none.nom || none.fix || none.vari) rows.push(none);
     var T = rows.reduce(function (s, r) { s.nom += r.nom; s.fix += r.fix; s.vari += r.vari; return s; }, { nom: 0, fix: 0, vari: 0 });
     var total = T.nom + T.fix + T.vari;
-    $("kpis").innerHTML =
-      '<div class="kpi main"><span>Costo del mes</span><b>' + money(total) + "</b></div>" +
+    var V = S.attendance && (S.salesByMonth[ym] || []).length ? salesStats(ym) : null, LL = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 };
+    var res = V ? V.net + V.serviceLocal - V.fees - V.foodCost - total - LL.merma - LL.faltante : 0;
+    $("kpis").innerHTML = (V ? '<div class="kpi main"><span>Utilidad neta estimada</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>la última línea del estado de resultados</span></div>" +
+        '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + "</b><span>con IVA, sin el servicio</span></div>" : "") +
+      '<div class="kpi' + (V ? "" : " main") + '"><span>Costo del mes</span><b>' + money(total) + "</b><span>nómina + gastos fijos + variables</span></div>" +
       '<div class="kpi"><span>Nómina</span><b>' + money(T.nom) + "</b></div>" +
       '<div class="kpi"><span>Gastos fijos</span><b>' + money(T.fix) + "</b></div>" +
-      '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>" +
-      (S.attendance && (S.salesByMonth[ym] || []).length ? (function () { var V = salesStats(ym), LL = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 }, res = V.net + V.serviceLocal - V.fees - V.foodCost - total - LL.merma - LL.faltante;
-        return '<div class="kpi"><span>Ventas del mes</span><b>' + money(V.total) + '</b></div><div class="kpi"><span>Utilidad neta estimada</span><b style="color:' + (res >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(res) + "</b><span>ver pestaña Ventas</span></div>"; })() : "");
+      '<div class="kpi"><span>Gastos variables</span><b>' + money(T.vari) + "</b></div>";
     $("byArea").innerHTML = '<table class="tbl"><thead><tr><th>Área</th><th class="n hide-sm">Nómina</th><th class="n hide-sm">Fijos</th><th class="n hide-sm">Variables</th><th class="n">Total</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
       rows.map(function (r) {
         var t = r.nom + r.fix + r.vari, p = total ? t / total * 100 : 0;
@@ -1559,19 +1710,13 @@
       '<tr class="total"><td>Total</td><td class="n hide-sm">' + money(T.nom) + '</td><td class="n hide-sm">' + money(T.fix) + '</td><td class="n hide-sm">' + money(T.vari) + '</td><td class="n">' + money(total) + '</td><td class="hide-sm"></td></tr></tbody></table>';
 
     var recs = allRecipes(), done = recs.filter(function (r) { return r.rc && !r.rc.broken && !r.rc.missing; });
-    var avgPct = done.length ? done.reduce(function (s, r) { return s + (isFinite(r.pct) ? r.pct : 0); }, 0) / done.length : NaN;
     var avgMargin = done.length ? done.reduce(function (s, r) { return s + r.margin; }, 0) / done.length : NaN;
-    var worst = done.filter(function (r) { return isFinite(r.pct); }).sort(function (a, b) { return b.pct - a.pct; }).slice(0, 5);
-    $("recSummary").innerHTML = '<div class="kpis">' +
-      '<div class="kpi"><span>Recetas cargadas</span><b>' + done.length + " / " + recs.length + "</b></div>" +
-      '<div class="kpi"><span>Costo medio de insumos</span><b>' + (isFinite(avgPct) ? pct(avgPct) : "—") + "</b></div>" +
-      '<div class="kpi"><span>Ganancia media por plato</span><b>' + (isFinite(avgMargin) ? money(avgMargin) : "—") + "</b></div></div>" +
-      (worst.length ? "<h3>Platos con el costo más alto</h3>" + recTable(worst) : '<p class="muted">Cuando cargues recetas verás aquí los platos que menos ganancia dejan.</p>');
 
     $("breakeven").innerHTML = isFinite(avgMargin) && avgMargin > 0 && total > 0
       ? "<p>Para cubrir los <b>" + money(total) + "</b> de costos del mes necesitas vender unos <b>" + Math.ceil(total / avgMargin) +
         " platos</b> (≈ " + Math.ceil(total / avgMargin / 30) + " al día), contando una ganancia media de " + money(avgMargin) + ' por plato.</p><p class="muted">Es una estimación: usa el promedio de los platos con receta cargada. Será más precisa cuando registremos las ventas reales.</p>'
       : '<p class="muted">Se calcula cuando haya costos del mes y al menos una receta cargada.</p>';
+    renderResultado(ym);
   }
 
   function recTable(list) {
@@ -2024,6 +2169,7 @@
     show("priceSetup", !S.pricing); ["pendCard", "supCard", "histCard"].forEach(function (id) { show(id, S.pricing); });
     if (!S.pricing) return;
     $("autoPct").value = num(S.settings.auto_apply_pct);
+    $("autoPctTxt").textContent = nf2.format(num(S.settings.auto_apply_pct)).replace(/,00$/, "") + " %";
     var pend = S.updates.filter(function (u) { return u.status === "pending"; });
     $("pendCount").textContent = pend.length;
     $("pendCount").className = "pill" + (pend.length ? " warn" : "");
@@ -2270,13 +2416,29 @@
     return { nom: nom, fix: fix, vari: vari, total: nom + fix + vari };
   }
   function renderVentas() {
-    if (!S.attendance) { $("salesKpis").innerHTML = '<div class="card" style="grid-column:1/-1"><p class="muted" style="margin:0">Para activar ventas, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p></div>'; ["salesResult", "salesTop", "salesDays"].forEach(function (id) { $(id).innerHTML = ""; }); return; }
-    var ym = $("salesMonth").value || ymNow(), T = salesStats(ym), C2 = monthCosts(ym);
+    if (!S.attendance) { $("salesKpis").innerHTML = '<div class="card" style="grid-column:1/-1"><p class="muted" style="margin:0">Para activar ventas, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p></div>'; ["salesDays"].forEach(function (id) { $(id).innerHTML = ""; }); return; }
+    var ym = $("salesMonth").value || ymNow(), T = salesStats(ym);
     $("salesKpis").innerHTML =
       '<div class="kpi main"><span>Ventas del mes</span><b>' + money(T.total) + "</b></div>" +
       '<div class="kpi"><span>Servicio 10 % (local)</span><b>' + money(T.serviceLocal) + '</b><span>personal ' + money(T.serviceStaff) + "</span></div>" +
       '<div class="kpi"><span>Comisiones banco (est.)</span><b>' + money(T.fees) + "</b></div>" +
       '<div class="kpi"><span>Tickets · promedio</span><b>' + T.tickets + "</b><span>" + (T.tickets ? money(T.total / T.tickets) + " por ticket" : "—") + "</span></div>";
+    var days = S.salesByMonth[ym] || [];
+    var itemsM = S.itemsByMonth[ym] || [];
+    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Costo insumos</th><th class="n">Utilidad bruta (sin IVA)</th><th class="n hide-sm">Tickets</th></tr></thead><tbody>' +
+      days.map(function (d) {
+        var its = itemsM.filter(function (i) { return i.sale_date === d.sale_date; }), fc = 0, cov = 0;
+        its.forEach(function (i) { var uc = itemUnitCost(i.dish_id, i.variant); if (uc != null) { fc += uc * num(i.qty); cov += num(i.amount); } });
+        var g = num(d.total) / ivaF() - fc, partial = its.length && cov < num(d.total) * 0.999;
+        return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + (its.length ? money(fc) : "—") +
+          '</td><td class="n">' + (its.length ? money(g) + (partial ? '<div class="muted">recetas incompletas</div>' : "") : '<span class="muted">sin detalle</span>') + '</td><td class="n hide-sm">' + num(d.tickets) + "</td></tr>";
+      }).join("") + "</tbody></table>" : '<div class="empty">Sin días registrados.</div>';
+    loadPagos();
+  }
+  // Dinero › Ganancia: el estado de resultados del mes elegido (antes en Ventas)
+  function renderResultado(ym) {
+    if (!S.attendance) { $("salesResult").innerHTML = '<p class="muted" style="margin:0">Para ver el resultado del mes, vuelve a ejecutar <code>supabase/gestion.sql</code>.</p>'; return; }
+    var T = salesStats(ym), C2 = monthCosts(ym);
     var L = S.inventory ? lossStats(ym) : { merma: 0, faltante: 0 };
     var gross = T.net - T.foodCost, opex = C2.nom + C2.fix + C2.vari + T.fees + L.merma + L.faltante, net = gross - opex + T.serviceLocal;
     var staffPctV = num(S.settings.service_staff_pct != null ? S.settings.service_staff_pct : 15);
@@ -2298,23 +2460,27 @@
       line("<b>Utilidad neta</b>" + pctOf(net), '<b style="color:' + (net >= 0 ? "var(--ok)" : "var(--danger)") + '">' + money(net) + "</b>", "total") +
       "</tbody></table>" +
       '<p class="muted">El servicio para el personal (' + money(T.serviceStaff) + ") no es ingreso del local. Los porcentajes son sobre las ventas netas (sin IVA). No incluye el impuesto sobre la renta.</p>"
-      : '<div class="empty">Sin ventas registradas en este mes. Llegarán desde n8n, o pulsa «+ Día» para cargarlas a mano.</div>';
-    $("salesTop").innerHTML = T.top.length ? '<table class="tbl"><thead><tr><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="n hide-sm">Costo est.</th><th class="n">Margen</th></tr></thead><tbody>' +
-      T.top.slice(0, 15).map(function (x) {
-        return "<tr><td>" + esc(x.name) + (x.variant ? ' <span class="muted">' + esc(x.variant) + "</span>" : "") + (x.dish_id ? "" : ' <span class="pill warn">no está en la carta</span>') +
-          '</td><td class="n">' + nf3.format(x.qty) + '</td><td class="n">' + money(x.amount) + '</td><td class="n hide-sm">' + (x.cost == null ? "—" : money(x.cost)) +
-          '</td><td class="n">' + (x.cost == null ? '<span class="pill">sin receta</span>' : pctPill(x.amount ? x.cost / (x.amount / ivaF()) * 100 : NaN)) + "</td></tr>";
-      }).join("") + "</tbody></table>" : '<div class="empty">Sin detalle por plato todavía.</div>';
-    var days = S.salesByMonth[ym] || [];
-    var itemsM = S.itemsByMonth[ym] || [];
-    $("salesDays").innerHTML = days.length ? '<table class="tbl"><thead><tr><th>Día</th><th class="n">Ventas</th><th class="n hide-sm">Costo insumos</th><th class="n">Utilidad bruta (sin IVA)</th><th class="n hide-sm">Tickets</th></tr></thead><tbody>' +
-      days.map(function (d) {
-        var its = itemsM.filter(function (i) { return i.sale_date === d.sale_date; }), fc = 0, cov = 0;
-        its.forEach(function (i) { var uc = itemUnitCost(i.dish_id, i.variant); if (uc != null) { fc += uc * num(i.qty); cov += num(i.amount); } });
-        var g = num(d.total) / ivaF() - fc, partial = its.length && cov < num(d.total) * 0.999;
-        return '<tr class="click" data-sale="' + esc(d.sale_date) + '"><td>' + esc(d.sale_date.slice(8, 10) + "/" + d.sale_date.slice(5, 7)) + '</td><td class="n"><b>' + money(d.total) + '</b></td><td class="n hide-sm">' + (its.length ? money(fc) : "—") +
-          '</td><td class="n">' + (its.length ? money(g) + (partial ? '<div class="muted">recetas incompletas</div>' : "") : '<span class="muted">sin detalle</span>') + '</td><td class="n hide-sm">' + num(d.tickets) + "</td></tr>";
-      }).join("") + "</tbody></table>" : '<div class="empty">Sin días registrados.</div>';
+      : '<div class="empty">Sin ventas registradas en este mes. Llegan solas de la caja; un día sin caja se carga en Dinero › Ventas con «+ Día».</div>';
+  }
+  // Dinero › Ventas: pagos de Binance o PayPal de los últimos 2 días que nadie comprobó (los mismos que cuenta la alerta de Inicio)
+  var PAGO_NOM = { binance: "Binance", paypal: "PayPal" };
+  function loadPagos() {
+    if (!mfaOk) return;
+    opt(sb.from("pos_payments").select("id,order_id,method,amount,reference,created_by,created_at").in("method", ["binance", "paypal"]).is("verified_at", null).gt("amount", 0)
+      .gte("created_at", new Date(Date.now() - 2 * 864e5).toISOString()).order("created_at")).then(function (r) {
+      var l = r || [];
+      show("pagosCard", l.length > 0); $("pagosN").textContent = l.length;
+      $("pagosList").innerHTML = l.length ? '<table class="tbl"><thead><tr><th>Cuándo</th><th>Método</th><th class="n">Monto</th><th>Referencia</th><th class="hide-sm">Cobró</th></tr></thead><tbody>' +
+        l.map(function (p) {
+          var e = (S.employees || []).find(function (x) { return x.id === p.created_by; });
+          return "<tr><td>" + esc(new Date(p.created_at).toLocaleString("es-VE", { timeZone: TZ, weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })) +
+            "</td><td>" + esc(PAGO_NOM[p.method] || p.method) + '</td><td class="n">' + money(num(p.amount)) + "</td><td>" + (p.reference ? esc(p.reference) : '<span class="muted">sin referencia</span>') +
+            '</td><td class="hide-sm">' + (e ? esc(String(e.name).split(" ")[0]) : "—") + "</td></tr>";
+        }).join("") + "</tbody></table>" : "";
+    });
+  }
+  // ---------------------------------------------------------------- Ajustes › General: todos los ajustes juntos
+  function renderAjustes() {
     var st = S.settings;
     $("sIva").value = num(st.iva_pct != null ? st.iva_pct : 16);
     $("sStaff").value = num(st.service_staff_pct != null ? st.service_staff_pct : 15); $("sDeb").value = num(st.fee_debito); $("sCre").value = num(st.fee_credito);
@@ -2326,6 +2492,13 @@
     document.querySelectorAll(".panelset").forEach(function (x) { x.hidden = st.meta_insumos_pct === undefined; });
     $("sMetaIns").value = num(st.meta_insumos_pct); $("sMetaNom").value = num(st.meta_nomina_pct); $("sMetaCom").value = num(st.meta_comisiones_pct);
     $("sMetaCoc").value = num(st.meta_cocina_min); $("sMetaCal").value = num(st.meta_calificacion);
+    var listo = st.opinion_qr !== undefined; show("opSetCard", listo);
+    if (listo) {
+      $("opQr").checked = !!st.opinion_qr; $("opAlerta").checked = !!st.opinion_alerta; $("opGoogle").value = st.opinion_google || "";
+      var dest = String(st.alert_emails || st.report_emails || "").trim();
+      $("opAlertaA").innerHTML = dest ? "Llegan a " + esc(dest) + " (los correos de «Correos y alertas», arriba)." : '<b style="color:var(--warn)">Falta el correo:</b> escríbelo arriba, en «Correos y alertas».';
+    }
+    show("autoCard", !!S.pricing);
   }
   function saleForm(d) {
     var ym = $("salesMonth").value || ymNow(), items = d ? (S.itemsByMonth[ym] || []).filter(function (i) { return i.sale_date === d.sale_date; }) : [];
@@ -2440,7 +2613,7 @@
     return { book: book };
   })();
 
-  // ---------------------------------------------------------------- Excel para el contador (Dinero › Ventas)
+  // ---------------------------------------------------------------- Excel para el contador (Dinero › Ganancia)
   var MET_XL = [["efectivo_usd", "Efectivo $", "$"], ["efectivo_bs", "Efectivo Bs", "Bs"], ["pago_movil", "Pago móvil", "Bs"], ["punto_debito", "Punto débito", "Bs"],
     ["punto_credito", "Punto crédito", "Bs"], ["zelle", "Zelle", "$"], ["binance", "Binance", "$"], ["paypal", "PayPal", "$"], ["cuenta", "A cuenta de empleado", "Ref"]];
   var DIVISAS = { efectivo_usd: 1, zelle: 1, binance: 1, paypal: 1 };
@@ -2483,7 +2656,7 @@
       tnr += num(y.ref); tnb += num(y.bs);
       var q = String(y.quincena); nomina.push([(q.slice(8, 10) === "01" ? "1 al 15" : "16 al fin") + " " + q.slice(5, 7) + "/" + q.slice(0, 4), y.empleado, r2(y.ref), y.tasa ? { v: num(y.tasa), s: 4 } : "", y.bs != null ? r2(y.bs) : "", fechaXl(y.fecha)]);
     });
-    if (nomina.length === 1) nomina.push(["Sin pagos marcados como «Pagado» en Gestión › Personal › Nómina este mes."]); else nomina.push([B("Total"), "", N(tnr), "", N(tnb), ""]);
+    if (nomina.length === 1) nomina.push(["Sin pagos marcados como «Pagado» en Gestión › Equipo › Nómina este mes."]); else nomina.push([B("Total"), "", N(tnr), "", N(tnb), ""]);
     var res = [[B("Ichiraku Ramen · resumen de " + mes)],
       ["Del " + fechaXl(c.mes) + " al " + fechaXl(c.hasta) + ". Precios con IVA " + iva + " % incluido. Ref = euro BCV; los Bs van a la tasa BCV de cada día."], [],
       [B("Ventas"), B("Ref"), B(sinBs ? "Bs (sin tasa registrada)" : T.sinTasa ? "Bs (solo días con tasa)" : "Bs")],
@@ -2502,7 +2675,7 @@
       { name: "Nómina", rows: nomina, widths: [18, 28, 13, 13, 16, 14] }]);
   }
   $("xlsContador").addEventListener("click", function () {
-    var ym = $("salesMonth").value || ymNow(), btn = $("xlsContador");
+    var ym = $("month").value || ymNow(), btn = $("xlsContador");
     btn.disabled = true;
     q(sb.rpc("gestion_contador", { p_mes: ym + "-01" })).then(function (c) {
       var a = document.createElement("a"); a.href = URL.createObjectURL(contadorXlsx(c)); a.download = "ichiraku-contador-" + ym + ".xlsx";
@@ -2652,6 +2825,7 @@
       return;
     }
     $("mePeriod").textContent = ME.period || "";
+    plSyncSold();
     if (ME.missing) { $("meList").innerHTML = '<p class="muted">Para ver esto hay que ejecutar <code>supabase/datos.sql</code>.</p>'; $("meKpis").innerHTML = ""; return; }
     var by = {}; ME.sales.forEach(function (s) { by[s.dish_id + "|" + (s.variant || "")] = s; });
     var rows = [], noRecUnits = 0, totUnits = 0, totCost = 0, fmtU = function (n) { return nf3.format(Math.round(n)); };
@@ -2776,6 +2950,279 @@
       .then(function () { openRecipe(R.dish, R.variant); })
       .catch(fail).then(function () { btn.disabled = false; });
   });
+
+  // ---------------------------------------------------------------- Carta › Platos (antes «Panel de la carta», admin.html)
+  // Fotos, nombres, precios y «Disponible» de cada plato. Al lado de cada precio: el % de costo de su receta y lo vendido
+  // en el período de «Lo que vende y lo que deja» (las mismas ventas de la rentabilidad).
+  var BUCKET = (window.MENU_CONFIG || {}).PHOTO_BUCKET || "dishes";
+  var PL = { editing: null, photoBlob: null, removePhoto: false };
+  function plSoldMap() {
+    if (!ME.sales || ME.missing || ME.loading) return null;
+    var by = {}; ME.sales.forEach(function (s) { var k = s.dish_id + "|" + (s.variant || ""); by[k] = (by[k] || 0) + num(s.units); });
+    return by;
+  }
+  function plCostPill(d, label, price) {
+    var rc = recipeCost(d.id, label);
+    if (!rc) return '<span class="pill">sin receta</span>';
+    if (rc.broken) return '<span class="pill bad">revisar unidades</span>';
+    if (rc.missing) return '<span class="pill warn" title="Sin precio: ' + esc(rc.missing.join(", ")) + '">falta precio</span>';
+    return pctPill(price > 0 ? rc.cost / (price / ivaF()) * 100 : NaN);
+  }
+  function plInfo(d, label, price, by) {
+    return plCostPill(d, label, price) + (by ? '<span class="sold">' + nf3.format(Math.round(by[d.id + "|" + label] || 0)) + " vend.</span>" : "");
+  }
+  function renderCarta() {
+    if (!S.cats || !S.dishes) return;
+    var by = plSoldMap(), html = "";
+    S.cats.forEach(function (c) {
+      var items = S.dishes.filter(function (d) { return d.category_id === c.id; });
+      html += '<div class="cat-title">' + esc(c.name) + "</div>";
+      if (!items.length) html += '<p class="muted" style="margin:4px 0">Sin platos.</p>';
+      items.forEach(function (d) {
+        var vs = Array.isArray(d.variants) && d.variants.length ? d.variants : null;
+        html += '<div class="dish-row" data-pl="' + d.id + '">' +
+          (d.photo_url ? '<img class="pl-thumb" src="' + esc(d.photo_url) + '" alt="" loading="lazy">' : '<div class="pl-thumb"></div>') +
+          '<div class="grow"><div class="name">' + esc(d.name) + '</div><div class="row" style="gap:10px;margin-top:2px">' +
+          '<label class="avl"><input type="checkbox" class="avail"' + (d.available ? " checked" : "") + "> Disponible</label>" +
+          '<button type="button" class="small edit">Editar</button></div></div><div class="prices">' +
+          (vs ? vs.map(function (v, i) {
+            return '<div class="pr"><label>' + esc(v.label) + ' <input class="price vprice" data-i="' + i + '" type="number" step="0.01" min="0" inputmode="decimal" value="' + Number(v.price) +
+              '" aria-label="Precio de ' + esc(d.name) + " " + esc(v.label) + '"></label><span class="pp" data-k="' + esc(v.label) + '">' + plInfo(d, v.label, Number(v.price), by) + "</span></div>";
+          }).join("") : '<div class="pr"><input class="price" type="number" step="0.01" min="0" inputmode="decimal" value="' + Number(d.price) + '" aria-label="Precio de ' + esc(d.name) +
+            '"><span class="pp" data-k="">' + plInfo(d, "", Number(d.price), by) + "</span></div>") + "</div></div>";
+      });
+    });
+    $("plList").innerHTML = html || '<p class="muted">Crea primero una categoría.</p>';
+    plRenderCats();
+  }
+  // Solo cambia el costo y lo vendido de una fila (sin redibujar la lista: no se pierde el campo en el que estás escribiendo)
+  function plRefreshInfo(row, d, by) {
+    row.querySelectorAll(".pp").forEach(function (sp) {
+      var k = sp.getAttribute("data-k") || "", v = variants(d).find(function (x) { return (x.label || "") === k; });
+      sp.innerHTML = plInfo(d, k, v ? Number(v.price) : Number(d.price), by);
+    });
+  }
+  function plSyncSold() {
+    var by = plSoldMap();
+    document.querySelectorAll("#plList .dish-row").forEach(function (row) {
+      var d = S.dishes.find(function (x) { return x.id === Number(row.dataset.pl); }); if (d) plRefreshInfo(row, d, by);
+    });
+  }
+  $("plList").addEventListener("change", function (e) {
+    var row = e.target.closest(".dish-row"); if (!row) return;
+    var d = S.dishes.find(function (x) { return x.id === Number(row.dataset.pl); }), patch; if (!d) return;
+    if (e.target.classList.contains("price")) {
+      var p = Math.round(parseFloat(e.target.value) * 100) / 100;
+      if (!(p >= 0)) return toast("Precio no válido");
+      if (e.target.classList.contains("vprice")) {
+        var vars = d.variants.map(function (v) { return Object.assign({}, v); });
+        vars[Number(e.target.dataset.i)].price = p;
+        patch = { variants: vars, price: Math.min.apply(null, vars.map(function (v) { return Number(v.price); })) };
+      } else patch = { price: p };
+    } else if (e.target.classList.contains("avail")) patch = { available: e.target.checked };
+    else return;
+    q(sb.from("dishes").update(patch).eq("id", d.id)).then(function () {
+      Object.assign(d, patch);
+      toast("available" in patch ? d.name + (patch.available ? ": disponible" : ": agotado") : "Precio guardado: " + d.name);
+      if ("price" in patch) { plRefreshInfo(row, d, plSoldMap()); renderRecetas(); renderResumen(); }
+    }).catch(fail);
+  });
+  $("plList").addEventListener("click", function (e) {
+    var b = e.target.closest("button.edit"); if (!b) return;
+    plOpen(S.dishes.find(function (x) { return x.id === Number(b.closest(".dish-row").dataset.pl); }));
+  });
+  $("plNew").addEventListener("click", function () { if (!S.cats || !S.cats.length) return toast("Crea primero una categoría"); plOpen(null); });
+
+  function plOpen(d) {
+    PL.editing = d || null; PL.photoBlob = null; PL.removePhoto = false;
+    $("plTitle").textContent = d ? "Editar plato" : "Nuevo plato";
+    $("plCat").innerHTML = S.cats.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("");
+    $("plCat").value = d ? d.category_id : S.cats[0].id;
+    $("plName").value = d ? d.name : ""; $("plSub").value = d ? (d.subtitle || "") : ""; $("plDesc").value = d ? (d.description || "") : "";
+    $("plPrice").value = d ? Number(d.price) : ""; $("plOpts").value = d ? (d.options || []).join(", ") : "";
+    $("plVars").innerHTML = ""; ((d && d.variants) || []).forEach(function (v) { plAddVar(v.label, v.price); }); plSyncVars();
+    $("plPos").value = d ? d.position : S.dishes.length + 1;
+    $("plTags").value = d ? (d.tags || []).join(", ") : ""; plSyncTags();
+    $("plAvail").checked = d ? !!d.available : true;
+    $("plPhoto").value = ""; plPreview(d && d.photo_url);
+    show("plDelete", !!d);
+    $("plDlg").showModal();
+  }
+  function plAddVar(label, price) {
+    var div = document.createElement("div"); div.className = "var-row";
+    div.innerHTML = '<input class="vl" placeholder="Tamaño (Peq)" aria-label="Tamaño" maxlength="20"><input class="vp" style="flex:1" type="number" step="0.01" min="0" inputmode="decimal" placeholder="Precio" aria-label="Precio del tamaño">' +
+      '<button type="button" class="danger small" aria-label="Quitar tamaño">✕</button>';
+    div.querySelector(".vl").value = label || ""; div.querySelector(".vp").value = price == null ? "" : price;
+    div.querySelector("button").addEventListener("click", function () { div.remove(); plSyncVars(); });
+    $("plVars").appendChild(div); plSyncVars();
+  }
+  function plSyncVars() { show("plSingle", !$("plVars").children.length); } // con tamaños, el precio único no aplica
+  function plReadVars() {
+    var out = [], bad = false;
+    $("plVars").querySelectorAll(".var-row").forEach(function (r) {
+      var l = r.querySelector(".vl").value.trim(), p = Math.round(parseFloat(r.querySelector(".vp").value) * 100) / 100;
+      if (!l && isNaN(p)) return;
+      if (!l || !(p >= 0)) bad = true; else out.push({ label: l, price: p });
+    });
+    return bad ? null : out;
+  }
+  $("plAddVar").addEventListener("click", function () { plAddVar(); });
+  $("plAddPG").addEventListener("click", function () { $("plVars").innerHTML = ""; plAddVar("Peq"); plAddVar("Gr"); });
+  function plPreview(src) { $("plPhotoPrev").src = src || "data:image/gif;base64,R0lGODlhAQABAAAAACw="; }
+  $("plCancel").addEventListener("click", function () { $("plDlg").close(); });
+  $("plPhoto").addEventListener("change", function () {
+    var f = $("plPhoto").files[0]; if (!f) return;
+    plCompress(f).then(function (blob) {
+      PL.photoBlob = blob; PL.removePhoto = false; plPreview(URL.createObjectURL(blob));
+      toast("Foto lista (" + Math.round(blob.size / 1024) + " KB)");
+    }).catch(fail);
+  });
+  $("plRemovePhoto").addEventListener("click", function () { PL.photoBlob = null; PL.removePhoto = true; $("plPhoto").value = ""; plPreview(null); });
+  // Achica la foto a 900 px como máximo, en WebP (o JPEG) al 80 %, para que la carta cargue rápido con datos móviles
+  function plCompress(file) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var s = Math.min(1, 900 / Math.max(img.width, img.height)), cv = document.createElement("canvas");
+        cv.width = Math.round(img.width * s); cv.height = Math.round(img.height * s);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (b) {
+          if (b && b.type === "image/webp") return resolve(b);
+          cv.toBlob(function (j) { j ? resolve(j) : reject(new Error("No se pudo procesar la imagen")); }, "image/jpeg", 0.8);
+        }, "image/webp", 0.8);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("Imagen no válida")); };
+      img.src = url;
+    });
+  }
+  function plStoragePath(publicUrl) {
+    var marker = "/storage/v1/object/public/" + BUCKET + "/", i = (publicUrl || "").indexOf(marker);
+    return i === -1 ? null : decodeURIComponent(publicUrl.slice(i + marker.length));
+  }
+  function plUpload(blob) {
+    var path = Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "." + (blob.type === "image/webp" ? "webp" : "jpg");
+    return sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: "31536000", upsert: false })
+      .then(function (r) { if (r.error) throw r.error; return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl; });
+  }
+  $("plForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var d = PL.editing, oldUrl = d && d.photo_url;
+    var list = function (id) { return $(id).value.split(",").map(function (t) { return t.trim(); }).filter(Boolean); };
+    var vars = plReadVars();
+    if (!vars) return toast("Cada tamaño necesita nombre y precio");
+    var price = vars.length ? Math.min.apply(null, vars.map(function (v) { return v.price; })) : Math.round(parseFloat($("plPrice").value) * 100) / 100;
+    if (!(price >= 0)) return toast("Precio no válido");
+    var row = { category_id: Number($("plCat").value), name: $("plName").value.trim(), subtitle: $("plSub").value.trim(), description: $("plDesc").value.trim(),
+      price: price, variants: vars, options: list("plOpts"), position: parseInt($("plPos").value, 10) || 0, tags: list("plTags"), available: $("plAvail").checked };
+    if (!row.name) return toast("Escribe el nombre del plato");
+    $("plSave").disabled = true;
+    var foto = PL.photoBlob ? plUpload(PL.photoBlob).then(function (u) { row.photo_url = u; }) : Promise.resolve(PL.removePhoto ? (row.photo_url = null) : null);
+    foto.then(function () { return q(d ? sb.from("dishes").update(row).eq("id", d.id) : sb.from("dishes").insert(row)); }).then(function () {
+      // Borra la foto anterior del almacenamiento si se reemplazó o se quitó
+      if (oldUrl && "photo_url" in row && row.photo_url !== oldUrl) { var p = plStoragePath(oldUrl); if (p) sb.storage.from(BUCKET).remove([p]); }
+      $("plDlg").close(); toast("Guardado: " + row.name); return refresh();
+    }).catch(fail).then(function () { $("plSave").disabled = false; });
+  });
+  $("plDelete").addEventListener("click", function () {
+    var d = PL.editing; if (!d || !confirm("¿Eliminar «" + d.name + "» de la carta?")) return;
+    q(sb.from("dishes").delete().eq("id", d.id)).then(function () {
+      var p = plStoragePath(d.photo_url); if (p) sb.storage.from(BUCKET).remove([p]);
+      $("plDlg").close(); toast("Eliminado: " + d.name); return refresh();
+    }).catch(fail);
+  });
+  // Botones rápidos de etiquetas: añaden o quitan la etiqueta del campo de texto
+  function plTagList() { return $("plTags").value.split(",").map(function (t) { return t.trim(); }).filter(Boolean); }
+  function plSyncTags() {
+    var have = plTagList().map(function (t) { return t.toLowerCase(); });
+    document.querySelectorAll("#plTagQuick button").forEach(function (b) { b.classList.toggle("on", have.indexOf(b.getAttribute("data-tag").toLowerCase()) >= 0); });
+  }
+  $("plTagQuick").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    var t = b.getAttribute("data-tag"), l = plTagList(), i = l.map(function (x) { return x.toLowerCase(); }).indexOf(t.toLowerCase());
+    if (i >= 0) l.splice(i, 1); else l.push(t);
+    $("plTags").value = l.join(", "); plSyncTags();
+  });
+  $("plTags").addEventListener("input", plSyncTags);
+
+  // Categorías de la carta
+  function plRenderCats() {
+    $("plCats").innerHTML = S.cats.map(function (c) {
+      return '<div class="cat-row" data-id="' + c.id + '"><input class="pos" type="number" inputmode="numeric" value="' + num(c.position) + '" aria-label="Orden de ' + esc(c.name) + '">' +
+        '<input class="name" style="flex:1;min-width:0" value="' + esc(c.name) + '" aria-label="Nombre de la categoría">' +
+        '<input class="sub" value="' + esc(c.subtitle || "") + '" aria-label="Subtítulo de ' + esc(c.name) + '" placeholder="Subtítulo">' +
+        '<button class="danger small del" type="button">Eliminar</button></div>';
+    }).join("") || '<p class="muted">Aún no hay categorías.</p>';
+  }
+  $("plCats").addEventListener("change", function (e) {
+    var row = e.target.closest(".cat-row"); if (!row) return;
+    var cl = e.target.classList, patch = cl.contains("pos") ? { position: parseInt(e.target.value, 10) || 0 } : cl.contains("sub") ? { subtitle: e.target.value.trim() } : { name: e.target.value.trim() };
+    if (patch.name === "") return toast("El nombre no puede quedar vacío");
+    q(sb.from("categories").update(patch).eq("id", row.dataset.id)).then(function () { toast("Guardado"); return refresh(); }).catch(fail);
+  });
+  $("plCats").addEventListener("click", function (e) {
+    if (!e.target.classList.contains("del")) return;
+    var id = Number(e.target.closest(".cat-row").dataset.id), n = S.dishes.filter(function (d) { return d.category_id === id; }).length;
+    if (!confirm(n ? "Se eliminará la categoría y sus " + n + " platos. ¿Seguro?" : "¿Eliminar la categoría?")) return;
+    q(sb.from("categories").delete().eq("id", id)).then(refresh).catch(fail);
+  });
+  $("plNewCat").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var max = S.cats.reduce(function (m, c) { return Math.max(m, num(c.position)); }, 0);
+    q(sb.from("categories").insert({ name: $("plNewCatName").value.trim(), position: max + 1 })).then(function () { $("plNewCatName").value = ""; return refresh(); }).catch(fail);
+  });
+
+  // Código QR de la carta: SVG propio, módulos oscuros sobre blanco y corrección alta (H) para que el logo no impida leerlo
+  var QR_LOGO = '<rect width="64" height="64" rx="14" fill="#e5206b"/><path d="M22 14v14a6 6 0 0 0 4 5.6V50h4V33.6A6 6 0 0 0 34 28V14h-3v12h-2V14h-2v12h-2V14zm22 0c-4 0-7 6-7 14 0 4 2 6 4 6.5V50h4V14z" fill="#fff"/>';
+  var QR_LOGO_INV = QR_LOGO.replace('rx="14" fill="#e5206b"', 'rx="14" fill="#fff"').replace('z" fill="#fff"', 'z" fill="#e5206b"');
+  function qrBlock(url, x, y, side, withLogo) { // el QR en (x, y) con lado `side`
+    var qr = window.qrcode(0, withLogo ? "H" : "M"); qr.addData(url); qr.make();
+    var n = qr.getModuleCount(), quiet = 2, cell = side / (n + quiet * 2), d = "";
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (qr.isDark(r, c)) {
+      d += "M" + (x + (c + quiet) * cell).toFixed(2) + " " + (y + (r + quiet) * cell).toFixed(2) + "h" + cell.toFixed(2) + "v" + cell.toFixed(2) + "h-" + cell.toFixed(2) + "z";
+    }
+    var out = '<rect x="' + x + '" y="' + y + '" width="' + side + '" height="' + side + '" fill="#fff"/><path d="' + d + '" fill="#1f1a17" shape-rendering="crispEdges"/>';
+    if (withLogo) {
+      var ls = side * 0.2, lx = x + (side - ls) / 2, ly = y + (side - ls) / 2, pad = ls * 0.12;
+      out += '<rect x="' + (lx - pad) + '" y="' + (ly - pad) + '" width="' + (ls + pad * 2) + '" height="' + (ls + pad * 2) + '" rx="' + (ls * 0.28) + '" fill="#fff"/>' +
+        '<g transform="translate(' + lx + " " + ly + ") scale(" + (ls / 64) + ')">' + QR_LOGO + "</g>";
+    }
+    return out;
+  }
+  function qrSvg(url, style) {
+    var font = "font-family=\"'Trebuchet MS','Segoe UI',Arial,sans-serif\"";
+    if (style !== "card") return { w: 1000, h: 1000, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">' + qrBlock(url, 0, 0, 1000, style === "logo") + "</svg>" };
+    var cfg = window.MENU_CONFIG || {}, name = cfg.RESTAURANT_NAME || "Menú", tag = cfg.TAGLINE || "", W = 1000, H = 1400;
+    return { w: W, h: H, svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '">' +
+      '<rect width="' + W + '" height="' + H + '" rx="60" fill="#e5206b"/><g transform="translate(440 70) scale(1.875)">' + QR_LOGO_INV + "</g>" +
+      '<text x="500" y="275" text-anchor="middle" ' + font + ' font-size="78" font-weight="900" fill="#fff">' + esc(name) + "</text>" +
+      (tag ? '<text x="500" y="335" text-anchor="middle" ' + font + ' font-size="34" fill="#fde7ef">' + esc(tag) + "</text>" : "") +
+      '<rect x="130" y="390" width="740" height="740" rx="44" fill="#fff"/>' + qrBlock(url, 160, 420, 680, true) +
+      '<text x="500" y="1225" text-anchor="middle" ' + font + ' font-size="58" font-weight="900" fill="#fff">Escanea para ver el menú</text>' +
+      '<text x="500" y="1295" text-anchor="middle" ' + font + ' font-size="32" fill="#fde7ef">Apunta la cámara de tu móvil al código</text></svg>' };
+  }
+  (function setupQr() {
+    var input = $("qrUrl"), style = $("qrStyle"), current = null;
+    input.value = new URL("./", location.href).href;
+    function draw() {
+      if (!window.qrcode) { $("qrBox").textContent = "No se pudo cargar el generador de QR."; return; }
+      current = qrSvg(input.value.trim() || location.origin, style.value); $("qrBox").innerHTML = current.svg;
+    }
+    input.addEventListener("input", draw); style.addEventListener("change", draw); draw();
+    function download(href, name) { var a = document.createElement("a"); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+    var base = function () { return style.value === "card" ? "menu-qr-tarjeta" : "menu-qr"; };
+    $("qrSvg").addEventListener("click", function () { if (current) download(URL.createObjectURL(new Blob([current.svg], { type: "image/svg+xml" })), base() + ".svg"); });
+    $("qrPng").addEventListener("click", function () {
+      if (!current) return;
+      var img = new Image(), w = current.w * 2, h = current.h * 2;
+      img.onload = function () {
+        var cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+        var ctx = cv.getContext("2d"); if (style.value !== "card") { ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h); }
+        ctx.drawImage(img, 0, 0, w, h); download(cv.toDataURL("image/png"), base() + ".png");
+      };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(current.svg);
+    });
+  })();
 
   // ---------------------------------------------------------------- Áreas
   function renderAreas() {
@@ -2945,7 +3392,7 @@
         two("+ Servicio para el local (" + (100 - staffPctV) + " %)", servL) +
         "<tr class=\"total\"><td>Utilidad neta estimada" + (net12 ? " (" + pct(res / net12 * 100) + ")" : "") + '</td><td class="n">' + col(res) + money(res) + '</b></td><td class="n hide-sm">' + col(res) + money(n12 ? res / n12 : 0) + "</b></td></tr>" +
         "</tbody></table></div>" +
-        '<p class="muted">No incluye comisiones del banco, gastos variables, mermas ni impuesto sobre la renta. Para cada mes en detalle, mira la pestaña <b>Ventas</b>.</p>';
+        '<p class="muted">No incluye comisiones del banco, gastos variables, mermas ni impuesto sobre la renta. Cada mes en detalle está arriba, en el estado de resultados.</p>';
       $("histFc").addEventListener("change", function () { try { localStorage.setItem("gestion-hist-fc", String(num($("histFc").value))); } catch (e) {} renderHistorico(); });
       // Día de la semana (últimos 12 meses)
       var since = new Date(Date.parse(R.last + "T00:00:00Z") - 364 * 864e5).toISOString().slice(0, 10), W7 = DOW.map(function () { return { t: 0, n: 0 }; });
@@ -3130,30 +3577,13 @@
   });
 
   var NOT_PRODUCT = /PARA LLEVAR|DELIVERY|RESERVACI|BOLSA|ENVASE/i;
-  function renderHistTop() {
+  function renderHistTop() { // Ventas por grupo (los platos, con lo que deja cada uno, están en Carta › Platos)
     var P = S.histProducts;
-    if (!P || !P.length) { $("histTopNote").textContent = ""; $("histTop").innerHTML = '<div class="empty">Sin datos de productos. Se cargan con el archivo del sistema anterior.</div>'; $("histGroups").innerHTML = ""; return; }
-    var from = P.reduce(function (a, p) { return !a || p.period_from < a ? p.period_from : a; }, ""), to = P.reduce(function (a, p) { return p.period_to > a ? p.period_to : a; }, "");
-    var agg = {}, extra = 0, total = 0, groups = {};
+    if (!P || !P.length) { $("histGroups").innerHTML = '<div class="empty">Sin datos de productos. Se cargan con el archivo del sistema anterior.</div>'; return; }
+    var groups = {};
     P.forEach(function (p) {
-      var v = num(p.net) * ivaF();
-      var g = groups[p.group_name || "Otros"] = groups[p.group_name || "Otros"] || { t: 0, q: 0 }; g.t += v; g.q += num(p.qty);
-      if (NOT_PRODUCT.test(p.name)) { extra += v; return; }
-      total += v;
-      var d = p.dish_id && S.dishes.find(function (x) { return x.id === p.dish_id; }), k = d ? "d" + d.id : "n" + p.name;
-      var x = agg[k] = agg[k] || { name: d ? d.name : p.name.toLowerCase().replace(/(^|\s|\()\S/g, function (c) { return c.toUpperCase(); }), inMenu: !!d, qty: 0, amount: 0, parts: {} };
-      x.qty += num(p.qty); x.amount += v; if (d && p.variant) x.parts[p.variant] = (x.parts[p.variant] || 0) + num(p.qty);
+      var v = num(p.net) * ivaF(), g = groups[p.group_name || "Otros"] = groups[p.group_name || "Otros"] || { t: 0, q: 0 }; g.t += v; g.q += num(p.qty);
     });
-    var list = Object.keys(agg).map(function (k) { return agg[k]; }).sort(function (a, b) { return b.amount - a.amount; });
-    var top = list[0] ? list[0].amount : 1, showAll = renderHistTop.all;
-    $("histTopNote").textContent = "Del " + dmy(from) + " al " + dmy(to) + " · ventas con IVA. Sumando tamaños y sabores de cada plato." + (extra ? " No incluye envases, delivery ni reservaciones (" + money(extra) + ")." : "");
-    $("histTop").innerHTML = '<table class="tbl"><thead><tr><th class="n">#</th><th>Plato</th><th class="n">Vendidos</th><th class="n">Ventas</th><th class="hide-sm">% del total</th></tr></thead><tbody>' +
-      list.slice(0, showAll ? list.length : 20).map(function (x, i) { var p = total ? x.amount / total * 100 : 0, parts = Object.keys(x.parts);
-        return '<tr><td class="n muted">' + (i + 1) + "</td><td><b>" + esc(x.name) + "</b>" + (x.inMenu ? "" : ' <span class="pill warn">ya no está en la carta</span>') +
-          (parts.length > 1 ? '<div class="muted">' + parts.map(function (v) { return esc(v) + " " + nf3.format(x.parts[v]); }).join(" · ") + "</div>" : "") +
-          '</td><td class="n">' + nf3.format(x.qty) + '</td><td class="n">' + money(x.amount) + '</td><td class="hide-sm"><div class="row" style="flex-wrap:nowrap"><div class="bar" style="flex:1"><i style="width:' + (x.amount / top * 100).toFixed(1) + '%"></i></div><span class="muted" style="min-width:42px;text-align:right">' + (p < 1 ? nf2.format(p) + " %" : pct(p)) + "</span></div></td></tr>"; }).join("") +
-      "</tbody></table>" + (list.length > 20 ? '<p><button type="button" class="small" id="histTopAll">' + (showAll ? "Ver solo los 20 primeros" : "Ver los " + list.length) + "</button></p>" : "");
-    var b = $("histTopAll"); if (b) b.addEventListener("click", function () { renderHistTop.all = !renderHistTop.all; renderHistTop(); });
     var gl = Object.keys(groups).map(function (k) { return { name: k, t: groups[k].t, q: groups[k].q }; }).filter(function (g) { return g.t > 0; }).sort(function (a, b2) { return b2.t - a.t; }), gt = gl.reduce(function (s, g) { return s + g.t; }, 0);
     $("histGroups").innerHTML = '<table class="tbl"><thead><tr><th>Grupo</th><th class="n hide-sm">Unidades</th><th class="n">Ventas</th><th>% del total</th></tr></thead><tbody>' +
       gl.map(function (g) { var p = gt ? g.t / gt * 100 : 0;

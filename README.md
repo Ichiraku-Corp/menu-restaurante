@@ -6,7 +6,7 @@ para cambiar precios, platos, fotos y disponibilidad.
 - **`index.html`**: el menú público. Una sola página sin librerías, con el CSS y el JS en línea.
   Guarda la última versión en el móvil, así que en visitas repetidas se ve al instante y se
   actualiza en segundo plano. Las fotos (≈7 KB cada una) se cargan solo cuando aparecen en pantalla.
-- **`admin.html`**: el panel. Login, categorías, platos, nombre en japonés, tamaños (Peq/Gr)
+- **`gestion.html` › Carta › Platos** (antes `admin.html`, que ahora lleva allí): login, categorías, platos, nombre en japonés, tamaños (Peq/Gr)
   con precio propio, sabores, precios editables directamente en la lista, "Agotado" con un clic,
   subida de fotos (se comprimen en el navegador antes de subirlas) y generador del QR en PNG/SVG.
 - **Supabase** como backend gratuito: base de datos, almacenamiento de fotos y login.
@@ -106,7 +106,7 @@ node scripts/seed-sql.js
    Ahí también se configuran el nombre, el eslogan y el formato de precio (`Ref 2.5`).
 5. **Publica** la carpeta en cualquier hosting estático: GitHub Pages (Settings → Pages →
    Deploy from branch), Netlify o Vercel. No hay paso de compilación.
-6. Abre `https://tu-dominio/admin.html`, entra, y descarga el QR desde la sección *Código QR*.
+6. Abre `https://tu-dominio/gestion.html`, entra, y descarga el QR en *Carta › Platos › Código QR de la carta*.
 
 Sin Supabase configurado en `config.js`, el menú funciona igual mostrando `data/menu.json`
 (pero los cambios solo se pueden hacer editando ese archivo).
@@ -117,4 +117,4 @@ Sin Supabase configurado en `config.js`, el menú funciona igual mostrando `data
 npx serve .
 ```
 
-y abre http://localhost:3000 (menú) y http://localhost:3000/admin.html (panel).
+y abre http://localhost:3000 (menú) y http://localhost:3000/gestion.html (gestión y carta).

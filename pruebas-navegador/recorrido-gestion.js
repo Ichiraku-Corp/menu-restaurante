@@ -105,8 +105,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/Sábado 13:00 a 14:00[\s\S]*Ref 85,20 de promedio[\s\S]*8 sábados con ventas/.test(await page.textContent("#vhMap .tip")), "al pasar o tocar un cuadro dice el promedio, los pedidos y cuántos días cuenta");
     await page.click('#vhWeeks [data-w="4"]'); await page.waitForTimeout(300);
     ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_ventas_hora").pop().args.p_weeks) === 4, "se puede ver el promedio de 4 semanas");
-    // Promociones (Clientes › Promociones)
-    await page.click('#secs [data-sec="clientes"]'); await page.click('#tabs [data-tab="promos"]'); await page.waitForTimeout(200);
+    // Promociones (Carta › Promociones)
+    await page.click('#secs [data-sec="carta"]'); await page.click('#tabs [data-tab="promos"]'); await page.waitForTimeout(200);
     ok(/Happy hour[\s\S]*20 %[\s\S]*Lun · Mar · Mié · Jue[\s\S]*3:00 p\. m\. a 6:00 p\. m\./.test(await page.textContent("#promoList")), "Promociones muestra la de happy hour con días y horario");
     await page.click("#addPromo"); await page.waitForSelector("#dlg[open]");
     await page.fill("#f_name", "Martes de ramen"); await page.fill("#f_percent", "15");
@@ -120,8 +120,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     const pg = await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "gestion_promo_guardar").pop());
     ok(pg && pg.args.p.name === "Martes de ramen" && pg.args.p.percent === 15 && JSON.stringify(pg.args.p.days) === "[2]" && pg.args.p.dish_ids.length === 1 && pg.args.p.start_time === "15:00",
       "guarda la promoción con nombre, %, días, horario y platos");
-    // Alertas al correo (Dinero › Ventas › Ajustes)
-    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(200);
+    // Alertas al correo (Ajustes › General)
+    await page.click('#secs [data-sec="ajustes"]'); await page.click('#tabs [data-tab="general"]'); await page.waitForTimeout(200);
     ok(await page.isVisible("#sAlerts") && (await page.inputValue("#sAlertDiff")) === "5", "Ajustes tiene los correos de alertas y desde cuánto avisa un cierre (Ref 5)");
     await page.fill("#sAlerts", "dueno@ejemplo.test"); await page.fill("#sAlertDiff", "15"); await page.fill("#sMetaPct", "10"); await page.click("#saveSettings"); await page.waitForTimeout(300);
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "gestion_settings" && c.op === "update" && c.value.alert_emails === "dueno@ejemplo.test" && c.value.alert_cash_diff === 15)),
@@ -135,14 +135,14 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(/La meta de calificación va de 1 a 5/.test(await page.textContent("#toast")), "una meta imposible no se guarda");
     await page.fill("#sMetaCal", "4.5");
     // Facturas de la caja (Dinero › Gastos)
-    await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
+    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="gastos"]'); await page.waitForSelector("#facList [data-fac]", { timeout: 5000 });
     ok(/Salida de caja[\s\S]*Compra de hielo · \$ 5,00/.test(await page.textContent("#facList")) && /Agua \(botella\) 12 unidades/.test(await page.textContent("#facList")), "Gastos muestra las facturas de la caja: salida con motivo y mercancía");
     await page.click('#facList [data-fac="1"]'); await page.waitForSelector("#facDlg[open]", { timeout: 3000 });
     ok(await page.evaluate(() => { const c = window.__G.calls.filter((x) => x.storage).pop(); return c.storage === "facturas" && c.path === "2026-11/0123456789abcdef0123456789abcdef.jpg" && c.secs === 300; }) &&
        /^data:image/.test(await page.getAttribute("#facImg", "src")), "«Ver foto» abre la factura con un enlace privado que vence en 5 minutos");
     await page.click("#facClose");
-    // Excel para el contador (Dinero › Ventas): un .xlsx con resumen, ventas por día, cobros, gastos y nómina
-    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(200);
+    // Excel para el contador (Dinero › Ganancia): un .xlsx con resumen, ventas por día, cobros, gastos y nómina
+    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="resumen"]'); await page.waitForTimeout(200);
     const [dlx] = await Promise.all([page.waitForEvent("download", { timeout: 8000 }), page.click("#xlsContador")]);
     const xb = fs.readFileSync(await dlx.path()), X = {};
     for (let i = 0; xb.readUInt32LE(i) === 0x04034b50;) {
@@ -184,7 +184,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "categories" && c.op === "update" && c.value.station_id === null && c.value.no_kitchen === false)) &&
        !/No pasan por cocina/.test(await page.textContent("#stList")), "y volver a la principal");
     // Nómina: tasa euro del día, faltas y descuentos de la quincena, a pagar en Bs y la casilla de pagado
-    await page.click('#secs [data-sec="personal"]'); await page.click('#tabs [data-tab="nomina"]'); await page.waitForTimeout(300);
+    await page.click('#secs [data-sec="equipo"]'); await page.click('#tabs [data-tab="nomina"]'); await page.waitForTimeout(300);
     const tasa = await page.textContent("#nomTasa");
     ok(/Tasa euro BCV de hoy/.test(tasa) && /Bs 1\.009,34 por 1 €/.test(tasa) && /Desde el .*Bs 1\.010,56/.test(tasa), "Nómina muestra la tasa euro BCV de hoy (y la de mañana si ya salió): " + tasa.replace(/\s+/g, " "));
     const fila = (n) => page.locator("#empList tr", { hasText: n }).first();
@@ -252,7 +252,6 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(await page.isVisible("#opPuente"), "avisa si la laptop de caja todavía no imprime el QR");
     ok((await page.$$eval("#opStars .oprow", (x) => x.map((r) => r.textContent))).join("|") === "5 ★3 · 50 %|4 ★1 · 17 %|3 ★1 · 17 %|2 ★0 · 0 %|1 ★1 · 17 %",
       "reparto por estrellas, de 5 a 1, con cantidad y %");
-    ok(/Sasha/.test(await page.textContent("#opMes")) && /3,5 ★/.test(await page.textContent("#opMes")), "promedio por mesonero");
     ok((await page.$$("#opList .op")).length === 3 && !(await page.$("#opList b b")) && /La sopa llegó fría <b>y tardó<\/b>/.test(await page.textContent("#opList")),
       "lista las opiniones (el comentario se muestra como texto, sin interpretar HTML)");
     ok(await page.getAttribute('#opList a[href^="https://wa.me/"]', "href") === "https://wa.me/584141234567", "botón para escribirle por WhatsApp a quien dejó su número (0414 → 58414)");
@@ -262,6 +261,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok((await page.$$("#opList .op")).length === 1, "filtro «Con contacto»");
     await page.selectOption("#opDias", "90"); await page.waitForTimeout(200);
     ok(await page.evaluate(() => window.__G.calls.some((c) => c.rpc === "gestion_opiniones" && c.args.p_dias === 90)), "cambiar el período vuelve a pedir el resumen (90 días)");
+    await page.click('#secs [data-sec="ajustes"]'); await page.click('#tabs [data-tab="general"]'); await page.waitForTimeout(200);
     ok(await page.isChecked("#opQr") && await page.isChecked("#opAlerta") && /Falta el correo/.test(await page.textContent("#opAlertaA")),
       "ajustes: QR y alerta encendidos, y avisa si falta el correo para las alertas");
     await page.fill("#opGoogle", "g.page/r/abc/review"); await page.click("#opSave"); await page.waitForTimeout(200);
@@ -307,8 +307,8 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(!/Salsa de la casa|Masa de prueba/.test(await page.textContent("#invStock")) && /Azúcar/.test(await page.textContent("#invStock")),
       "el inventario no lleva preparaciones (se descuentan sus ingredientes)");
 
-    // Recetas: una receta puede usar una preparación; rentabilidad del menú
-    await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
+    // Carta › Recetas: una receta puede usar una preparación; Carta › Platos: lo que vende y lo que deja
+    await page.click('#secs [data-sec="carta"]'); await page.click('#tabs [data-tab="recetas"]'); await page.waitForTimeout(400);
     await page.click('#recList tr[data-dish] >> text=Gyozas'); await page.waitForSelector("#recDlg[open]");
     const rl = await page.evaluate(() => [...document.querySelectorAll("#recLines .line[data-i]")].map((r) => r.querySelector(".li-ing").selectedOptions[0].textContent + " " + r.querySelector(".cost").textContent));
     ok(rl.join(" | ") === "Harina de trigo Ref 0,12 | Cerdo molido Ref 0,36 | Salsa de la casa Ref 0,06", "la receta usa la preparación con su costo (30 ml de salsa = Ref 0,06): " + rl.join(" | "));
@@ -321,11 +321,60 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     ok(!/Agua/.test(await page.textContent("#meList")) && /30 de 80 platos/.test(await page.textContent("#meKpis")),
       "el agua no se clasifica: le falta el precio de compra (cuenta en «sin receta o sin precio»)");
     ok(/falta precio/.test(await page.locator("#recList tr[data-dish]", { hasText: "Agua" }).first().textContent()), "en el costo por receta, el agua dice «falta precio»");
+    // Carta › Platos (antes el Panel de la carta): la lista con precio, % de costo y lo vendido
+    await page.click('#tabs [data-tab="platos"]'); await page.waitForTimeout(300);
+    const nPl = await page.evaluate(() => window.__MENU.dishes.length);
+    ok((await page.$$("#plList .dish-row")).length === nPl, "Carta › Platos lista los " + nPl + " platos de la carta");
+    const gyRow = page.locator("#plList .dish-row", { hasText: "Gyozas" }).first();
+    ok(/12 %/.test(await gyRow.textContent()) && /40 vend\./.test(await gyRow.textContent()) && /sin receta/.test(await page.locator("#plList .dish-row", { hasText: "Asuka Corn Dog" }).first().textContent()),
+      "al lado del precio: el % de costo de la receta (Gyozas 12 %), lo vendido (40) y «sin receta» donde falta");
+    await gyRow.locator("input.price").fill("6"); await gyRow.locator("input.price").press("Tab"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "dishes" && c.op === "update" && c.value.price === 6)) && /10 %/.test(await gyRow.textContent()) && !/12 %/.test(await gyRow.textContent()),
+      "cambiar el precio lo guarda y recalcula el % de costo en la misma fila (a Ref 6: 10 %)");
+    await gyRow.locator("input.avail").uncheck(); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "dishes" && c.op === "update" && c.value.available === false)), "desmarcar «Disponible» lo muestra agotado");
+    await gyRow.locator("button.edit").click(); await page.waitForSelector("#plDlg[open]");
+    ok(await page.inputValue("#plName") === "Gyozas" && await page.inputValue("#plPrice") === "6", "«Editar» abre el plato con su nombre y precio");
+    await page.fill("#plDesc", "Empanaditas japonesas"); await page.click("#plSave"); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "dishes" && c.op === "update" && c.value.description === "Empanaditas japonesas" && c.value.name === "Gyozas")) && !(await page.isVisible("#plDlg")),
+      "guardar el plato lo actualiza y cierra la ventana");
+    await page.click("#plNew"); await page.waitForSelector("#plDlg[open]");
+    await page.fill("#plName", "Ramen de prueba"); await page.click("#plAddPG");
+    await page.locator("#plVars .vp").nth(0).fill("8"); await page.locator("#plVars .vp").nth(1).fill("12"); await page.click("#plSave"); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => window.__G.calls.some((c) => c.table === "dishes" && c.op === "insert" && c.value.name === "Ramen de prueba" && c.value.price === 8 && c.value.variants.length === 2)),
+      "«+ Nuevo plato» con tamaños Peq / Gr guarda el plato con el precio menor (Ref 8)");
+    ok((await page.$$("#plCats .cat-row")).length === (await page.evaluate(() => window.__MENU.categories.length)) && !!(await page.$("#qrBox svg")),
+      "en la misma pestaña están las categorías y el código QR de la carta");
     await page.selectOption("#meDays", "hist"); await page.waitForTimeout(400);
     ok(/500 platos del sistema anterior \(hasta el 06\/11\/2026\) y 80 de la caja/.test(await page.textContent("#mePeriod")) && /Gyozas540/.test(await page.textContent("#meList")),
       "«2 años» suma lo vendido en el sistema anterior y en la caja (500 + 40 gyozas)");
     ok(await page.evaluate(() => window.__G.calls.filter((c) => c.rpc === "menu_sales").pop().args.p_from) === "2026-11-07",
       "de la caja solo pide lo vendido después del último día del sistema anterior (no cuenta dos veces)");
+    ok(/540 vend\./.test(await page.locator("#plList .dish-row", { hasText: "Gyozas" }).first().textContent()), "lo vendido en la lista sigue el período elegido (2 años: 540 gyozas)");
+
+    // Las 7 secciones, cada dato en un solo lugar
+    ok((await page.$$eval("#secs [data-sec]", (x) => x.map((b) => b.dataset.sec).join(","))) === "inicio,dinero,carta,cocina,equipo,clientes,ajustes", "Gestión tiene 7 secciones: Inicio, Dinero, Carta, Cocina, Equipo, Clientes y Ajustes");
+    // Dinero › Ganancia: el estado de resultados, el costo por área, el punto de equilibrio y lo que se gana
+    await page.click('#secs [data-sec="dinero"]'); await page.click('#tabs [data-tab="resumen"]'); await page.waitForTimeout(200);
+    ok(await page.isVisible("#salesResult") && await page.isVisible("#byArea") && await page.isVisible("#breakeven") && !!(await page.$('[data-panel="resumen"] #histProfit')) && /Costo del mes/.test(await page.textContent("#kpis")),
+      "Ganancia junta el estado de resultados, el costo por área, el punto de equilibrio y lo que se gana");
+    // Dinero › Ventas: los pagos de Binance o PayPal sin comprobar
+    await page.click('#tabs [data-tab="ventas"]'); await page.waitForTimeout(300);
+    ok(await page.isVisible("#pagosCard") && /Binance[\s\S]*Ref 20,00[\s\S]*BN-778[\s\S]*Ana/.test(await page.textContent("#pagosList")) && !(await page.isVisible("#sIva")),
+      "Ventas muestra el pago de Binance sin comprobar (Ref 20, ref. BN-778, cobró Ana) y ya no tiene los ajustes");
+    // Equipo › Servicio y bonos: calificación por mesonero; Equipo › Cuentas
+    await page.click('#secs [data-sec="equipo"]'); await page.click('#tabs [data-tab="servicio"]'); await page.waitForTimeout(300);
+    ok(await page.isVisible("#mesCard") && /Sasha/.test(await page.textContent("#opMes")) && /3,5 ★/.test(await page.textContent("#opMes")), "Servicio y bonos muestra la calificación por mesonero");
+    await page.click('#tabs [data-tab="cuentas"]'); await page.waitForTimeout(200);
+    ok(await page.isVisible("#svcTabs") && !(await page.isVisible("#svcLiq")), "Cuentas del personal tiene su propia pestaña en Equipo");
+    // Inicio › Panel: «Ver más →» lleva al detalle
+    await page.click('#secs [data-sec="inicio"]'); await page.waitForTimeout(300);
+    await page.click('#iniInd a[data-go="platos"]'); await page.waitForTimeout(300);
+    ok(await page.isVisible('#tabs [data-tab="platos"].on') && await page.isVisible('#secs [data-sec="carta"].on'), "«Ver más →» de los platos lleva a Carta › Platos");
+    // El enlace viejo del Panel de la carta lleva a Carta › Platos
+    await page.goto("http://localhost:8798/admin.html"); await page.waitForURL(/gestion\.html#platos$/, { timeout: 5000 });
+    await page.waitForSelector("#app:not(.hidden)", { timeout: 8000 }); await page.waitForTimeout(300);
+    ok(await page.isVisible('#tabs [data-tab="platos"].on') && (await page.$$("#plList .dish-row")).length > 0, "admin.html (el Panel de la carta) lleva a Gestión › Carta › Platos");
   } catch (e) {
     fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]);
   }

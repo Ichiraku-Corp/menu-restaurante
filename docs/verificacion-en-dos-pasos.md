@@ -1,6 +1,6 @@
 # Verificación en dos pasos (2FA) del panel y la gestión
 
-El **panel de la carta** (`admin.html`) y la **gestión** (`gestion.html`) piden, después de la
+La **gestión** (`gestion.html`, que también tiene la carta en *Carta › Platos*) pide, después de la
 contraseña, el **código de 6 dígitos** de una app del teléfono (Google Authenticator, Microsoft
 Authenticator o Authy).
 
@@ -14,7 +14,7 @@ Aunque alguien robara la contraseña, sin el teléfono no ve ni cambia nada.
 
 ## Primera vez
 
-1. Entra en `/admin.html` con tu correo y contraseña.
+1. Entra en `/gestion.html` con tu correo y contraseña.
 2. Aparece «Protege tu cuenta» con un **código QR**. En la app del teléfono: añadir cuenta → escanear.
 3. Escribe el código de 6 dígitos que muestra la app → **Verificar**.
 

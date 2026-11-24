@@ -20,6 +20,8 @@
                     { id: 6, name: "Agua (botella)", buy_unit: "unidad", buy_qty: 1, buy_price: 0, waste_pct: 0, stock_qty: 0, min_qty: 6, zone: "afuera" }],
       prep_items: [{ id: 1, prep_id: 5, ingredient_id: 3, qty: 400, unit: "g", position: 1 }, { id: 2, prep_id: 5, ingredient_id: 4, qty: 400, unit: "ml", position: 2 }],
       recipe_items: [], price_updates: [], price_history: [], attendance_events: [], inventory_movements: [], customers: [], daily_sales: [], historic_product_sales: [],
+      // Un pago de Binance que nadie comprobó (Dinero › Ventas › Pagos por comprobar)
+      pos_payments: [{ id: 1, order_id: 9, method: "binance", amount: 20, reference: "BN-778", created_by: 11, created_at: new Date(Date.now() - 3 * 3600e3).toISOString() }],
       promos: [{ id: 1, name: "Happy hour", percent: 20, days: [1, 2, 3, 4], start_time: "15:00:00", end_time: "18:00:00", date_from: null, date_to: null, dish_ids: [], category_ids: [3], active: true }]
     }
   };
