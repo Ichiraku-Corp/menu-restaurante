@@ -23,6 +23,7 @@ const md5 = (t) => crypto.createHash("md5").update(t).digest("hex");
     if (p.username !== nvr.usuario || p.response !== esperado || p.uri !== req.url || p.opaque !== "abc123") { res.writeHead(401); return res.end(); }
     nvr.autorizados++;
     if (/channels\/9/.test(req.url) || /channel=9/.test(req.url)) { res.writeHead(404); return res.end(); }
+    if (nvr.soloProxy && /^\/ISAPI\/Streaming\//.test(req.url)) { res.writeHead(403); return res.end("<ResponseStatus><subStatusCode>notSupport</subStatusCode></ResponseStatus>"); }
     res.writeHead(200, { "Content-Type": "image/jpeg" }); res.end(FOTO);
   });
   await new Promise((r) => grabador.listen(0, "127.0.0.1", r));
@@ -94,6 +95,17 @@ const md5 = (t) => crypto.createHash("md5").update(t).digest("hex");
     sb.listas = []; sb.pendientes = [{ id: 26, canal: 1, detalle: "normal", camara: "Cocina" }];
     await P.camTick();
     ok(sb.listas[0] && /no se llega al grabador/.test(sb.listas[0].p_error), "si el grabador no responde, avisa «no se llega al grabador»");
+
+    // 4a) Grabador que da la foto por StreamingProxy: lo prueba solo y lo recuerda
+    config({ marca: "hikvision", host: "127.0.0.1", puerto: grabador.address().port, usuario: "nex", clave: nvr.clave }); P.reloadConfig();
+    nvr.soloProxy = true; nvr.pedidos = []; sb.listas = []; sb.pendientes = [{ id: 28, canal: 1, detalle: "normal", camara: "Cocina" }];
+    await P.camTick();
+    ok(sb.listas[0] && sb.listas[0].p_error === "" && nvr.pedidos.includes("/ISAPI/ContentMgmt/StreamingProxy/channels/102/picture"),
+      "si el grabador no da la foto en la dirección normal, prueba la de StreamingProxy y la sube");
+    nvr.pedidos = []; sb.listas = []; sb.pendientes = [{ id: 29, canal: 2, detalle: "normal", camara: "Caja" }];
+    await P.camTick();
+    ok(sb.listas[0] && sb.listas[0].p_error === "" && !nvr.pedidos.some((u) => u.startsWith("/ISAPI/Streaming/")), "y la siguiente vez va directo a la dirección que funciona");
+    nvr.soloProxy = false;
 
     // 4b) Revisión automática: después de subirla, le pide a Nex que la mire
     config({ marca: "hikvision", host: "127.0.0.1", puerto: grabador.address().port, usuario: "nex", clave: nvr.clave }); P.reloadConfig();

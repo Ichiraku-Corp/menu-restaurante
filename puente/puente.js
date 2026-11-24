@@ -1045,13 +1045,31 @@ function camGet(url, autorizacion) {
     req.on("error", (e) => reject(new Error(e.code === "ECONNREFUSED" || e.code === "EHOSTUNREACH" ? "no se llega al grabador (" + e.code + ")" : e.message)));
   });
 }
-async function camFoto(canal, detalle) {
-  const c = camCfg(); if (!c) throw new Error("Cámaras sin configurar en config.json");
-  const url = new URL(camUrl(c, canal, detalle)), uri = url.pathname + url.search;
+async function camPedir(direccion, c) {
+  const url = new URL(direccion), uri = url.pathname + url.search;
   let r = await camGet(url, null);
   if (r.status === 401) {
     const dig = r.desafios.find((d) => /^\s*digest/i.test(d));
     r = await camGet(url, dig ? camDigest(dig, c, "GET", uri) : "Basic " + Buffer.from(c.usuario + ":" + c.clave).toString("base64"));
+  }
+  return r;
+}
+// Algunos grabadores Hikvision dan la foto de cada cámara en otra dirección (StreamingProxy): se prueba y se recuerda.
+let camProxy = false;
+async function camFoto(canal, detalle) {
+  const c = camCfg(); if (!c) throw new Error("Cámaras sin configurar en config.json");
+  const dirs = [camUrl(c, canal, detalle)];
+  if (!c.ruta_foto && camMarca(c) === "hikvision") {
+    dirs.push(camUrl(Object.assign({}, c, { ruta_foto: "/ISAPI/ContentMgmt/StreamingProxy/channels/{canal}{flujo}/picture" }), canal, detalle));
+    if (camProxy) dirs.reverse();
+  }
+  let r;
+  for (const d of dirs) {
+    r = await camPedir(d, c);
+    const noVa = r.status === 404 || r.status === 400 || (r.status === 403 && /notSupport/i.test(r.body.toString("utf8", 0, 2000)));
+    if (noVa && d !== dirs[dirs.length - 1]) continue;
+    if (r.status === 200 && dirs.length > 1) camProxy = d.includes("StreamingProxy");
+    break;
   }
   if (r.status === 401 || r.status === 403) throw new Error("el grabador no aceptó el usuario o la clave");
   if (r.status === 404) throw new Error("el grabador no tiene el canal " + canal);
