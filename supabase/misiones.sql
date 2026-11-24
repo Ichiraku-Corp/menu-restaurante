@@ -187,11 +187,11 @@ $$;
 create or replace function public.mis_tipo_medible(p_tipo text) returns boolean language sql immutable as $$
   select p_tipo in ('comandas', 'atendidas', 'ventas', 'unidades', 'distintos', 'secciones', 'comandas_con', 'promedio', 'primera',
                     'platos_comanda', 'vs_ayer', 'vs_semana', 'top_ventas', 'equipo_meta', 'equipo_unidades', 'sellos', 'clientes_nuevos',
-                    'para_llevar', 'delivery', 'rapidas', 'express', 'sin_anulaciones')
+                    'para_llevar', 'delivery', 'rapidas', 'express', 'sin_anulaciones', 'sin_bajas')
 $$;
 -- Las que solo se saben al cerrar la caja
 create or replace function public.mis_tipo_cierre(p_tipo text) returns boolean language sql immutable as $$
-  select p_tipo in ('top_ventas', 'sin_anulaciones') $$;
+  select p_tipo in ('top_ventas', 'sin_anulaciones', 'sin_bajas') $$;
 
 -- Cuánto lleva y cuánto pide la misión: {"actual": 2, "meta": 3}
 create or replace function public.mis_medir(p_emp bigint, p_fecha date, p_tipo text, p_params jsonb) returns jsonb
@@ -277,6 +277,11 @@ begin
     select case when exists (select 1 from public.mis_items(p_emp, p_fecha)) and not exists (
              select 1 from public.pos_items i where i.created_by = p_emp and i.status = 'anulado' and i.voided_at >= dia0 and i.voided_at < dia1)
            then 1 else 0 end into a;
+    m := 1;
+  when 'sin_bajas' then
+    -- al cierre: 1 si cerró al menos «minimo» comandas y ninguna suya quedó por debajo de «monto»
+    select case when count(*) >= coalesce((p_params ->> 'minimo')::int, 1) and min(c.monto) >= v_monto then 1 else 0 end into a
+    from public.mis_comandas(p_emp, p_fecha) c;
     m := 1;
   else a := 0; m := 1e12;  -- todavía no se puede medir
   end case;
@@ -781,7 +786,7 @@ insert into public.mis_catalogo (numero, texto, nivel, dias, tipo, params) value
   (19, 'Vende más que tu promedio de la semana pasada', 2, 'todos', 'vs_semana', '{}'),
   (20, 'Comanda promedio de $18 o más (mínimo 8 comandas)', 2, 'todos', 'promedio', '{"monto": 18, "minimo": 8}'),
   (21, 'Comanda promedio de $25 o más (mínimo 8 comandas)', 3, 'todos', 'promedio', '{"monto": 25, "minimo": 8}'),
-  (22, 'Ninguna comanda tuya por debajo de $8 (mínimo 8 comandas)', 2, 'flojos', 'pendiente', '{}'),
+  (22, 'Ninguna comanda tuya por debajo de $8 (mínimo 8 comandas)', 2, 'flojos', 'sin_bajas', '{"monto": 8, "minimo": 8}'),
   (23, 'Cierra una comanda con 8 platos o más', 2, 'todos', 'platos_comanda', '{"n": 1, "platos": 8}'),
   (24, 'Cierra 3 comandas con 5 platos o más', 2, 'normales', 'platos_comanda', '{"n": 3, "platos": 5}'),
   (25, 'Sé quien más vende del día', 3, 'todos', 'top_ventas', '{}'),

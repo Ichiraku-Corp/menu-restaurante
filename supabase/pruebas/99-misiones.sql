@@ -53,6 +53,13 @@ select prueba.ok((select count(*) from public.mis_logros where employee_id = :me
 select prueba.ok(not exists (select 1 from public.mis_logros where employee_id = :mesera and nivel = 3),
   'la misión «sin anulaciones» espera al cierre de caja');
 select prueba.ok(not exists (select 1 from public.mis_logros where employee_id = :caja), 'la cajera no gana misiones por lo que anotó la mesera');
+-- «Ninguna comanda tuya por debajo de $8» (la 22): solo cuenta con el mínimo de comandas y se da al cerrar la caja
+select prueba.ok((public.mis_medir(:mesera, :'hoy', 'sin_bajas', '{"monto": 8, "minimo": 1}') ->> 'actual')::int = 1
+  and (public.mis_medir(:mesera, :'hoy', 'sin_bajas', '{"monto": 1000, "minimo": 1}') ->> 'actual')::int = 0
+  and (public.mis_medir(:mesera, :'hoy', 'sin_bajas', '{"monto": 8, "minimo": 50}') ->> 'actual')::int = 0
+  and public.mis_tipo_medible('sin_bajas') and public.mis_tipo_cierre('sin_bajas')
+  and (select tipo = 'sin_bajas' from public.mis_catalogo where numero = 22),
+  '«ninguna comanda por debajo de $8»: se cumple solo con el mínimo de comandas y se da al cerrar la caja');
 
 -- 3) Lo que ve la tablet
 set role authenticated;
