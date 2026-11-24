@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-wd724wVboZ4+AJtPEOf9GPsholm6dBf2J39tSCiZ1w0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Bk1s13A/ILJbgeykHCjKbsijRC0GkBW9VRoF5bBBD8Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -70,6 +70,8 @@
   .pbs { font-size: 11px; font-weight: 700; color: var(--ink); white-space: nowrap; }
   nav { position: sticky; top: 0; z-index: 5; background: #fff; box-shadow: 0 3px 0 var(--ink); }
   nav ul { display: flex; gap: 8px; overflow-x: auto; list-style: none; margin: 0 auto; padding: 12px 16px 10px; max-width: 720px; scrollbar-width: none; }
+  /* Si las secciones no caben, la última se desvanece: avisa que hay más deslizando */
+  nav ul.mas { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
   nav ul::-webkit-scrollbar { display: none; }
   nav a { display: block; white-space: nowrap; padding: 5px 14px 5px 12px; border-radius: 999px; background: #fff; color: var(--ink);
     border: 2px solid var(--m); text-decoration: none; font-size: 14px; font-weight: 700; }
@@ -446,6 +448,9 @@
     $("tasa").textContent = "Tasa euro BCV" + (dias <= 0 ? " de hoy" : dias <= 3 ? " vigente" : " del " + fd.slice(8, 10) + "/" + fd.slice(5, 7)) + ": Bs " +
       RATE.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " por 1 €";
   }
+  function navMas() { var n = $("nav"); n.classList.toggle("mas", n.scrollWidth - n.scrollLeft - n.clientWidth > 4); }
+  $("nav").addEventListener("scroll", navMas, { passive: true });
+  window.addEventListener("resize", navMas);
   function render(data) {
     showTasa(data.tasa); showPromos(data);
     DISHES = {};
@@ -490,7 +495,7 @@
       });
       html += "</section>";
     });
-    $("nav").innerHTML = navHtml;
+    $("nav").innerHTML = navHtml; navMas();
     var firstOf = {};
     cats.forEach(function (c) { if ((byCat[c.id] || []).length) { var m = maidOf(c.name); if (!firstOf[m]) firstOf[m] = "cat-" + c.id; } });
     if (html) html = bienvenida(firstOf) + html;

@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-xC35tc7N4oL+X0/WWVmBKeiLUzA2abGZFCoDmaFrO8E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ll3BqLNmnbIAnN7qDlFeNYL+CU+9NCZ3t3UG2gELuDY='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -231,6 +231,20 @@
   /* ---------------------------------------------------------------- Pop dulce: contornos tipo sticker */
   header.top h1 { font-weight:900; font-size:25px; color:var(--accent); -webkit-text-stroke:6px #fff; paint-order:stroke fill; text-shadow:2px 3px 0 var(--ink); }
   header.top h1 small { -webkit-text-stroke:0; text-shadow:none; color:var(--ink) !important; }
+  header.top .corto { display:none; }
+  /* En el teléfono: el encabezado en una sola fila, el título más liviano (se lee mejor) y las secciones más bajas,
+     para que el contenido empiece antes. Si las pestañas no caben, la última se desvanece para avisar que hay más. */
+  @media (max-width:560px) {
+    header.top { flex-wrap:nowrap; gap:8px; }
+    header.top h1 { font-size:21px; -webkit-text-stroke:4px #fff; text-shadow:1.5px 2px 0 var(--ink); white-space:nowrap; margin:4px 0; }
+    header.top h1 small { display:none; }
+    header.top h1::before { width:30px; height:30px; vertical-align:-7px; margin-right:8px; }
+    header.top .row { flex-wrap:nowrap; gap:6px; }
+    header.top .btn, header.top button { padding:6px 12px; min-height:38px; font-size:14px; }
+    header.top .largo { display:none; } header.top .corto { display:inline; }
+    .secs button { min-height:36px; padding:6px 4px; }
+  }
+  .tabs.mas { -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image:linear-gradient(to right, #000 calc(100% - 48px), transparent); }
   header.top h1::before { content:""; display:inline-block; width:38px; height:38px; border-radius:50%; vertical-align:-10px; margin-right:10px;
     background:#fff url(assets/logo-gato.png) center / cover; border:3px solid #fff; box-shadow:0 0 0 2px var(--ink); transform:rotate(-6deg); }
   button, .btn { border-width:2px; font-weight:600; }
@@ -267,7 +281,7 @@
   <header class="top">
     <h1>Gestión <small class="muted" style="font-weight:600;font-size:15px">Ichiraku Ramen</small></h1>
     <div class="row">
-      <a class="btn" href="admin.html">Panel de la carta</a>
+      <a class="btn" href="admin.html"><span class="largo">Panel de la carta</span><span class="corto">Carta</span></a>
       <button id="logout" class="hidden">Salir</button>
     </div>
   </header>
@@ -1452,7 +1466,12 @@
     document.querySelectorAll("#secs [data-sec]").forEach(function (x) { x.classList.toggle("on", x.dataset.sec === sec); });
     document.querySelectorAll("#tabs button[data-tab]").forEach(function (x) { x.hidden = (TAB_SEC[x.dataset.tab] || "dinero") !== sec || x.dataset.tab === "inicio"; });
     $("tabs").classList.toggle("hidden", sec === "inicio");
+    tabsMas();
   }
+  // Si las pestañas no caben (teléfono), la última se desvanece: avisa que hay más deslizando
+  function tabsMas() { var t = $("tabs"); t.classList.toggle("mas", t.scrollWidth - t.scrollLeft - t.clientWidth > 4); }
+  $("tabs").addEventListener("scroll", tabsMas, { passive: true });
+  window.addEventListener("resize", tabsMas);
   $("secs").addEventListener("click", function (e) {
     var b = e.target.closest("[data-sec]"); if (!b) return;
     var sec = b.dataset.sec, first = Object.keys(TAB_SEC).filter(function (k) { return TAB_SEC[k] === sec; })[0];

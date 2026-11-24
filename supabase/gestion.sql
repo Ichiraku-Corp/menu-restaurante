@@ -578,6 +578,8 @@ end $$;
 drop trigger if exists prep_items_recalc on public.prep_items;
 create trigger prep_items_recalc after insert or update or delete on public.prep_items
   for each row execute function public.prep_items_recalc();
+-- Son funciones de disparador: solo las usa la base al guardar; nadie tiene que llamarlas por la API
+revoke execute on function public.prep_fill(), public.prep_cascade(), public.prep_items_check(), public.prep_items_recalc() from public, anon, authenticated;
 
 -- Guardar una preparación completa (Gestión › Insumos › Preparaciones): todo o nada.
 -- p_lines: [{"ingredient_id": 3, "qty": 400, "unit": "g"}, …]. Devuelve su id.
