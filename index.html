@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Bk1s13A/ILJbgeykHCjKbsijRC0GkBW9VRoF5bBBD8Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-B1RMNg9xv704Lg3Yok4K3Ty6xHRmwpcKCRnqYmKGC4E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -112,10 +112,14 @@
   .dish:first-of-type { border-top: 0; }
   /* La foto, en un platito del color de la maid (el blanco de la foto toma ese color) */
   .plate { width: 106px; height: 106px; flex: none; border-radius: 50%; background: var(--t); display: grid; place-items: center; overflow: hidden;
-    border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink); }
+    border: 3px solid #fff; box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink); isolation: isolate; }
   .dish:nth-of-type(even) .plate { transform: rotate(3deg); }
   .photo { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; background: transparent; mix-blend-mode: multiply; }
-  /* Postres: el platito va blanco (las fotos de postres tienen fondo blanco y con el rosado se veían rosadas) */
+  /* La foto aparece al terminar de cargar: obliga al teléfono a dibujarla (en algunos Android no se veía hasta tocar el plato) */
+  .dish .photo { opacity: 0; transition: opacity .25s ease; }
+  .dish .photo.lista { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .dish .photo { transition: none; } }
+  /* Postres y bebidas: el platito va blanco (sus fotos tienen fondo blanco y con el color de la maid se veían teñidas) */
   [data-plato="blanco"] .plate, [data-plato="blanco"] .herobox { background: #fff; }
   .info { flex: 1; min-width: 0; }
   .dish h3 { margin: 0; font-size: 18px; font-weight: 800; color: var(--ink); line-height: 1.2; letter-spacing: -0.01em; }
@@ -399,7 +403,7 @@
     var n = norm(name);
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
-  function platoBlanco(name) { return /postre/.test(norm(name)); }
+  function platoBlanco(name) { return /postre|bebida/.test(norm(name)); } // postres y bebidas: platito blanco
   // Bienvenida con las maids: cada una lleva a la primera sección de su color (Miso el ramen; Dango postres y bebidas; Imo lo demás)
   function bienvenida(firstOf) {
     if (!firstOf.miso && !firstOf.dango && !firstOf.imo) return "";
@@ -460,7 +464,7 @@
       DISHES[d.id] = d;
       (byCat[d.category_id] = byCat[d.category_id] || []).push(d);
     });
-    var navHtml = "", html = "";
+    var navHtml = "", html = "", nFoto = 0; // todas las fotos se piden de una vez (pesan ~7 KB c/u); las 6 primeras, antes
     cats.forEach(function (c) {
       var items = (byCat[c.id] || []).sort(function (a, b) {
         return (b.available - a.available) || (a.position - b.position);
@@ -479,7 +483,7 @@
         var hay = norm([d.name, d.subtitle, d.description, c.name, opts.join(" "), tags.join(" ")].join(" "));
         html += '<article class="dish' + (d.available ? "" : " off") + '" data-id="' + esc(d.id) + '" data-q="' + esc(hay) +
           '" tabindex="0" aria-label="' + esc(d.name) + ', ver detalles">' +
-          (photo ? '<span class="plate"><img class="photo" src="' + esc(photo) + '" alt="" loading="lazy" decoding="async" width="100" height="100"></span>' : "") +
+          (photo ? '<span class="plate"><img class="photo" src="' + esc(photo) + '" alt="" width="100" height="100"' + (nFoto++ < 6 ? "" : ' fetchpriority="low"') + "></span>" : "") +
           '<div class="info"><h3>' + esc(d.name) +
           (d.subtitle ? '<span class="jp" lang="ja">' + esc(d.subtitle) + "</span>" : "") + "</h3>" +
           (d.description ? "<p>" + esc(d.description) + "</p>" : "") +
@@ -501,10 +505,29 @@
     if (html) html = bienvenida(firstOf) + html;
     $("menu").innerHTML = (html || '<div class="state">El menú aún está vacío.</div>') +
       '<div class="noresults" id="noresults" hidden>No encontramos nada con esa búsqueda.</div>';
+    fotosListas();
     watchSections();
     applySearch();
     cleanOrder();
     refreshOrder();
+  }
+
+  // Cada foto se muestra cuando terminó de cargar; si falla, se pide otra vez una sola vez.
+  // A los 4 s, una red de seguridad muestra las que ya cargaron aunque su aviso se haya perdido.
+  function fotosListas() {
+    document.querySelectorAll("#menu img.photo").forEach(function (img) {
+      if (img.complete && img.naturalWidth > 0) { img.classList.add("lista"); return; }
+      img.addEventListener("load", function () { img.classList.add("lista"); });
+      img.addEventListener("error", function () {
+        if (img.getAttribute("data-reintento")) return;
+        img.setAttribute("data-reintento", "1");
+        setTimeout(function () { img.src = img.src.split("?")[0] + "?r=" + Date.now(); }, 1500);
+      });
+    });
+    clearTimeout(fotosListas.t);
+    fotosListas.t = setTimeout(function () {
+      document.querySelectorAll("#menu img.photo:not(.lista)").forEach(function (img) { if (img.complete && img.naturalWidth > 0) img.classList.add("lista"); });
+    }, 4000);
   }
 
   var observer;

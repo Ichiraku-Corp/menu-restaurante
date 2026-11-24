@@ -97,10 +97,10 @@ function maidOf(catId) {
   var n = c ? c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
   return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
 }
-// Postres: el platito va blanco (sus fotos tienen fondo blanco y con el rosado se veían rosadas), igual que en la carta
+// Postres y bebidas: el platito va blanco (sus fotos tienen fondo blanco y con el color de la maid se veían teñidas), igual que en la carta
 function platoBlanco(catId) {
   var c = MENU.cats.find(function (x) { return x.id === catId; });
-  return !!c && /postre/.test(c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+  return !!c && /postre|bebida/.test(c.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
 }
 // Emoji del plato (se guarda en dishes.attributes.emoji; por ahora los extras: 🍗 pollo, 🥓 panceta…)
 function emojiOf(d) { var e = d && d.attributes && d.attributes.emoji; return typeof e === "string" ? e : ""; }

@@ -162,12 +162,12 @@ const falso = () => "window.__MENU=" + menu + ";" + fs.readFileSync(path.join(__
     await p.click('#dishExtras button:has-text("Huevo")'); await p.click("#dishAdd"); await p.waitForTimeout(100);
     await p.click("#lines .line.new.sub"); await p.waitForTimeout(100);
     ok((await p.$$("#lines .line.new.sub")).length === 0 && /Tonkotsu/.test(await p.textContent("#lines")), "tocar el extra sin enviar lo quita y el ramen queda");
-    // 7) Postres: el platito es blanco (no rosado), como en la carta
-    await p.click('#cats button:has-text("Postres")'); await p.waitForTimeout(100);
-    const fondos = await p.$$eval("#dishes button .plate", (l) => l.map((x) => getComputedStyle(x).backgroundColor));
-    await p.click('#cats button:has-text("Bebidas")'); await p.waitForTimeout(100);
-    const fondoBebida = await p.$eval("#dishes button .plate", (x) => getComputedStyle(x).backgroundColor);
-    ok(fondos.length > 0 && fondos.every((c) => c === "rgb(255, 255, 255)") && fondoBebida !== "rgb(255, 255, 255)", "los postres tienen el platito blanco; las bebidas siguen en rosado");
+    // 7) Postres y bebidas: el platito es blanco, como en la carta; el resto sigue con el color de su maid
+    const fondosDe = async (cat) => { await p.click('#cats button:has-text("' + cat + '")'); await p.waitForTimeout(100);
+      return p.$$eval("#dishes button .plate", (l) => l.map((x) => getComputedStyle(x).backgroundColor)); };
+    const postres = await fondosDe("Postres"), bebidas = await fondosDe("Bebidas"), ramen = await fondosDe("Ramen");
+    ok(postres.length > 0 && bebidas.length > 0 && postres.concat(bebidas).every((c) => c === "rgb(255, 255, 255)") && ramen.length > 0 && ramen.every((c) => c !== "rgb(255, 255, 255)"),
+      "postres y bebidas tienen el platito blanco; el ramen sigue con el color de su maid");
     ok(errores.length === 0, "sin errores en la página" + (errores.length ? ": " + errores.join(" | ") : ""));
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message); }
   await browser.close(); server.close();
