@@ -290,7 +290,7 @@ language sql immutable as $$ select to_char(coalesce(x, 0), 'FM999G999G990D00') 
 
 -- Un número de verdad y de tamaño razonable: abs(NaN) e infinito nunca son menores que el máximo.
 create or replace function public.pos_num_ok(x numeric, maximo numeric default 1e9) returns boolean
-language sql immutable as $$ select x is not null and abs(x) < maximo $$;
+language sql immutable set search_path = public as $$ select x is not null and abs(x) < maximo $$;
 
 create or replace function public.pos_order_label(p_order bigint) returns text
 language sql stable security definer set search_path = public as $$

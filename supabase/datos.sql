@@ -217,7 +217,7 @@ end $$;
 -- Ficha del cliente por teléfono (al crear un delivery): datos, dirección e historial
 -- Texto para buscar sin acentos ni mayúsculas
 create or replace function public.pos_fold(p text) returns text
-language sql immutable as $$ select translate(lower(coalesce(p, '')), 'áàäâéèëêíìïîóòöôúùüûñ', 'aaaaeeeeiiiioooouuuun') $$;
+language sql immutable set search_path = public as $$ select translate(lower(coalesce(p, '')), 'áàäâéèëêíìïîóòöôúùüûñ', 'aaaaeeeeiiiioooouuuun') $$;
 
 -- Ficha de un cliente para la caja: visitas, gasto, última visita, lo que suele pedir y su tarjeta de puntos.
 -- Teléfono y cédula van tapados (solo se ven los últimos dígitos): el cajero confirma con el cliente sin ver los datos de otros.
