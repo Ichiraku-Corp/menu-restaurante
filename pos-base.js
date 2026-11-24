@@ -108,3 +108,42 @@ var ST = null;             // estado de sala (pos_state)
 var MENU = { cats: [], dishes: [] };
 var cur = { area: null, order: null, data: null, cart: [], cat: null };
 try { cur.area = localStorage.getItem("pos-area") || "Tokio"; } catch (e) { cur.area = "Tokio"; }
+
+// ---------------------------------------------------------------- Actualización automática
+// Cada 5 minutos (y al volver a la pantalla) se compara la versión de los programas (los ?v= de pos.html) con la del
+// servidor. Si hay una nueva, avisa y se recarga sola en un momento libre: en la pantalla del PIN tras 10 s sin tocarla,
+// o en el mapa de mesas sin platos por enviar y 2 minutos sin tocarla. Nunca con una ventana abierta ni escribiendo.
+var ACT = { nueva: false, toque: Date.now(), actual: "" };
+function actFirma(html) { return (String(html).match(/(?:pos(?:-[a-z]+)?|reporte-cierre|monitoreo)\.(?:js|css)\?v=[0-9a-f]+/g) || []).sort().join(","); }
+ACT.actual = actFirma(document.documentElement.innerHTML);
+function actRevisar() {
+  if (ACT.nueva || !ACT.actual) return Promise.resolve();
+  return fetch(location.pathname + "?act=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (t) {
+    var f = actFirma(t);
+    if (f && f !== ACT.actual) { ACT.nueva = true; actAviso(); }
+  }).catch(function () { /* sin red: se revisa en la próxima vuelta */ });
+}
+function actVisible(id) { var e = document.getElementById(id); return !!e && !e.classList.contains("hidden"); }
+function actLibre() {
+  if (document.querySelector("dialog[open]")) return false;
+  var a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+  var quieto = Date.now() - ACT.toque;
+  if (actVisible("pin")) return quieto > 10000;
+  return actVisible("tablesView") && !(cur && cur.cart && cur.cart.length) && quieto > 120000;
+}
+function actRecargar() { location.replace(location.pathname + "?act=" + Date.now() + location.hash); }
+function actQuizas() { if (ACT.nueva && actLibre()) actRecargar(); }
+function actAviso() {
+  if (document.getElementById("actAviso")) return;
+  var el = document.createElement("div"); el.id = "actAviso"; el.className = "act-aviso"; el.setAttribute("role", "status");
+  el.innerHTML = '<span>Hay una versión nueva del sistema: se actualiza sola en un momento libre.</span> <button type="button">Actualizar ahora</button>';
+  el.querySelector("button").addEventListener("click", function () {
+    if (cur && cur.cart && cur.cart.length) { toast("Primero envía o quita los platos que faltan por enviar"); return; }
+    actRecargar();
+  });
+  document.body.appendChild(el);
+}
+["pointerdown", "keydown", "touchstart"].forEach(function (ev) { document.addEventListener(ev, function () { ACT.toque = Date.now(); }, { capture: true, passive: true }); });
+document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") actRevisar(); });
+setTimeout(actRevisar, 60000); setInterval(actRevisar, 5 * 60000); setInterval(actQuizas, 15000);
+

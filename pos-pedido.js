@@ -462,59 +462,151 @@ $("moveCancel").addEventListener("click", function () { $("moveDlg").close(); })
 
 // ---------------------------------------------------------------- Cliente del pedido (para factura y registro)
 // Para cobrar hacen falta el nombre y el teléfono del cliente (Edgar, 23/11); la cédula y el correo son opcionales.
-// El teléfono reconoce al cliente que ya vino: se llena su nombre solo.
-var cliTimer = null, cliTelTimer = null, cliCobro = false;
+// Un solo buscador (teléfono, cédula o nombre): se elige al cliente de la lista y aparece su ficha (visitas, gasto,
+// lo que suele pedir y su tarjeta de puntos). Teléfono y cédula salen tapados: se confirman con el cliente sin ver
+// los datos de otros. Si no está, se registra; antes de crear otro, la base avisa si el teléfono o la cédula ya son
+// de alguien («¿es la misma persona?»), para no repetir clientes.
+var CLI = { cobro: false, modo: "buscar", elegido: null, corregir: false, res: [], timer: null, conflicto: null, sugerido: {} };
 function clienteListo(d) {
   var c = d && d.client;
   return !!(c && String(c.name || "").trim().length >= 2 && String(c.phone || "").replace(/\D/g, "").length >= 10);
 }
+function cliModo(m) {
+  var e = CLI.elegido, form = m === "nuevo" || (m === "elegido" && CLI.corregir), falta = m === "elegido" && CLI.cobro && e && !e.tel;
+  CLI.modo = m;
+  show("cBuscar", m === "buscar"); show("cFicha", m === "elegido" || m === "conflicto"); show("cConf", m === "conflicto");
+  show("cForm", form || falta); show("cRowPhone", form || falta); show("cRowName", form); show("cRowDoc", form);
+  show("cConsentRow", m === "nuevo" || (m === "elegido" && e && !e.acepta));
+  $("cOk").disabled = m === "buscar" || m === "conflicto";
+  $("cHelp").textContent = m === "buscar" ? "Busca por teléfono, cédula o nombre: si ya vino, aparece en la lista."
+    : m === "nuevo" ? "Cliente nuevo: " + (CLI.cobro ? "el nombre y el teléfono son obligatorios." : "escribe sus datos.")
+    : falta ? "Falta su teléfono: pídeselo para cobrar." : CLI.corregir ? "Escribe solo lo que cambia: lo que quede vacío se mantiene." : "";
+  $("cErr").textContent = "";
+}
 function clientForm(paraCobrar) {
-  cliCobro = paraCobrar === true;
   var d = cur.data || {}, c = d.client || {};
-  // Sin cliente todavía: se aprovecha lo que ya trae el pedido (el teléfono del delivery o de WhatsApp, el nombre de «para llevar»)
-  var nombre = c.name || (d.kind && d.kind !== "mesa" && d.customer ? String(d.customer) : "");
-  $("cDoc").value = c.doc_id || ""; $("cName").value = nombre; $("cPhone").value = c.phone || d.phone || ""; $("cEmail").value = c.email || "";
-  $("cConsent").checked = false; $("cErr").textContent = ""; $("cFound").textContent = "";
-  $("cTitle").textContent = cliCobro ? "Datos del cliente para cobrar" : "Datos del cliente";
-  $("cHelp").textContent = cliCobro ? "Para cobrar hacen falta el nombre y el teléfono. Si ya vino antes, con el teléfono se llena solo."
-    : "Para la factura y el registro de clientes. Con el teléfono o la cédula, si ya vino antes, se llena solo.";
-  $("cOk").textContent = cliCobro ? "Guardar y cobrar" : "Guardar en el pedido";
-  show("cSkipBox", cliCobro);
-  $("cliDlg").showModal(); setTimeout(function () { $($("cPhone").value ? "cName" : "cPhone").focus(); }, 50);
-  if ($("cPhone").value) lookupPhone();
+  CLI.cobro = paraCobrar === true; CLI.elegido = null; CLI.corregir = false; CLI.res = []; CLI.conflicto = null;
+  ["cQ", "cDoc", "cName", "cPhone", "cEmail"].forEach(function (id) { $(id).value = ""; });
+  $("cConsent").checked = false; $("cRes").innerHTML = "";
+  $("cTitle").textContent = CLI.cobro ? "Datos del cliente para cobrar" : "Datos del cliente";
+  $("cOk").textContent = CLI.cobro ? "Guardar y cobrar" : "Guardar en el pedido";
+  show("cSkipBox", CLI.cobro);
+  // Lo que ya trae el pedido: el teléfono del delivery o de WhatsApp, el nombre de «para llevar»
+  CLI.sugerido = { phone: d.phone || "", name: d.kind && d.kind !== "mesa" && d.customer ? String(d.customer) : "" };
+  $("cliDlg").showModal();
+  if (c.id) {   // el pedido ya tiene cliente: se abre su ficha
+    cliModo("elegido"); $("cFicha").innerHTML = '<p class="muted" style="margin:0">Cargando su ficha…</p>';
+    rpc("pos_customer_ficha", { p_id: c.id }).then(function (f) { if (f) cliElegir(f); else cliModo("buscar"); }).catch(function () { cliModo("buscar"); });
+    return;
+  }
+  cliModo("buscar");
+  if (CLI.sugerido.phone || CLI.sugerido.name) { $("cQ").value = CLI.sugerido.phone || CLI.sugerido.name; cliBuscar(); }
+  setTimeout(function () { $("cQ").focus(); }, 50);
 }
-function lookupPhone() {
-  var dig = $("cPhone").value.replace(/\D/g, "");
-  if (dig.length < 10) { $("cFound").textContent = ""; return; }
-  rpc("pos_customer_by_phone", { p_phone: $("cPhone").value }).then(function (r) {
-    if (!r || dig !== $("cPhone").value.replace(/\D/g, "")) return;
-    if (!$("cName").value.trim() && r.name) $("cName").value = r.name;
-    var n = num(r.orders);
-    $("cFound").textContent = "Cliente conocido ✓" + (n ? " · " + n + (n === 1 ? " pedido" : " pedidos") : "");
-  }).catch(function () {});
+function cliDatos(c) {
+  var v = num(c.visitas);
+  return [c.tel, c.doc, v ? v + (v === 1 ? " visita" : " visitas") : "sin visitas en la caja"].filter(Boolean).join(" · ");
 }
-$("cPhone").addEventListener("input", function () { clearTimeout(cliTelTimer); cliTelTimer = setTimeout(lookupPhone, 400); });
-function lookupClient() {
-  var d = $("cDoc").value.replace(/[\s.\-]/g, "");
-  if (d.length < 5) { $("cFound").textContent = ""; return; }
-  rpc("pos_find_customer", { p_doc: d }).then(function (r) {
-    if (!r) { $("cFound").textContent = "Cliente nuevo: se registrará al guardar."; return; }
-    $("cFound").textContent = "Cliente encontrado ✓";
-    if (!$("cName").value) $("cName").value = r.name || ""; if (!$("cPhone").value) $("cPhone").value = r.phone || ""; if (!$("cEmail").value) $("cEmail").value = r.email || "";
-    if (r.marketing_consent) $("cConsent").checked = true;
-  }).catch(function () {});
+function cliBuscar() {
+  var q = $("cQ").value.trim(), dig = q.replace(/\D/g, "");
+  if (q.length < 3) { CLI.res = []; $("cRes").innerHTML = ""; return; }
+  $("cRes").innerHTML = '<p class="muted" style="margin:4px 0">Buscando…</p>';
+  rpc("pos_customer_search", { p_q: q }).then(function (l) {
+    if (q !== $("cQ").value.trim() || CLI.modo !== "buscar") return;   // ya escribieron otra cosa
+    CLI.res = l || [];
+    if (CLI.res.length === 1 && dig.length >= 10) return cliElegir(CLI.res[0]);   // teléfono completo y una sola persona
+    if (!CLI.res.length && dig.length >= 10) return cliNuevo();                   // teléfono completo que no está: a registrarlo
+    $("cRes").innerHTML = CLI.res.map(function (c, i) {
+      return '<button type="button" class="cres-it" data-i="' + i + '"><b>' + esc(c.name) + '</b><span class="muted">' + esc(cliDatos(c)) + "</span></button>";
+    }).join("") + '<button type="button" class="cres-nuevo" data-nuevo="1">' + (CLI.res.length ? "No es ninguno: registrar cliente nuevo" : "No está registrado: registrar cliente nuevo") + "</button>";
+  }).catch(function () {
+    if (CLI.modo !== "buscar") return;
+    $("cRes").innerHTML = '<p class="muted" style="margin:4px 0">No se pudo buscar (¿sin internet?).</p><button type="button" class="cres-nuevo" data-nuevo="1">Escribir los datos</button>';
+  });
 }
-$("cDoc").addEventListener("input", function () { clearTimeout(cliTimer); cliTimer = setTimeout(lookupClient, 400); });
-$("cCancel").addEventListener("click", function () { $("cliDlg").close(); });
-$("cOk").addEventListener("click", function () {
-  var name = $("cName").value.trim(), tel = $("cPhone").value.replace(/\D/g, ""), seguir = cliCobro;
-  if (name.length < 2) { $("cErr").textContent = "Escribe el nombre o la razón social."; return; }
-  if (cliCobro && tel.length < 10) { $("cErr").textContent = "Escribe el teléfono del cliente (por ejemplo 0414 1234567)."; return; }
-  rpc("pos_set_customer", { p_order: cur.order, p_doc: $("cDoc").value, p_name: name, p_phone: $("cPhone").value, p_email: $("cEmail").value, p_consent: $("cConsent").checked })
-    .then(function () { $("cliDlg").close(); toast("Cliente guardado en el pedido"); return loadOrder(); })
-    .then(function () { if (seguir) abrirCobro(false); })
-    .catch(function (e) { $("cErr").textContent = errMsg(e); });
+$("cQ").addEventListener("input", function () { clearTimeout(CLI.timer); CLI.timer = setTimeout(cliBuscar, 350); });
+$("cQ").addEventListener("keydown", function (e) {
+  if (e.key !== "Enter") return; e.preventDefault();
+  if (CLI.res.length) cliElegir(CLI.res[0]); else if ($("cQ").value.trim().length >= 3) cliNuevo();
 });
+$("cRes").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-i]"); if (b) return cliElegir(CLI.res[Number(b.dataset.i)]);
+  if (e.target.closest("[data-nuevo]")) cliNuevo();
+});
+function cliNuevo() {
+  var q = $("cQ").value.trim(), dig = q.replace(/\D/g, ""), s = CLI.sugerido || {};
+  var esDoc = /^[VEJGP][\s.\-]*\d/i.test(q) || (dig.length >= 5 && dig.length <= 9 && dig.length === q.replace(/[\s.\-]/g, "").length);
+  CLI.elegido = null; CLI.corregir = false;
+  $("cPhone").value = !esDoc && dig.length >= 10 ? q : (s.phone || "");
+  $("cDoc").value = esDoc ? q : "";
+  $("cName").value = /[a-záéíóúñü]{2}/i.test(q) && !esDoc ? q : (s.name || "");
+  $("cEmail").value = ""; $("cConsent").checked = false;
+  $("cPhone").placeholder = "0414 1234567"; $("cDoc").placeholder = "Cédula o RIF (opcional)"; $("cEmail").placeholder = "Correo (opcional)";
+  cliModo("nuevo");
+  setTimeout(function () { $(!$("cPhone").value ? "cPhone" : !$("cName").value ? "cName" : "cDoc").focus(); }, 30);
+}
+function cliElegir(c) {
+  CLI.elegido = c; CLI.corregir = false;
+  $("cName").value = c.name || ""; $("cPhone").value = ""; $("cDoc").value = ""; $("cEmail").value = "";
+  $("cPhone").placeholder = c.tel ? "Nuevo teléfono (vacío: se queda " + c.tel + ")" : "0414 1234567";
+  $("cDoc").placeholder = c.doc ? "Cédula: se queda " + c.doc : "Cédula o RIF (opcional)";
+  $("cEmail").placeholder = c.correo ? "Correo nuevo (vacío: se queda)" : "Correo (opcional)";
+  $("cConsent").checked = !!c.acepta;
+  $("cFicha").innerHTML = cliFicha(c, false);
+  cliModo("elegido");
+  setTimeout(function () { $(CLI.cobro && !c.tel ? "cPhone" : "cOk").focus(); }, 30);
+}
+// La ficha: visitas, gasto, última visita, lo que suele pedir y la tarjeta de puntos (sellos desde el último canje)
+function cliFicha(c, soloVer) {
+  var v = num(c.visitas), dias = c.ultima ? Math.floor((Date.now() - new Date(c.ultima).getTime()) / 864e5) : null;
+  var pend = Math.max(0, num(c.sellos) - 3 * num(c.canjes)), llenos = Math.min(pend, 3), faltan = 3 - llenos;
+  return '<div class="row between" style="flex-wrap:nowrap"><span class="cnom">' + esc(c.name) + "</span>" +
+      (soloVer ? "" : '<button type="button" class="clink" data-cli="cambiar">Cambiar</button>') + "</div>" +
+    '<div class="muted">' + esc([c.tel || "sin teléfono", c.doc].filter(Boolean).join(" · ")) + "</div>" +
+    (v ? '<div class="cstats"><span><b>' + v + "</b> " + (v === 1 ? "visita" : "visitas") + "</span><span><b>" + ref(num(c.gastado)) + "</b> en total</span>" +
+           (dias != null ? "<span>última: " + (dias < 1 ? "hoy" : dias === 1 ? "ayer" : "hace " + dias + " días") + "</span>" : "") + "</div>" +
+         ((c.suele || []).length ? '<div class="muted">Suele pedir: ' + esc(c.suele.join(", ")) + "</div>" : "")
+       : '<div class="muted">Todavía sin visitas cobradas en la caja.</div>') +
+    '<div class="csellos" title="Sellos registrados en la caja desde el último canje">Tarjeta de puntos: <span class="dots">' +
+      [0, 1, 2].map(function (i) { return '<i class="' + (i < llenos ? "on" : "") + '"></i>'; }).join("") + "</span>" +
+      (faltan ? "<span>" + llenos + " de 3 sellos · " + (faltan === 1 ? "le falta 1" : "le faltan " + faltan) + " para el canje</span>" : "<b>¡ya tiene el canje!</b>") + "</div>" +
+    (soloVer ? "" : '<button type="button" class="clink" data-cli="corregir">Corregir sus datos</button>');
+}
+$("cFicha").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-cli]"); if (!b) return;
+  if (b.dataset.cli === "cambiar") { CLI.elegido = null; cliModo("buscar"); setTimeout(function () { $("cQ").focus(); }, 30); return; }
+  CLI.corregir = true; cliModo("elegido"); setTimeout(function () { $("cName").focus(); }, 30);
+});
+function cliGuardar(modo) {
+  var e = CLI.elegido, name = (e && !CLI.corregir ? e.name : $("cName").value).trim(), tel = $("cPhone").value.replace(/\D/g, ""), seguir = CLI.cobro;
+  if (name.length < 2) { $("cErr").textContent = "Escribe el nombre o la razón social."; return; }
+  if (tel && tel.length < 10) { $("cErr").textContent = "El teléfono está incompleto (por ejemplo 0414 1234567)."; return; }
+  if (CLI.cobro && !tel && !(e && e.tel)) { $("cErr").textContent = "Escribe el teléfono del cliente (por ejemplo 0414 1234567)."; return; }
+  var args = { p_order: cur.order, p_doc: $("cDoc").value, p_name: name, p_phone: $("cPhone").value, p_email: $("cEmail").value, p_consent: $("cConsent").checked };
+  if (e) args.p_customer = e.id; else args.p_modo = modo || "revisar";
+  $("cOk").disabled = true;
+  rpc("pos_set_customer", args).then(function (r) {
+    if (r && r.conflicto) { cliConflicto(r); return; }
+    $("cliDlg").close(); toast("Cliente guardado en el pedido");
+    return loadOrder().then(function () { if (seguir) abrirCobro(false); });
+  }).catch(function (err) { $("cErr").textContent = errMsg(err); $("cOk").disabled = false; });
+}
+// El teléfono o la cédula ya son de un cliente: ¿es la misma persona?
+function cliConflicto(r) {
+  var c = r.conflicto, porCed = r.por === "cedula";
+  CLI.conflicto = r;
+  $("cFicha").innerHTML = cliFicha(c, true);
+  $("cConfTxt").textContent = (porCed ? "Esa cédula ya es de " : "Ese teléfono ya es de ") + c.name + ". ¿Es la misma persona?";
+  $("cConfNo").textContent = porCed ? "No: corregir la cédula" : "No, es otra persona";
+  cliModo("conflicto");
+}
+$("cConfSi").addEventListener("click", function () { CLI.elegido = CLI.conflicto.conflicto; CLI.corregir = false; cliGuardar(""); });
+$("cConfNo").addEventListener("click", function () {
+  if (CLI.conflicto.por === "cedula") { cliModo("nuevo"); setTimeout(function () { $("cDoc").focus(); $("cDoc").select(); }, 30); return; }
+  cliModo("nuevo"); cliGuardar("nuevo");
+});
+$("cOk").addEventListener("click", function () { cliGuardar(""); });
+$("cCancel").addEventListener("click", function () { $("cliDlg").close(); });
 $("cSkip").addEventListener("click", function () { $("cliDlg").close(); abrirCobro(true); });
 $("btnClient").addEventListener("click", clientForm);
 

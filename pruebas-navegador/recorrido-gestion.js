@@ -352,6 +352,12 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
       "de la caja solo pide lo vendido después del último día del sistema anterior (no cuenta dos veces)");
     ok(/540 vend\./.test(await page.locator("#plList .dish-row", { hasText: "Gyozas" }).first().textContent()), "lo vendido en la lista sigue el período elegido (2 años: 540 gyozas)");
 
+    // Clientes › Clientes: posibles repetidos y unir en el marcado
+    await page.click('#secs [data-sec="clientes"]'); await page.click('#tabs [data-tab="clientes"]'); await page.waitForSelector("#repList .rep", { timeout: 5000 });
+    ok(/Mismo teléfono · 2 clientes/.test(await page.textContent("#repList")) && /Ana P\./.test(await page.textContent("#repList")), "Clientes muestra los posibles repetidos (mismo teléfono)");
+    await page.click('#repList [data-unir="0"]'); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => { const c = window.__G.calls.filter((x) => x.rpc === "gestion_unir_clientes"); return c.length === 1 && c[0].args.p_queda === 21 && c[0].args.p_sale === 22; })
+       && /No hay clientes repetidos/.test(await page.textContent("#repList")), "«Unir en el marcado» une a Ana P. en Ana Pérez (la que tiene más pedidos) y la lista queda limpia");
     // Las 7 secciones, cada dato en un solo lugar
     ok((await page.$$eval("#secs [data-sec]", (x) => x.map((b) => b.dataset.sec).join(","))) === "inicio,dinero,carta,cocina,equipo,clientes,ajustes", "Gestión tiene 7 secciones: Inicio, Dinero, Carta, Cocina, Equipo, Clientes y Ajustes");
     // Dinero › Ganancia: el estado de resultados, el costo por área, el punto de equilibrio y lo que se gana

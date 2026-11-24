@@ -674,3 +674,25 @@ dialog h2 { font-weight:900; }
 @keyframes maidIn { from { opacity:0; transform:translateX(28px); } }
 @keyframes bubIn { from { opacity:0; transform:scale(.85); } }
 @media (max-width: 599px), (max-height: 479px) { .maidpin, .maidbub { display:none !important; } }
+
+/* Cliente: buscador único (teléfono, cédula o nombre), lista con los datos tapados, ficha y aviso de dobles */
+#cliDlg { width:min(520px, calc(100vw - 20px)); }
+.cres { display:grid; gap:6px; margin-top:8px; max-height:min(320px, 42vh); overflow:auto; }
+.cres-it { display:grid; gap:2px; text-align:left; padding:10px 12px; min-height:54px; }
+.cres-it .muted { font-size:13px; font-weight:600; }
+.cres-nuevo { border-style:dashed !important; min-height:46px; font-weight:800; }
+.cficha { display:grid; gap:6px; padding:12px 14px; border:2px solid var(--ink); border-radius:16px; background:#fff; margin:4px 0 2px; }
+.cficha .cnom { font-size:19px; font-weight:900; color:var(--ink); }
+.cstats { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:14px; }
+.csellos { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:14px; }
+.csellos .dots { display:inline-flex; gap:4px; }
+.csellos .dots i { width:15px; height:15px; border-radius:50%; border:2px solid var(--ink); background:#fff; }
+.csellos .dots i.on { background:var(--accent); }
+.clink { background:none !important; border:0 !important; box-shadow:none !important; padding:2px 0; min-height:0; color:var(--ink); font-weight:800; text-decoration:underline; justify-self:start; }
+.cconf { display:grid; gap:10px; padding:12px 14px; border-radius:14px; background:var(--imo-t); border:2px solid var(--ink); margin-top:8px; }
+
+/* Aviso de versión nueva (se actualiza sola en un momento libre) */
+.act-aviso { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + env(safe-area-inset-bottom, 0px)); z-index:60; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  max-width:calc(100vw - 24px); padding:10px 14px; border-radius:16px; background:var(--ink); color:#fff; font-size:14px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+.act-aviso button { min-height:36px; padding:4px 12px; font-size:14px; }
+

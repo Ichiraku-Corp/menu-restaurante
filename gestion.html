@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-6OiU1J1Rx8Di7p1N7PRNfK2UUMW9vVYz8MvigCs2ejo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-mxkINlZp3qKEcZF0bur9b5nCxdXGG0LDS4D4CNFzHqA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -270,6 +270,8 @@
   .tbl tr.total td { border-top-color:var(--ink); }
   input, select, textarea { border-width:1.5px; border-color:#D9CBBE; background:#fff; }
   /* Inicio › Panel: enlace a la pestaña con el detalle */
+  .rep + .rep { margin-top:16px; padding-top:12px; border-top:1px dashed var(--line); }
+  .rep h3 { margin-top:0; }
   .vermas { float:right; text-transform:none; letter-spacing:0; font-size:13px; font-weight:700; color:var(--sky); text-decoration:none; }
   .vermas:hover { text-decoration:underline; }
   /* Carta › Platos (antes Panel de la carta) */
@@ -502,6 +504,11 @@
         <p class="muted">Solo escribe con promociones a quien haya dado su <b>consentimiento</b>; los importados de Syth no lo tienen todavía.</p>
         <input id="cliSearch" type="search" placeholder="Buscar por nombre, cédula o teléfono" aria-label="Buscar cliente">
         <div class="scroll" id="cliList" style="margin-top:8px"></div>
+      </div>
+      <div class="card" id="repCard">
+        <h2>Posibles repetidos</h2>
+        <p class="muted">Clientes con el mismo teléfono, la misma cédula o el mismo nombre. Marca cuál se queda y toca «Unir»: los pedidos y los datos de los otros pasan a ese. Si tienen cédulas distintas, no son la misma persona y no se unen.</p>
+        <div id="repList"><p class="muted">Cargando…</p></div>
       </div>
     </section>
 
@@ -1636,6 +1643,7 @@
     if (b.getAttribute("data-tab") === "opiniones") loadOpiniones();
     if (b.getAttribute("data-tab") === "servicio") loadMesoneros();
     if (b.getAttribute("data-tab") === "ventas") loadPagos();
+    if (b.getAttribute("data-tab") === "clientes") loadRepetidos();
   });
   // Un enlace con #pestaña (p. ej. el viejo Panel de la carta → #platos) abre esa pestaña; si no, la última que se usó
   function tabDeHash() { var h = location.hash.replace("#", ""); return /^[a-z]+$/.test(h) && document.querySelector('#tabs [data-tab="' + h + '"]') ? h : null; }
@@ -3594,6 +3602,37 @@
   window.addEventListener("resize", function () { clearTimeout(histResize); histResize = setTimeout(function () { if (!document.querySelector('[data-panel="historico"]').hidden) renderHistorico(); }, 200); });
 
   // ---------------------------------------------------------------- Clientes
+  // ---- Posibles repetidos: el mismo teléfono, cédula o nombre; se marca cuál se queda y se unen los demás en ese
+  var REP = { grupos: [] }, REP_POR = { telefono: "Mismo teléfono", cedula: "Misma cédula", nombre: "Mismo nombre" };
+  function loadRepetidos() {
+    if (!mfaOk) return;
+    opt(sb.rpc("gestion_clientes_repetidos")).then(function (r) {
+      if (r === null) { $("repCard").hidden = true; return; }
+      REP.grupos = r.data || r || []; $("repCard").hidden = false; drawRepetidos();
+    });
+  }
+  function drawRepetidos() {
+    var gs = REP.grupos;
+    $("repList").innerHTML = gs.length ? gs.map(function (g, gi) {
+      return '<div class="rep" data-g="' + gi + '"><h3>' + esc(REP_POR[g.por] || g.por) + " · " + g.clientes.length + " clientes</h3>" +
+        '<div class="scroll"><table class="tbl"><thead><tr><th>Se queda</th><th>Nombre</th><th>Cédula</th><th>Teléfono</th><th class="n">Pedidos</th><th class="hide-sm">Desde</th></tr></thead><tbody>' +
+        g.clientes.map(function (c, ci) {
+          return "<tr><td><input type=\"radio\" name=\"rep" + gi + "\" value=\"" + c.id + "\"" + (ci === 0 ? " checked" : "") + ' aria-label="Se queda ' + esc(c.name) + '"></td><td>' + esc(c.name) +
+            "</td><td>" + esc(c.doc_id || "—") + "</td><td>" + esc(c.phone || "—") + '</td><td class="n">' + num(c.pedidos) + '</td><td class="hide-sm">' + esc(c.desde || "") + (c.origen === "pos" ? " · caja" : "") + "</td></tr>";
+        }).join("") + '</tbody></table></div><p style="margin:8px 0 0"><button type="button" class="primary small" data-unir="' + gi + '">Unir en el marcado</button></p></div>';
+    }).join("") : '<div class="empty">No hay clientes repetidos ✓</div>';
+  }
+  $("repList").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-unir]"); if (!b) return;
+    var g = REP.grupos[Number(b.dataset.unir)], box = b.closest(".rep"), sel = box.querySelector("input[type=radio]:checked");
+    if (!g || !sel) return;
+    var queda = Number(sel.value), otros = g.clientes.filter(function (c) { return c.id !== queda; }), q0 = g.clientes.find(function (c) { return c.id === queda; });
+    if (!confirm("¿Unir " + otros.map(function (c) { return "«" + c.name + "»"; }).join(", ") + " en «" + q0.name + "»? Sus pedidos pasan a «" + q0.name + "» y los otros se borran.")) return;
+    b.disabled = true;
+    otros.reduce(function (p, c) { return p.then(function () { return q(sb.rpc("gestion_unir_clientes", { p_queda: queda, p_sale: c.id })); }); }, Promise.resolve())
+      .then(function () { toast("Clientes unidos en «" + q0.name + "»"); loadRepetidos(); return refresh(); })
+      .catch(function (err) { fail(err); loadRepetidos(); });
+  });
   function renderClientes() {
     var L = S.customers;
     show("cliSetup", !L); $("addCli").disabled = !L;

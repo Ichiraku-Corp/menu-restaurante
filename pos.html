@@ -13,16 +13,16 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
-<link rel="stylesheet" href="pos.css?v=c83fb83fd7">
+<link rel="stylesheet" href="pos.css?v=630c6ac8d7">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=f9f2d5eead"></script>
-<script src="pos-base.js?v=3b7c33de0b" defer></script>
+<script src="pos-base.js?v=9be70a67ad" defer></script>
 <script src="pos-acceso.js?v=42384c4aa0" defer></script>
 <script src="pos-mesas.js?v=b5ea79844b" defer></script>
-<script src="pos-pedido.js?v=1686f01bbf" defer></script>
+<script src="pos-pedido.js?v=35b39c079e" defer></script>
 <script src="pos-cobro.js?v=58595d706b" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=15dc6dfc47" defer></script>
@@ -184,12 +184,22 @@
 <!-- Cliente del pedido -->
 <dialog id="cliDlg">
   <h2 id="cTitle">Datos del cliente</h2>
-  <p class="muted" id="cHelp" style="margin-top:0">Para la factura y el registro de clientes. Con el teléfono o la cédula, si ya vino antes, se llena solo.</p>
-  <label class="muted" for="cPhone">Teléfono</label><input id="cPhone" placeholder="0414 1234567" inputmode="tel" maxlength="20" autocomplete="off">
-  <label class="muted" for="cName" style="display:block;margin-top:8px">Nombre o razón social</label><input id="cName" maxlength="80" autocomplete="off">
-  <p class="muted" id="cFound" style="margin:4px 0 0;color:var(--ok)"></p>
-  <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input id="cDoc" placeholder="Cédula o RIF (opcional)" autocomplete="off" aria-label="Cédula o RIF (opcional)"><input id="cEmail" type="email" placeholder="Correo (opcional)" maxlength="120" aria-label="Correo (opcional)"></div>
-  <label class="row" style="margin-top:10px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="cConsent" style="width:22px;height:22px;flex:none"> Acepta recibir promociones por WhatsApp o correo</label>
+  <p class="muted" id="cHelp" style="margin-top:0"></p>
+  <div id="cBuscar">
+    <input id="cQ" type="search" placeholder="Teléfono, cédula o nombre" autocomplete="off" aria-label="Buscar cliente por teléfono, cédula o nombre" enterkeyhint="search">
+    <div id="cRes" class="cres" aria-live="polite"></div>
+  </div>
+  <div id="cFicha" class="cficha hidden"></div>
+  <div id="cConf" class="cconf hidden" role="alert">
+    <p id="cConfTxt" style="margin:0;font-weight:700"></p>
+    <div class="row" style="gap:8px"><button type="button" class="primary" id="cConfSi">Sí, es la misma persona</button><button type="button" id="cConfNo">No, es otra persona</button></div>
+  </div>
+  <div id="cForm" class="hidden">
+    <div id="cRowPhone"><label class="muted" for="cPhone">Teléfono</label><input id="cPhone" placeholder="0414 1234567" inputmode="tel" maxlength="20" autocomplete="off"></div>
+    <div id="cRowName"><label class="muted" for="cName" style="display:block;margin-top:8px">Nombre o razón social</label><input id="cName" maxlength="80" autocomplete="off"></div>
+    <div id="cRowDoc" class="row" style="margin-top:8px;flex-wrap:nowrap"><input id="cDoc" placeholder="Cédula o RIF (opcional)" autocomplete="off" aria-label="Cédula o RIF (opcional)"><input id="cEmail" type="email" placeholder="Correo (opcional)" maxlength="120" aria-label="Correo (opcional)"></div>
+  </div>
+  <label class="row" id="cConsentRow" style="margin-top:10px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="cConsent" style="width:22px;height:22px;flex:none"> Acepta recibir promociones por WhatsApp o correo</label>
   <p id="cErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><button type="button" id="cCancel">Cancelar</button><button type="button" class="primary" id="cOk">Guardar en el pedido</button></div>
   <p id="cSkipBox" class="hidden" style="text-align:center;margin:12px 0 0"><button type="button" id="cSkip" style="min-height:40px;font-size:14px">Es consumo de un empleado (va a su cuenta)</button></p>

@@ -75,6 +75,10 @@
                 { order_id: 8, visita: "17/11 19:40", respondida: "17/11 20:30", mesa: "Barra 2", mesonero: "Sasha", rating: 5, comment: "¡Umai! El tonkotsu", name: "", phone: "", cambios: 0 },
                 { order_id: 7, visita: "16/11 13:05", respondida: "16/11 15:00", mesa: "Para llevar", mesonero: "Sasha", rating: 3, comment: "", name: "", phone: "", cambios: 0 }] };
     },
+    gestion_clientes_repetidos: function () { G.calls.push({ rpc: "gestion_clientes_repetidos" });
+      return G.unidos ? [] : [{ por: "telefono", clientes: [{ id: 21, name: "Ana Pérez", doc_id: "V12345678", phone: "04141234567", email: "", desde: "2026-11-24", origen: "pos", pedidos: 3 },
+                                                           { id: 22, name: "Ana P.", doc_id: null, phone: "0414-123.45.67", email: "", desde: "2026-11-24", origen: "pos", pedidos: 1 }] }]; },
+    gestion_unir_clientes: function (a) { G.calls.push({ rpc: "gestion_unir_clientes", args: a }); G.unidos = true; return { id: a.p_queda, pedidos: 1 }; },
     gestion_promo_guardar: function (a) { G.calls.push({ rpc: "gestion_promo_guardar", args: a }); return 2; },
     gestion_promo_borrar: function (a) { G.calls.push({ rpc: "gestion_promo_borrar", args: a }); },
     gestion_facturas: function (a) { G.calls.push({ rpc: "gestion_facturas", args: a }); var t = new Date().toISOString();

@@ -215,6 +215,127 @@ begin
 end $$;
 
 -- Ficha del cliente por teléfono (al crear un delivery): datos, dirección e historial
+-- Texto para buscar sin acentos ni mayúsculas
+create or replace function public.pos_fold(p text) returns text
+language sql immutable as $$ select translate(lower(coalesce(p, '')), 'áàäâéèëêíìïîóòöôúùüûñ', 'aaaaeeeeiiiioooouuuun') $$;
+
+-- Ficha de un cliente para la caja: visitas, gasto, última visita, lo que suele pedir y su tarjeta de puntos.
+-- Teléfono y cédula van tapados (solo se ven los últimos dígitos): el cajero confirma con el cliente sin ver los datos de otros.
+create or replace function public.pos_customer_card(c public.customers) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare k text := public.phone_key(c.phone); r jsonb;
+begin
+  with o as (
+    select o.id, o.closed_at, o.sello, t.total from public.pos_orders o cross join lateral public.pos_totals(o.id) t
+    where o.status = 'cobrada' and (o.customer_id = c.id or (k is not null and public.phone_key(o.phone) = k))
+  )
+  select jsonb_build_object(
+    'id', c.id, 'name', c.name,
+    'tel', case when k is not null then '0' || left(k, 3) || ' ••• ' || right(k, 4) end,
+    'doc', case when c.doc_id is not null then left(c.doc_id, 1) || '-•••' || right(c.doc_id, 3) end,
+    'correo', coalesce(c.email, '') <> '', 'acepta', c.marketing_consent,
+    'visitas', (select count(*) from o), 'gastado', (select coalesce(round(sum(total), 2), 0) from o), 'ultima', (select max(closed_at) from o),
+    'suele', (select coalesce(jsonb_agg(x.nombre order by x.n desc), '[]'::jsonb) from (
+               select i.name || case when i.variant <> '' then ' ' || i.variant else '' end nombre, sum(i.qty) n
+               from public.pos_items i where i.order_id in (select id from o) and i.status <> 'anulado' and i.canje is null
+               group by 1 order by 2 desc limit 3) x),
+    'sellos', (select count(*) from o where o.sello),
+    'canjes', (select count(distinct i.order_id) from public.pos_items i where i.order_id in (select id from o) and i.canje is not null))
+  into r;
+  return r;
+end $$;
+
+-- Buscador único de la caja: teléfono, cédula o nombre (todas las palabras, sin acentos). Hasta 6 clientes, los más
+-- seguros primero (teléfono o cédula completos), cada uno con su ficha.
+create or replace function public.pos_customer_search(p_emp bigint, p_pin text, p_q text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare q text := trim(coalesce(p_q, '')); dig text := regexp_replace(coalesce(p_q, ''), '\D', '', 'g');
+        tel text; f text; pal text[]; r jsonb;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  if length(q) < 3 then return '[]'::jsonb; end if;
+  tel := regexp_replace(dig, '^(58|0)', '');                       -- 0414… o 58414… → 414…
+  f := regexp_replace(public.pos_fold(q), '[^a-z0-9 ]', ' ', 'g');
+  pal := array(select w from unnest(string_to_array(f, ' ')) w where length(w) >= 2);
+  select coalesce(jsonb_agg(public.pos_customer_card(c) order by x.rk, x.id desc), '[]'::jsonb) into r
+  from (
+    select c.id,
+      case when length(dig) >= 10 and public.phone_key(c.phone) = right(dig, 10) then 1
+           when length(dig) >= 6 and regexp_replace(coalesce(c.doc_id, ''), '\D', '', 'g') = dig then 1
+           when length(tel) >= 4 and public.phone_key(c.phone) like '%' || tel || '%' then 2
+           when length(dig) >= 4 and regexp_replace(coalesce(c.doc_id, ''), '\D', '', 'g') like '%' || dig || '%' then 3
+           when public.pos_fold(c.name) like coalesce(pal[1], '') || '%' then 4 else 5 end rk
+    from public.customers c
+    where (length(tel) >= 4 and public.phone_key(c.phone) like '%' || tel || '%')
+       or (length(dig) >= 4 and regexp_replace(coalesce(c.doc_id, ''), '\D', '', 'g') like '%' || dig || '%')
+       or (length(dig) < 4 and cardinality(pal) > 0
+           and (select bool_and(public.pos_fold(c.name) like '%' || w || '%') from unnest(pal) w))
+    order by 2, c.id desc limit 6
+  ) x join public.customers c on c.id = x.id;
+  return r;
+end $$;
+
+-- La ficha del cliente que ya tiene el pedido (para abrir la ventana del cliente con su ficha)
+create or replace function public.pos_customer_ficha(p_emp bigint, p_pin text, p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r jsonb;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  select public.pos_customer_card(c) into r from public.customers c where c.id = p_id;
+  return r;
+end $$;
+
+-- ---------------------------------------------------------------- Gestión › Clientes: posibles repetidos y unir
+-- Grupos con el mismo nombre (sin acentos ni mayúsculas), el mismo teléfono o la misma cédula.
+create or replace function public.gestion_clientes_repetidos() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r jsonb;
+begin
+  if not public.can_manage() then raise exception 'Sin permiso'; end if;
+  with c as (
+    select c.*, public.pos_fold(regexp_replace(trim(c.name), '\s+', ' ', 'g')) nk, public.phone_key(c.phone) tk,
+           nullif(regexp_replace(coalesce(c.doc_id, ''), '\D', '', 'g'), '') dk,
+           (select count(*) from public.pos_orders o where o.customer_id = c.id and o.status = 'cobrada') pedidos
+    from public.customers c
+  ), g as (
+    select 'nombre' por, nk k from c where nk <> '' group by nk having count(*) > 1
+    union all select 'telefono', tk from c where tk is not null group by tk having count(*) > 1
+    union all select 'cedula', dk from c where dk is not null group by dk having count(*) > 1
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('por', g.por, 'clientes', (
+      select jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'doc_id', c.doc_id, 'phone', c.phone, 'email', c.email,
+               'desde', c.registered_at, 'origen', c.source, 'pedidos', c.pedidos) order by c.pedidos desc, c.id)
+      from c where (g.por = 'nombre' and c.nk = g.k) or (g.por = 'telefono' and c.tk = g.k) or (g.por = 'cedula' and c.dk = g.k)))
+    order by g.por, g.k), '[]'::jsonb) into r from g;
+  return r;
+end $$;
+
+-- Une dos clientes: los pedidos y conversaciones de «sale» pasan a «queda», que completa lo que le falte; «sale» se borra.
+create or replace function public.gestion_unir_clientes(p_queda bigint, p_sale bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare a public.customers; b public.customers; n int;
+begin
+  if not public.can_manage() then raise exception 'Sin permiso'; end if;
+  if p_queda = p_sale then raise exception 'Elige dos clientes distintos'; end if;
+  select * into a from public.customers where id = p_queda for update;
+  select * into b from public.customers where id = p_sale for update;
+  if a.id is null or b.id is null then raise exception 'Uno de los dos clientes ya no está'; end if;
+  if a.doc_id is not null and b.doc_id is not null and regexp_replace(a.doc_id, '^[VEJGP]', '') <> regexp_replace(b.doc_id, '^[VEJGP]', '') then
+    raise exception 'Tienen cédulas distintas (% y %): no son la misma persona', a.doc_id, b.doc_id;
+  end if;
+  update public.pos_orders set customer_id = a.id where customer_id = b.id;
+  get diagnostics n = row_count;
+  update public.wa_conversations set customer_id = a.id where customer_id = b.id;
+  delete from public.customers where id = b.id;   -- primero se borra: la cédula y el WhatsApp no se pueden repetir
+  update public.customers set doc_id = coalesce(a.doc_id, b.doc_id), phone = coalesce(nullif(a.phone, ''), b.phone, ''),
+    email = coalesce(nullif(a.email, ''), b.email, ''), address = coalesce(nullif(a.address, ''), b.address, ''),
+    notes = concat_ws(' · ', nullif(a.notes, ''), nullif(b.notes, '')), wa_phone = coalesce(a.wa_phone, b.wa_phone),
+    marketing_consent = a.marketing_consent or b.marketing_consent, consent_at = coalesce(a.consent_at, b.consent_at),
+    registered_at = least(a.registered_at, b.registered_at)
+  where id = a.id;
+  return jsonb_build_object('id', a.id, 'pedidos', n);
+end $$;
+
 create or replace function public.pos_customer_by_phone(p_emp bigint, p_pin text, p_phone text) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare key text := public.phone_key(p_phone); c record; h jsonb;
@@ -263,7 +384,9 @@ create trigger pos_delivery_customer before insert or update of phone, address o
 do $$
 declare f text;
 begin
-  foreach f in array array['import_data(text, jsonb, boolean)', 'menu_sales(date, date)', 'pos_customer_by_phone(bigint, text, text)'] loop
+  foreach f in array array['import_data(text, jsonb, boolean)', 'menu_sales(date, date)', 'pos_customer_by_phone(bigint, text, text)',
+                           'pos_customer_search(bigint, text, text)', 'pos_customer_ficha(bigint, text, bigint)',
+                           'gestion_clientes_repetidos()', 'gestion_unir_clientes(bigint, bigint)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
@@ -271,4 +394,5 @@ begin
     execute format('revoke execute on function public.%s from anon, public, authenticated', f);
   end loop;
 end $$;
+revoke execute on function public.pos_customer_card(public.customers) from anon, public, authenticated;
 revoke execute on function public.imp_norm(text), public.phone_key(text), public.imp_unit(text), public.imp_family(text), public.imp_num(text) from anon;

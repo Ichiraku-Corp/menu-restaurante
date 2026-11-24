@@ -1743,28 +1743,46 @@ begin
 end $$;
 
 -- Guarda (o actualiza) el cliente y lo une al pedido.
+--  · p_customer: el cliente que eligió el cajero en el buscador (se le completan o corrigen los datos escritos).
+--  · p_modo 'revisar': si la cédula o el teléfono ya son de un cliente, no guarda nada y devuelve
+--    {conflicto: su ficha, por: 'cedula' | 'telefono'} para que el cajero diga si es la misma persona.
+--  · p_modo 'nuevo': crea un cliente nuevo aunque el teléfono ya sea de otro (otra persona con el mismo teléfono).
+--  · Sin p_customer ni p_modo: como antes (reconoce por cédula y, si no, por teléfono). Lo usan WhatsApp y las cajas viejas.
+drop function if exists public.pos_set_customer(bigint, text, bigint, text, text, text, text, boolean);
 create or replace function public.pos_set_customer(p_emp bigint, p_pin text, p_order bigint, p_doc text, p_name text,
-  p_phone text default '', p_email text default '', p_consent boolean default false)
+  p_phone text default '', p_email text default '', p_consent boolean default false, p_customer bigint default null, p_modo text default '')
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare d text := public.pos_doc(p_doc); cid bigint;
+declare d text := public.pos_doc(p_doc); cid bigint; otro bigint; por text; k text := public.phone_key(p_phone);
+        tel text := left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20); mail text := left(lower(trim(coalesce(p_email, ''))), 120);
 begin
   perform public.pos_auth(p_emp, p_pin);
   if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
-  cid := public.pos_customer_id(d);
-  -- Sin cédula (o con una que no está), el teléfono reconoce al cliente que ya vino, si no tiene otra cédula
-  if cid is null and public.phone_key(p_phone) is not null then
-    select id into cid from public.customers
-    where public.phone_key(phone) = public.phone_key(p_phone) and (d is null or doc_id is null) order by id limit 1;
+  if p_customer is not null then
+    select id into cid from public.customers where id = p_customer;
+    if cid is null then raise exception 'Ese cliente ya no está: búscalo otra vez'; end if;
+    otro := public.pos_customer_id(d);
+    if otro is not null and otro <> cid then
+      raise exception 'Esa cédula es de otro cliente (%): búscalo con la cédula', (select name from public.customers where id = otro);
+    end if;
+  else
+    cid := public.pos_customer_id(d);   -- la cédula manda
+    if cid is not null then por := 'cedula'; end if;
+    if cid is null and k is not null and coalesce(p_modo, '') <> 'nuevo' then
+      -- Sin cédula (o con una que no está), el teléfono reconoce al cliente que ya vino, si no tiene otra cédula
+      select id into cid from public.customers where public.phone_key(phone) = k and (d is null or doc_id is null) order by id limit 1;
+      if cid is not null then por := 'telefono'; end if;
+    end if;
+    if cid is not null and p_modo = 'revisar' then
+      return jsonb_build_object('conflicto', (select public.pos_customer_card(c) from public.customers c where c.id = cid), 'por', por);
+    end if;
   end if;
   if cid is null then
     insert into public.customers (doc_id, name, phone, email, registered_at, source, marketing_consent, consent_at)
-    values (d, left(trim(p_name), 80), left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), left(lower(trim(coalesce(p_email, ''))), 120),
-            (now() at time zone 'America/Caracas')::date, 'pos', coalesce(p_consent, false), case when p_consent then now() end)
+    values (d, left(trim(p_name), 80), tel, mail, (now() at time zone 'America/Caracas')::date, 'pos', coalesce(p_consent, false), case when p_consent then now() end)
     returning id into cid;
   else
     update public.customers set name = left(trim(p_name), 80), doc_id = coalesce(doc_id, d),
-      phone = coalesce(nullif(left(regexp_replace(coalesce(p_phone, ''), '[^0-9+]', '', 'g'), 20), ''), phone),
-      email = coalesce(nullif(left(lower(trim(coalesce(p_email, ''))), 120), ''), email),
+      phone = coalesce(nullif(tel, ''), phone), email = coalesce(nullif(mail, ''), email),
       marketing_consent = marketing_consent or coalesce(p_consent, false),
       consent_at = case when p_consent and not marketing_consent then now() else consent_at end
     where id = cid;
@@ -2303,7 +2321,7 @@ begin
     'pos_canje(bigint, text, bigint, jsonb)', 'pos_canje_quitar(bigint, text, bigint)',
     'pos_open_delivery(bigint, text, text, text, text, numeric, text)', 'pos_set_delivery(bigint, text, bigint, text, text, text, numeric, text)',
     'pos_set_available(bigint, text, bigint, boolean)', 'pos_find_customer(bigint, text, text)',
-    'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
+    'pos_set_customer(bigint, text, bigint, text, text, text, text, boolean, bigint, text)', 'pos_inventory()', 'pos_count(bigint, text, jsonb)',
     'pos_session_report(bigint)', 'pos_report_next(integer)', 'pos_report_done(bigint, boolean, text)', 'pos_ranking(date, date)', 'pos_tops()', 'pos_top_dishes(integer)', 'pos_notas(integer)',
     'pos_cancel(bigint, text, bigint, text)', 'pos_set_rate(numeric, text, bigint, text, date)', 'pos_cash_open(bigint, text, numeric, numeric)',
     'pos_cash_summary(bigint)', 'pos_sync_day(date)', 'pos_cash_close(bigint, text, jsonb, text)', 'pos_print_next(int)',

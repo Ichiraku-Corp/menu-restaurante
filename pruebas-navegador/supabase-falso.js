@@ -7,6 +7,12 @@
   window.__S=S;
   function lbl(o){ if(o.kind==='delivery') return 'Delivery: '+o.label; if(o.kind==='mesa'){ var t=tables.find(function(x){return x.id===o.table_id}); return t.area+' '+t.number;} return 'Para llevar'+(o.label?': '+o.label:''); }
   function tot(o){ var sub=S.items.filter(function(i){return i.order_id===o.id&&i.status!=='anulado'}).reduce(function(s,i){return s+i.qty*i.unit_price},0), d=Math.min(o.discount||0,sub), svc=Math.round((sub-d)*o.service_pct)/100, dl=o.delivery_fee||0; return {subtotal:sub,discount:d,service:svc,delivery:dl,total:sub-d+svc+dl,paid:o.paid||0}; }
+  // Clientes (buscador único de la caja): Ana ya vino 3 veces y lleva 2 sellos de la tarjeta de puntos
+  S.clientes=[{id:7,name:'Ana Frecuente',phone:'04141234567',doc_id:'V12345678',email:'',acepta:false,visitas:3,gastado:45,sellos:2,canjes:0,suele:['Gyozas','Ramen Gr'],ultima:new Date(Date.now()-2*86400000).toISOString()}];
+  function fold(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+  function tkey(t){ var d=String(t||'').replace(/\D/g,''); return d.length>=10?d.slice(-10):''; }
+  function card(c){ var k=tkey(c.phone); return {id:c.id,name:c.name,tel:k?'0'+k.slice(0,3)+' ••• '+k.slice(-4):null,doc:c.doc_id?c.doc_id.charAt(0)+'-•••'+c.doc_id.slice(-3):null,
+    correo:!!c.email,acepta:!!c.acepta,visitas:c.visitas||0,gastado:c.gastado||0,ultima:c.ultima||null,suele:c.suele||[],sellos:c.sellos||0,canjes:c.canjes||0}; }
   function auth(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   function splitTot(o){ if(!o.split||o.split.n<2) return []; var t=tot(o), units=[]; S.items.filter(function(i){return i.order_id===o.id&&i.status!=='anulado'}).forEach(function(i){ var u=o.split.units[i.id]||[]; for(var k=0;k<Math.ceil(i.qty);k++) units.push({p:u[k]||0,price:i.unit_price*Math.min(1,i.qty-k)}); });
     var free=units.some(function(u){return !u.p}), last=0; units.forEach(function(u){ if(u.p>last) last=u.p; }); var list=[]; for(var p=1;p<=o.split.n;p++) list.push(p); if(free) list.push(0); var acc=0;
@@ -79,7 +85,20 @@
       kids.forEach(function(k){ if(k.status==='pendiente') quitar(k); else { k.status='anulado'; k.void_reason=a.p_reason; } }); return 'anulado'; },
     pos_discount:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.discount=a.p_amount; o.discount_reason=a.p_reason; },
     pos_precuenta:function(a){ auth(a); S.orders.find(function(x){return x.id===a.p_order}).precuenta_at=new Date().toISOString(); S.jobs.push('caja'); },
-    pos_set_customer:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.client={id:900+o.id,name:String(a.p_name||'').trim(),phone:String(a.p_phone||'').replace(/[^0-9+]/g,''),doc_id:a.p_doc||'',email:a.p_email||''}; return {id:o.client.id}; },
+    pos_customer_search:function(a){ auth(a); var q=String(a.p_q||'').trim(), dig=q.replace(/\D/g,''), tel=dig.replace(/^(58|0)/,''), pal=fold(q).split(/[^a-z0-9]+/).filter(function(w){return w.length>=2});
+      if(q.length<3) return []; window.__busquedas=(window.__busquedas||0)+1;
+      return S.clientes.filter(function(c){ return (tel.length>=4&&tkey(c.phone).indexOf(tel)>=0)||(dig.length>=4&&String(c.doc_id||'').replace(/\D/g,'').indexOf(dig)>=0)||
+        (dig.length<4&&pal.length&&pal.every(function(w){return fold(c.name).indexOf(w)>=0})); }).slice(0,6).map(card); },
+    pos_customer_ficha:function(a){ auth(a); var c=S.clientes.find(function(x){return x.id===a.p_id}); return c?card(c):null; },
+    pos_set_customer:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}), c=null, por='';
+      var doc=String(a.p_doc||'').toUpperCase().replace(/[\s.\-]/g,''), k=tkey(a.p_phone), tel=String(a.p_phone||'').replace(/[^0-9+]/g,'');
+      if(a.p_customer){ c=S.clientes.find(function(x){return x.id===a.p_customer}); if(!c) throw {message:'Ese cliente ya no está: búscalo otra vez'}; }
+      else { if(doc) c=S.clientes.find(function(x){return x.doc_id===doc}); if(c) por='cedula';
+        if(!c&&k&&a.p_modo!=='nuevo'){ c=S.clientes.find(function(x){return tkey(x.phone)===k}); if(c) por='telefono'; }
+        if(c&&a.p_modo==='revisar') return {conflicto:card(c),por:por}; }
+      if(!c){ c={id:900+o.id,name:'',phone:'',doc_id:doc||null,email:'',acepta:false}; S.clientes.push(c); }
+      c.name=String(a.p_name||'').trim(); if(tel) c.phone=tel; if(doc&&!c.doc_id) c.doc_id=doc; if(a.p_email) c.email=a.p_email; if(a.p_consent) c.acepta=true;
+      window.__cliente=a; o.client={id:c.id,name:c.name,phone:c.phone,doc_id:c.doc_id||'',email:c.email}; return {id:c.id}; },
     pos_customer_by_phone:function(a){ auth(a); return String(a.p_phone).replace(/\D/g,'').slice(-10)==='4141234567' ? {id:7,name:'Ana Frecuente',address:'Calle 2, casa azul',notes:'',orders:3,spent:45,last_at:new Date(Date.now()-2*86400000).toISOString(),top:['Gyozas','Ramen']} : null; },
     pos_open_delivery:function(a){ auth(a); var o={id:++id,kind:'delivery',table_id:null,label:a.p_name,phone:a.p_phone,address:a.p_address,delivery_fee:a.p_fee,channel:a.p_channel||'propio',status:'abierta',service_pct:0,opened_at:new Date().toISOString()}; S.orders.push(o); return o.id; },
     pos_set_delivery:function(a){ auth(a); var o=S.orders.find(function(x){return x.id===a.p_order}); o.label=a.p_name; o.phone=a.p_phone; o.address=a.p_address; o.delivery_fee=a.p_fee; if(a.p_channel) o.channel=a.p_channel; },
