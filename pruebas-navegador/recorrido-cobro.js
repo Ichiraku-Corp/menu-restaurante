@@ -82,6 +82,11 @@ ok(await p.evaluate(()=>window.__canje&&window.__canje.premio==="bebida"&&window
 ok(await p.isVisible("#payDlg")&&total0!==total1&&/Canje ✓/.test(await p.textContent("#canjeBtn")),"el cobro se vuelve a abrir con el total sin el premio ("+total0+" → "+total1+")");
 await p.check("#selloChk");
 ok(await p.evaluate(()=>document.getElementById("selloBox").classList.contains("marcada")),"al marcar la casilla queda en verde: «Se anota un sello en esta compra»");
+await p.click('#payMethods [data-m="yummy"]');await p.waitForTimeout(200);
+ok(await selloBloqueado(),"si se cobra con Yummy, la casilla del sello se desmarca y se apaga");
+await p.click("#payLines .del");await p.waitForTimeout(200);
+ok(!(await p.isDisabled("#selloChk")),"al quitar el pago de Yummy la casilla vuelve");
+await p.check("#selloChk");
 await p.click('#payMethods [data-m="punto_debito"]');await p.waitForTimeout(200);await p.click("#payOk");await p.waitForTimeout(500);
 ok(await p.evaluate(()=>window.__sello===true),"al cobrar se manda «Tarjeta entregada» con el pago");
 // Quien viene solo a canjear su premio: la cuenta queda en Ref 0 y se cierra sin pago
@@ -103,10 +108,12 @@ ok(await p.evaluate(()=>window.__lastPay&&window.__lastPay.payments.length===0&&
 if(await p.isVisible("#back"))await p.click("#back");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 const yid=await p.evaluate(()=>rpc("pos_open_delivery",{p_name:"Cliente Yummy",p_phone:"",p_address:"",p_fee:0,p_channel:"yummy"}));
 await p.evaluate((id)=>openOrder(id),yid);await p.waitForSelector("#orderView:not(.hidden)");
-await p.click('#cats button:has-text("Entradas")');await p.click('#dishes button:has-text("Gyozas")');await p.click("#send");await p.waitForTimeout(300);
+await p.click('#cats button:has-text("Entradas")');for(let k=0;k<4;k++){await p.click('#dishes button:has-text("Gyozas")');await p.waitForTimeout(60);}
+await p.click("#send");await p.waitForTimeout(300);
 await p.click("#pay");await p.waitForTimeout(400);
 ok(!(await p.isVisible("#cliDlg"))&&await p.isVisible("#payDlg")&&/Yummy/.test(await p.textContent("#payLines"))&&/Pedido de Yummy/.test(await p.textContent("#payErr"))&&!(await p.isDisabled("#payOk")),
   "un pedido de Yummy no pide datos del cliente y el cobro llega con Yummy por el total");
+ok(await selloBloqueado()&&/Yummy no llevan sello/.test(await p.textContent("#selloHint")),"un pedido de Yummy de Ref 20 no lleva sello: la casilla no se puede marcar");
 const colorNota=()=>p.evaluate(()=>getComputedStyle(document.getElementById("payErr")).color);
 ok(await colorNota()==="rgb(26, 127, 178)","la nota de Yummy sale en azul (informativa), no en rojo de error");
 await p.setViewportSize({width:1000,height:1000});await p.waitForTimeout(200);
@@ -115,7 +122,7 @@ await p.setViewportSize({width:1280,height:700});await p.waitForTimeout(200);
 await p.click("#payOk");await p.waitForTimeout(500);
 ok(await p.evaluate((id)=>window.__S.orders.find(o=>o.id===id).status==="cobrada"&&window.__lastPay.payments.length===1&&window.__lastPay.payments[0].method==="yummy",yid),"se cobra con el método Yummy");
 await p.click("#btnCaja");await p.waitForTimeout(400);
-ok(/Yummy \(por cobrar, no va en la gaveta\)\s*Ref 5,00/.test(await p.textContent("#cashBody")),"en «Caja» el resumen del turno muestra lo de Yummy aparte");
+ok(/Yummy \(por cobrar, no va en la gaveta\)\s*Ref 20,00/.test(await p.textContent("#cashBody")),"en «Caja» el resumen del turno muestra lo de Yummy aparte");
 await p.screenshot({path:process.env.CAPTURA_YUMMY_CAJA||"/dev/null"}).catch(()=>{});
 await p.click("#cashClose").catch(()=>{});await p.waitForTimeout(200);
 // Consumo de un empleado: se puede seguir sin datos del cliente, pero solo cargándolo a su cuenta

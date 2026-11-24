@@ -149,7 +149,7 @@ begin
     from jsonb_array_elements(coalesce(e -> 'lines', '[]'::jsonb)) x where coalesce(x ->> 'method', '') <> 'cuenta';
     begin
       r := public.pos_pay_core(emp, oid, lines, coalesce(nullif(e ->> 'change_currency', ''), 'REF'), true, at, true);
-      if coalesce((e ->> 'sello')::boolean, false) and (select t.total from public.pos_totals(oid) t) >= 19.995 then
+      if coalesce((e ->> 'sello')::boolean, false) and (select t.total from public.pos_totals(oid) t) >= 19.995 and not public.pos_es_yummy(oid) then
         update public.pos_orders set sello = true where id = oid;
       end if;
       if not coalesce((r ->> 'closed')::boolean, false) then

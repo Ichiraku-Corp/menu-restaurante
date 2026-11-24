@@ -1270,6 +1270,14 @@ revoke execute on function public.pos_pay_core(bigint, bigint, jsonb, text, bool
 
 -- p_sello: la casilla «Tarjeta entregada» (un sello por compra). null = no se toca (las tablets viejas no la mandan).
 drop function if exists public.pos_pay(bigint, text, bigint, jsonb, text, boolean);
+-- Pedido de Yummy: abierto como Yummy o cobrado con Yummy (no lleva sello de la tarjeta de puntos)
+create or replace function public.pos_es_yummy(p_order bigint) returns boolean
+language sql stable set search_path = public as $$
+  select coalesce((select o.channel = 'yummy' from public.pos_orders o where o.id = p_order), false)
+      or exists (select 1 from public.pos_payments y where y.order_id = p_order and y.method = 'yummy')
+$$;
+revoke execute on function public.pos_es_yummy(bigint) from anon, public, authenticated;
+
 create or replace function public.pos_pay(p_emp bigint, p_pin text, p_order bigint, p_payments jsonb, p_change_currency text default 'REF', p_partial boolean default false,
                                           p_sello boolean default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -1277,9 +1285,10 @@ declare r jsonb;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   r := public.pos_pay_core(p_emp, p_order, p_payments, p_change_currency, p_partial, now(), false);
-  -- Un sello por compra de Ref 20 o más: por debajo no se anota aunque llegue marcado
+  -- Un sello por compra de Ref 20 o más: por debajo no se anota aunque llegue marcado. Los pedidos de Yummy no llevan sello.
   if p_sello is not null then
-    update public.pos_orders set sello = p_sello and (select t.total from public.pos_totals(p_order) t) >= 19.995 where id = p_order;
+    update public.pos_orders set sello = p_sello and (select t.total from public.pos_totals(p_order) t) >= 19.995 and not public.pos_es_yummy(p_order)
+    where id = p_order;
   end if;
   return r;
 end $$;

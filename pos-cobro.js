@@ -121,6 +121,7 @@ function drawPays() {
         '<button type="button" class="bclr" data-bill="0" title="Borrar el monto">Borrar</button></span>' : "") + "</div>";
   }).join("");
   updatePaySums();
+  drawSello();  // un pago de Yummy apaga la casilla del sello; si se quita, vuelve
 }
 // Equivalente de cada pago en la otra moneda (para responder «¿cuánto son 13 $ en bolívares?»)
 function isRefMethod(k) { var m = minfo(k); return m && m[2] === "REF"; }
@@ -288,7 +289,9 @@ function doPay(partial) {
 var SELLO_DESDE = 20;
 function drawSello() {
   if (!cur.data) return;
-  var lleva = num(cur.data.totals.total) >= SELLO_DESDE - 0.005;
+  // Los pedidos de Yummy (abiertos como Yummy o con un pago de Yummy) no llevan sello
+  var yum = esYummy(cur.data) || pays.some(function (p) { return p.method === "yummy"; });
+  var lleva = !yum && num(cur.data.totals.total) >= SELLO_DESDE - 0.005;
   // Por debajo de Ref 20 no hay sello: la casilla no se puede marcar
   if (!lleva) $("selloChk").checked = false;
   $("selloChk").disabled = !lleva;
@@ -296,7 +299,8 @@ function drawSello() {
   $("selloBox").classList.toggle("marcada", marcada);
   $("selloBox").classList.toggle("lleva", lleva && !marcada);
   $("selloHint").textContent = marcada ? "Se anota un sello en esta compra"
-    : lleva ? "Esta compra lleva sello: márcala si entregaste la tarjeta o el sello" : "Un sello por compra de Ref " + SELLO_DESDE + " o más";
+    : lleva ? "Esta compra lleva sello: márcala si entregaste la tarjeta o el sello"
+    : yum ? "Los pedidos de Yummy no llevan sello" : "Un sello por compra de Ref " + SELLO_DESDE + " o más";
   var hay = (cur.data.items || []).some(function (i) { return i.canje && i.status !== "anulado"; });
   $("canjeBtn").classList.toggle("hay", hay);
   $("canjeBtn").textContent = hay ? "Canje ✓" : "Canje de tarjeta";
