@@ -5,6 +5,8 @@
 //    precuentas, recibos, cierres) y los manda a la impresora que toca por la red
 //    (ESC/POS, puerto 9100).
 //  · Cada 30 minutos lee la tasa del euro del BCV y la guarda para la caja.
+//  · Si hay cámaras en config.json: cuando Nex (o el dueño) pide una foto, la toma del grabador
+//    de la red del local y la sube al bucket privado «camaras» (la clave del grabador nunca sale de aquí).
 //
 // Usa la cuenta «impresora», que solo puede leer la cola de impresión y guardar la tasa.
 // Configuración: config.json en esta misma carpeta (copia de config.example.json).
@@ -25,7 +27,7 @@ function reloadConfig() {
     const t = fs.statSync(CFG_FILE).mtimeMs; if (t === cfgTime) return;
     const fresh = JSON.parse(fs.readFileSync(CFG_FILE, "utf8"));
     cfgTime = t;
-    for (const k of ["correo", "binance", "paypal", "bcv", "bcv_minutes", "actualizar"]) { if (k in fresh) cfg[k] = fresh[k]; else delete cfg[k]; }
+    for (const k of ["correo", "binance", "paypal", "bcv", "bcv_minutes", "actualizar", "camaras"]) { if (k in fresh) cfg[k] = fresh[k]; else delete cfg[k]; }
     log("config.json cambió: se volvió a leer. " + keysInfo() + " · correo " + (cfg.correo && cfg.correo.host && cfg.correo.password ? "configurado (" + cfg.correo.user + ")" : "SIN configurar"));
   } catch (e) { log("config.json tiene un error de escritura, se sigue usando el anterior: " + e.message); }
 }
@@ -999,6 +1001,108 @@ async function srSync() {
   finally { srSyncing = false; }
 }
 
+// ---------------------------------------------------------------- Cámaras (Nex mira por el grabador del local)
+// config.json: "camaras": { "marca": "hikvision" o "dahua", "host": "192.168.1.64", "puerto": 80, "usuario": "nex", "clave": "…" }
+//  · Conviene un usuario del grabador solo para ver (sin permiso de cambiar nada).
+//  · "ruta_foto" (opcional) cambia la dirección de la foto: {canal} y {flujo} (01 = principal, 02 = secundario).
+// Sin "camaras" no hace nada. Cada 3 s pregunta qué fotos tomar; cada hora borra las viejas.
+function camCfg() { const c = cfg.camaras; return c && c.host && c.usuario && c.clave ? c : null; }
+function camMarca(c) { return String(c.marca || "hikvision").toLowerCase() === "dahua" ? "dahua" : "hikvision"; }
+function camUrl(c, canal, detalle) {
+  const base = "http://" + c.host + (c.puerto && Number(c.puerto) !== 80 ? ":" + Number(c.puerto) : "");
+  const flujo = detalle === "alto" ? "01" : "02", n = Math.max(1, Math.min(64, parseInt(canal, 10) || 1));
+  if (c.ruta_foto) return base + String(c.ruta_foto).replace("{canal}", n).replace("{flujo}", flujo);
+  if (camMarca(c) === "dahua") return base + "/cgi-bin/snapshot.cgi?channel=" + n;
+  return base + "/ISAPI/Streaming/channels/" + n + flujo + "/picture";
+}
+// Autenticación Digest (la que usan Hikvision y Dahua): la clave nunca viaja, solo una huella MD5 de un solo uso.
+function camDigest(desafio, c, metodo, uri) {
+  const p = {};
+  String(desafio).replace(/^\s*Digest\s+/i, "").replace(/([a-z0-9_-]+)\s*=\s*(?:"([^"]*)"|([^,\s]*))/gi, (m, k, q, u) => { p[k.toLowerCase()] = q !== undefined ? q : u; return m; });
+  const md5 = (t) => crypto.createHash("md5").update(t).digest("hex");
+  const nc = "00000001", cnonce = crypto.randomBytes(8).toString("hex");
+  const qops = String(p.qop || "").split(",").map((q) => q.trim()).filter(Boolean);
+  const qop = qops.includes("auth") ? "auth" : qops[0] || "";
+  const ha1 = md5(`${c.usuario}:${p.realm}:${c.clave}`), ha2 = md5(`${metodo}:${uri}`);
+  const resp = qop ? md5(`${ha1}:${p.nonce}:${nc}:${cnonce}:${qop}:${ha2}`) : md5(`${ha1}:${p.nonce}:${ha2}`);
+  let h = `Digest username="${c.usuario}", realm="${p.realm}", nonce="${p.nonce}", uri="${uri}", response="${resp}"`;
+  if (p.algorithm) h += `, algorithm=${p.algorithm}`;
+  if (p.opaque) h += `, opaque="${p.opaque}"`;
+  if (qop) h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
+  return h;
+}
+function camGet(url, autorizacion) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, { headers: autorizacion ? { Authorization: autorizacion } : {}, timeout: 8000 }, (res) => {
+      const partes = []; let n = 0;
+      res.on("data", (d) => { n += d.length; if (n > 6e6) { req.destroy(new Error("La foto pesa demasiado")); return; } partes.push(d); });
+      res.on("end", () => {
+        const desafios = []; for (let i = 0; i < res.rawHeaders.length; i += 2) if (/^www-authenticate$/i.test(res.rawHeaders[i])) desafios.push(res.rawHeaders[i + 1]);
+        resolve({ status: res.statusCode, desafios, body: Buffer.concat(partes) });
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("el grabador no respondió a tiempo")));
+    req.on("error", (e) => reject(new Error(e.code === "ECONNREFUSED" || e.code === "EHOSTUNREACH" ? "no se llega al grabador (" + e.code + ")" : e.message)));
+  });
+}
+async function camFoto(canal, detalle) {
+  const c = camCfg(); if (!c) throw new Error("Cámaras sin configurar en config.json");
+  const url = new URL(camUrl(c, canal, detalle)), uri = url.pathname + url.search;
+  let r = await camGet(url, null);
+  if (r.status === 401) {
+    const dig = r.desafios.find((d) => /^\s*digest/i.test(d));
+    r = await camGet(url, dig ? camDigest(dig, c, "GET", uri) : "Basic " + Buffer.from(c.usuario + ":" + c.clave).toString("base64"));
+  }
+  if (r.status === 401 || r.status === 403) throw new Error("el grabador no aceptó el usuario o la clave");
+  if (r.status === 404) throw new Error("el grabador no tiene el canal " + canal);
+  if (r.status !== 200) throw new Error("el grabador respondió " + r.status);
+  if (!(r.body.length > 100 && r.body[0] === 0xff && r.body[1] === 0xd8)) throw new Error("el grabador no devolvió una foto");
+  return r.body;
+}
+async function camStorage(metodo, ruta, cuerpo, tipo) {
+  if (!token || Date.now() > expires - 120e3) await auth();
+  const r = await fetch(`${URL_}/storage/v1/object/${ruta}`, { method: metodo, body: cuerpo,
+    headers: { apikey: cfg.anon_key, Authorization: `Bearer ${token}`, "Content-Type": tipo } });
+  if (r.status === 401) token = null;
+  if (!r.ok) throw new Error(`no se pudo ${metodo === "DELETE" ? "borrar" : "subir"} la foto (${r.status} ${(await r.text()).slice(0, 120)})`);
+}
+let camOcupado = false, camEstadoAt = 0, camUltimoError = "", camOk = null;
+async function camTick() {
+  const c = camCfg(); if (!c || camOcupado) return;
+  camOcupado = true;
+  try {
+    const estado = Date.now() - camEstadoAt > 60e3 ? { marca: camMarca(c), host: String(c.host), ok: camOk, error: camUltimoError } : null;
+    const lista = await rpc("cam_pendientes", { p_estado: estado });
+    if (estado) camEstadoAt = Date.now();
+    for (const f of lista || []) {
+      try {
+        const jpg = await camFoto(f.canal, f.detalle);
+        const mes = new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 7);  // hora de Caracas
+        const ruta = `${mes}/${f.id}-${crypto.randomBytes(8).toString("hex")}.jpg`;
+        await camStorage("POST", "camaras/" + ruta, jpg, "image/jpeg");
+        await rpc("cam_foto_lista", { p_id: f.id, p_path: ruta, p_bytes: jpg.length, p_error: "" });
+        if (camOk !== true) log("Cámaras: el grabador responde bien");
+        camOk = true; camUltimoError = "";
+      } catch (e) {
+        if (e.message !== camUltimoError) log(`Cámara ${f.camara || f.canal}: no se pudo tomar la foto: ${e.message}`);
+        camOk = false; camUltimoError = e.message;
+        await rpc("cam_foto_lista", { p_id: f.id, p_path: null, p_bytes: null, p_error: e.message }).catch(() => {});
+      }
+    }
+  } catch (e) { /* sin internet o la base todavía sin cámaras: se reintenta en la próxima vuelta */ }
+  finally { camOcupado = false; }
+}
+async function camLimpiar() {
+  if (!camCfg()) return;
+  try {
+    const viejas = await rpc("cam_viejas");
+    if (!viejas || !viejas.length) return;
+    await camStorage("DELETE", "camaras", JSON.stringify({ prefixes: viejas.map((v) => v.path) }), "application/json");
+    await rpc("cam_borradas", { p_ids: viejas.map((v) => v.id) });
+    log(`Cámaras: ${viejas.length} foto(s) de más de 7 días borradas`);
+  } catch (e) { log("Cámaras: no se pudieron borrar las fotos viejas (se reintenta): " + e.message); }
+}
+
 function startBridge() {
   serveApp();
   {
@@ -1018,6 +1122,8 @@ function startBridge() {
     if (srPending().length) log(`Hay ${srPending().length} envío(s) hechos sin internet por subir`);
     checkBinance(); setInterval(checkBinance, 60e3);          // Binance Pay: casi al instante
     checkPaypal(); setInterval(checkPaypal, 5 * 60e3);        // PayPal: su reporte tarda hasta 3 h en mostrar cada pago
+    { const c = camCfg(); log("Cámaras: " + (c ? "configuradas (" + camMarca(c) + " " + c.host + ")" : "sin configurar")); }
+    setInterval(camTick, 3000); setTimeout(camLimpiar, 5 * 60e3); setInterval(camLimpiar, 3600e3);
   }
 }
-module.exports = { qrMatrix, qrRS, qrFormatBits, qrBytes, srApi, srComandas, srValid, srValidPago, srRecibo, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };
+module.exports = { camDigest, camUrl, camFoto, camTick, camLimpiar, reloadConfig, qrMatrix, qrRS, qrFormatBits, qrBytes, srApi, srComandas, srValid, srValidPago, srRecibo, srSync, srPending, sentryReport, checkUpdate, rollbackIfBroken, allowedPath, render, parseBcv, ascii, wrap, smtpSend, reportHtml, checkBinance, checkPaypal };

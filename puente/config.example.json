@@ -31,5 +31,13 @@
   "paypal": {
     "client_id": "",
     "client_secret": ""
+  },
+  "camaras_ejemplo": {
+    "_como_usar": "Cuando instalen el grabador, cambia el nombre de este bloque a \"camaras\" y llena los datos. La clave es de un usuario del grabador solo para ver.",
+    "marca": "hikvision",
+    "host": "192.168.1.64",
+    "puerto": 80,
+    "usuario": "nex",
+    "clave": "CLAVE-DEL-USUARIO-DEL-GRABADOR"
   }
 }
