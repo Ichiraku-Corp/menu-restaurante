@@ -33,7 +33,7 @@ function openCash() {
       }).join("");
       var outs = (sm.outs || []).length ? '<p class="muted" style="margin:6px 0">Salidas: ' + sm.outs.map(function (o) { return esc(o.reason) + " " + (o.method === "efectivo_usd" ? "$ " : "Bs ") + nf2.format(num(o.amount)) + " (" + esc(o.by || "") + ")"; }).join(" · ") + " — ya restadas del esperado.</p>" : "";
       // Pestaña 1: Resumen del turno
-      var res = '<div id="premiosBox"></div><div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
+      var res = '<div class="card"><div class="row between"><b>Caja abierta</b><span class="muted">desde ' + new Date(sm.opened_at).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + " por " + esc(sm.opened_by || "") + "</span></div>" +
         '<div class="tot"><span>Pedidos cobrados</span><b>' + sm.orders + '</b></div><div class="tot"><span>Ventas (con IVA)</span><b>' + ref(num(sm.sales)) + '</b></div><div class="tot"><span>Servicio</span><b>' + ref(num(sm.service)) + "</b></div>" +
         // Yummy le paga al restaurante después por pago móvil: se ve aparte y no se cuenta en la gaveta
         (sm.methods && sm.methods.yummy && num(sm.methods.yummy.amount) ? '<div class="tot"><span>Yummy (por cobrar, no va en la gaveta)</span><b>' + ref(num(sm.methods.yummy.amount)) + "</b></div>" : "") +
@@ -68,7 +68,6 @@ function openCash() {
       h = '<div class="ctabs" role="tablist"><button type="button" data-ctab="res">Resumen</button><button type="button" data-ctab="cierre">Cerrar caja</button><button type="button" data-ctab="tools">Herramientas</button></div>' +
         '<div data-cpanel="res">' + h + res + '</div><div data-cpanel="cierre">' + cie + '</div><div data-cpanel="tools">' + tools + "</div>";
       $("cashBody").innerHTML = h;
-      if (typeof shibuPremiosCaja === "function" && U.charge) shibuPremiosCaja();  // premios de misiones por aprobar
       // Caja nueva (otro día, sin recargar la página): el cierre vuelve a empezar ciego, desde el efectivo
       if (BLIND.session !== sm.id) { BLIND = { session: sm.id, revealed: false, first: null }; CSTEP = 1; CASHTAB = "res"; }
       cashTab(CASHTAB || "res"); cashStep(CSTEP || 1); cashDiff();

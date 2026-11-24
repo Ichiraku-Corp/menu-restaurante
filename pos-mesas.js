@@ -151,8 +151,10 @@ function drawTables() {
   if (!ST) return;
   if (AREAS.indexOf(cur.area) >= 0) { try { localStorage.setItem("pos-last-area", cur.area); } catch (e) {} }
   setTimeout(syncBars, 0);
-  $("areas").innerHTML = AREAS.concat(["Para llevar", "Delivery", "Por cobrar", "Tops"]).map(function (a) {
-    var n = a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length + (ST.entregar || []).length
+  var maids = typeof shibuTabVisible === "function" && shibuTabVisible();
+  if (cur.area === "Maids" && !maids) cur.area = AREAS[0];
+  $("areas").innerHTML = AREAS.concat(maids ? ["Maids"] : [], ["Para llevar", "Delivery", "Por cobrar", "Tops"]).map(function (a) {
+    var n = a === "Maids" ? shibuTabCount() : a === "Para llevar" ? ST.orders.filter(function (o) { return o.kind === "llevar"; }).length + (ST.entregar || []).length
       : a === "Delivery" ? ST.orders.filter(function (o) { return o.kind === "delivery"; }).length
       : a === "Por cobrar" ? ST.orders.length
       : a === "Tops" ? 0
@@ -174,6 +176,7 @@ function drawTables() {
     return;
   }
   if (cur.area === "Tops") { drawTops(); return; }
+  if (cur.area === "Maids") { shibuTabMaids($("areaBody")); return; }
   if (cur.area === "Por cobrar") {
     // Primero quien pidió la cuenta (el que más espera arriba), después el resto por orden de llegada
     var all = ST.orders.slice().sort(function (a, b) { return (b.precuenta_at ? 1 : 0) - (a.precuenta_at ? 1 : 0) || new Date(a.precuenta_at || a.opened_at) - new Date(b.precuenta_at || b.opened_at); });

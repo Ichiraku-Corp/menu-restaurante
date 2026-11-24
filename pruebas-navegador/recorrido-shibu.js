@@ -66,19 +66,28 @@ ok(await cards.count()===3&&await p.isEnabled('#perfilBody [data-canje="2"]')&&a
 await foto("perfil.png");
 await p.click('#perfilBody [data-canje="2"]');await p.waitForTimeout(500);
 ok((await M()).canjes.length===1&&/Esperando a la cajera/.test(await p.textContent("#perfilBody"))&&/2 puntos/.test(await p.textContent("#perfilBody .perfil-saldos")),"al canjear, el premio espera a la cajera y sus puntos bajan");
-await p.click("#perfilClose");
+await p.click("#perfilClose");await p.waitForTimeout(200);
+// La pestaña «Maids» va junto a Edo; la maid ve su día y su premio esperando
+const tabs=await p.$$eval("#areas [data-area]",l=>l.map(x=>x.dataset.area));
+ok(tabs.indexOf("Maids")===tabs.indexOf("Edo")+1,"la pestaña «Maids» está junto a Edo ("+tabs.join(", ")+")");
+await p.click('#areas [data-area="Maids"]');await p.waitForTimeout(300);
+ok(/Tu día con Shibu/.test(await p.textContent("#areaBody"))&&/Taiyaki · 7 pts/.test(await p.textContent("#areaBody"))&&/1/.test(await p.textContent('#areas [data-area="Maids"] .cnt')),
+  "en «Maids» la maid ve su día y su premio esperando (con el número en la pestaña)");
+await foto("maids-mesera.png");
+await p.click('#areas [data-area="Tokio"]');
 // 4) La cajera entra (también juega) y aprueba el premio en Caja
 await p.click("#btnUser");await p.waitForSelector("#pin:not(.hidden)");
 await pin("2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 if(await p.isVisible("#annDlg")) await p.keyboard.press("Escape");
 await p.waitForSelector("#shibuDlg[open]",{timeout:6000});await p.click("#shibuOk");await p.waitForTimeout(300);
-await p.click("#btnCaja");await p.waitForTimeout(300);if(await p.isVisible("#openCash")){await p.click("#openCash");await p.waitForTimeout(400);}
-if(!(await p.isVisible("#premiosBox"))){await p.click("#btnCaja").catch(()=>{});await p.waitForTimeout(400);}
-await p.waitForSelector("#premiosBox .premio-row",{timeout:5000});
-ok(/Mesera · Taiyaki/.test(await p.textContent("#premiosBox")),"en Caja › Resumen la cajera ve el premio por aprobar");
-await foto("caja-premios.png");
+await p.waitForSelector('#areas [data-area="Maids"] .cnt',{timeout:5000});
+ok((await p.textContent('#areas [data-area="Maids"] .cnt')).trim()==="1","a la cajera le sale el número de premios por aprobar en la pestaña «Maids»");
+await p.click('#areas [data-area="Maids"]');await p.waitForSelector("#premiosBox .premio-row",{timeout:5000});
+ok(/Mesera · Taiyaki/.test(await p.textContent("#premiosBox")),"en la pestaña «Maids» la cajera ve el premio por aprobar");
+await foto("maids-cajera.png");
 await p.click('#premiosBox [data-ok="1"]');await p.waitForTimeout(500);
-ok((await M()).canjes[0].estado==="entregado"&&!(await p.isVisible("#premiosBox .premio-row")),"al aprobarlo queda entregado y sale de la lista");
+ok((await M()).canjes[0].estado==="entregado"&&!(await p.isVisible("#premiosBox .premio-row"))&&/No hay premios esperando/.test(await p.textContent("#premiosBox"))
+  &&!(await p.isVisible('#areas [data-area="Maids"] .cnt')),"al aprobarlo queda entregado, sale de la lista y se apaga el número");
 }catch(e){fallos++;console.log("FALLÓ: "+e.message);}
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE SHIBU PASARON");})();
