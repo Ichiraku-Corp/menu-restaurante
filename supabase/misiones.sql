@@ -391,7 +391,7 @@ begin
     'juega', true, 'activo', true, 'fecha', f, 'tipo_dia', public.mis_tipo_dia(f),
     'nombre', (select name from public.employees where id = p_emp),
     'saludo_hoy', exists (select 1 from public.mis_saludos where employee_id = p_emp and fecha = f),
-    'misiones', coalesce((select jsonb_agg(jsonb_build_object('nivel', d.nivel, 'texto', d.texto, 'puntos', d.puntos,
+    'misiones', coalesce((select jsonb_agg(jsonb_build_object('nivel', d.nivel, 'texto', d.texto, 'puntos', d.puntos, 'tipo', d.tipo,
                   'actual', (m ->> 'actual')::numeric, 'meta', (m ->> 'meta')::numeric, 'al_cierre', public.mis_tipo_cierre(d.tipo),
                   'equipo', d.tipo like 'equipo_%', 'hecha', l.id is not null) order by d.nivel)
                 from public.mis_dia d
