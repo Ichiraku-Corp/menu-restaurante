@@ -14,8 +14,9 @@ select (select id from public.employees where name = 'Cajera Misiones') caja, (s
 -- La cajera de prueba no se llama «Cajera…»: se le activa a mano (en producción entra sola por su cargo)
 update public.employees set juega_misiones = true where id = :caja;
 select prueba.ok(public.mis_juega(:mesera) and public.mis_juega(:caja), 'juegan la maid (por su cargo) y la cajera');
-select prueba.ok((select count(*) from public.mis_catalogo) = 100 and not exists (select 1 from public.mis_catalogo where activa),
-  'las 100 misiones de la lista están cargadas y apagadas hasta que Edgar las apruebe');
+select prueba.ok((select count(*) from public.mis_catalogo where numero between 1 and 100) = 100, 'las 100 misiones de la lista están cargadas');
+-- Aquí se prueba el motor solo: se apagan todas (la selección de Edgar se prueba en 99-misiones-elegidas.sql)
+update public.mis_catalogo set activa = false;
 
 -- 1) Con 3 misiones activas (una por nivel), el día toma una de cada nivel
 update public.mis_catalogo set activa = true where numero in (26, 4, 14);
@@ -211,7 +212,8 @@ select prueba.ok(exists (select 1 from public.mis_logros where employee_id = :me
 
 -- 8) Quien no juega no ve misiones ni canjea; Gestión ve todo y no activa lo que no se puede medir
 update public.employees set juega_misiones = false where id = :caja;
-select (select id from public.mis_catalogo where numero = 69) m69, (select id from public.mis_catalogo where numero = 30) m30 \gset
+select (select id from public.mis_catalogo where numero = 74) m74, (select id from public.mis_catalogo where numero = 30) m30,
+       (select count(*) from public.mis_catalogo) as total_cat \gset
 set role authenticated;
 select prueba.ok(not (public.mis_estado(:caja, '6666') ->> 'juega')::boolean, 'quien no juega no ve misiones');
 select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :caja, '6666', :premio), 'meseras y cajeras', 'quien no juega no canjea');
@@ -221,8 +223,8 @@ insert into public.staff (email, role) values ('dueno@prueba.test', 'dueño') on
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"dueno@prueba.test","aal":"aal2"}', false);
 select jsonb_array_length(public.gestion_misiones() -> 'catalogo') as cat \gset
-select prueba.ok(:cat = 100, 'Gestión ve las 100 misiones');
-select prueba.falla(format('select public.gestion_mision_guardar(%s, true)', :m69), 'todavía no se puede medir',
+select prueba.ok(:cat = :total_cat and :cat >= 100, 'Gestión ve todas las misiones (las 100 de la lista y las que se agregaron)');
+select prueba.falla(format('select public.gestion_mision_guardar(%s, true)', :m74), 'todavía no se puede medir',
   'no se activa una misión que el sistema todavía no mide');
 select public.gestion_mision_guardar(:m30, true, 'Vende postre en 4 comandas', 2, 'todos', null);
 select prueba.falla($$select public.gestion_misiones_ajustes('{"tope_juegos": 50}')$$, 'tope de los juegos', 'el tope de los juegos tiene límite');

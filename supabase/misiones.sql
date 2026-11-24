@@ -23,6 +23,20 @@ language sql stable security definer set search_path = public as $$
                    from public.employees e where e.id = p_emp), false)
 $$;
 
+-- Meseras o cajeras: cada grupo tiene sus misiones del día (las de caja solo las puede cumplir quien cobra)
+create or replace function public.mis_grupo(p_emp bigint) returns text
+language sql stable security definer set search_path = public as $$
+  select case when coalesce((select e.job_title from public.employees e where e.id = p_emp), '') ~* '^\s*caj' then 'cajeras' else 'meseras' end
+$$;
+-- Un número del 0 al 99, fijo para cada día y misión (para las que salen con una frecuencia, como la #43 al 40 %)
+create or replace function public.mis_azar(p_fecha date, p_id bigint) returns int language sql immutable as $$
+  select (('x' || substr(md5(p_fecha::text || '#' || p_id::text), 1, 7))::bit(28)::int % 100) $$;
+-- ¿Hay una promoción activa ese día? (las misiones de «la promo del día» solo salen así)
+create or replace function public.mis_hay_promo(p_fecha date) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.promos p where p.active and extract(isodow from p_fecha)::int = any (p.days)
+                 and (p.date_from is null or p.date_from <= p_fecha) and (p.date_to is null or p.date_to >= p_fecha)) $$;
+
 -- Hoy en Venezuela, y qué tipo de día es (con los datos de noviembre: martes y miércoles flojos, sábado y domingo fuertes)
 create or replace function public.mis_hoy() returns date language sql stable as $$ select (now() at time zone 'America/Caracas')::date $$;
 create or replace function public.mis_tipo_dia(p_fecha date) returns text language sql immutable as $$
@@ -40,17 +54,32 @@ create table if not exists public.mis_catalogo (
   params     jsonb not null default '{}'::jsonb,
   activa     boolean not null default false,
   updated_at timestamptz not null default now());
+-- Para quién es (todas, solo meseras o solo cajeras) y si es la misión extra que sale todos los días (la 4.ª)
+alter table public.mis_catalogo add column if not exists para  text not null default 'todas' check (para in ('todas', 'meseras', 'cajeras'));
+alter table public.mis_catalogo add column if not exists extra boolean not null default false;
 
--- Las 3 misiones de cada día: las mismas para todas
+-- Las misiones de cada día: 3 (fácil, media y difícil) + la extra (nivel 0), unas para las meseras y otras para las cajeras
 create table if not exists public.mis_dia (
   fecha       date not null,
-  nivel       smallint not null check (nivel between 1 and 3),
+  grupo       text not null default 'meseras' check (grupo in ('meseras', 'cajeras')),
+  nivel       smallint not null check (nivel between 0 and 3),
   catalogo_id bigint references public.mis_catalogo(id) on delete set null,
   texto       text not null,
   tipo        text not null,
   params      jsonb not null default '{}'::jsonb,
   puntos      int not null,
-  primary key (fecha, nivel));
+  primary key (fecha, grupo, nivel));
+-- (por si la tabla venía de antes, con las mismas 3 para todas)
+alter table public.mis_dia add column if not exists grupo text not null default 'meseras';
+do $$
+begin
+  if (select array_length(conkey, 1) from pg_constraint where conname = 'mis_dia_pkey' and conrelid = 'public.mis_dia'::regclass) <> 3 then
+    alter table public.mis_dia drop constraint mis_dia_pkey;
+    alter table public.mis_dia add primary key (fecha, grupo, nivel);
+  end if;
+  alter table public.mis_dia drop constraint if exists mis_dia_nivel_check;
+  alter table public.mis_dia add constraint mis_dia_nivel_check check (nivel between 0 and 3);
+end $$;
 
 create table if not exists public.mis_logros (
   id          bigserial primary key,
@@ -188,11 +217,12 @@ $$;
 create or replace function public.mis_tipo_medible(p_tipo text) returns boolean language sql immutable as $$
   select p_tipo in ('comandas', 'atendidas', 'ventas', 'unidades', 'distintos', 'secciones', 'comandas_con', 'promedio', 'primera',
                     'platos_comanda', 'vs_ayer', 'vs_semana', 'top_ventas', 'equipo_meta', 'equipo_unidades', 'sellos', 'clientes_nuevos',
-                    'para_llevar', 'delivery', 'rapidas', 'express', 'sin_anulaciones', 'sin_bajas')
+                    'para_llevar', 'delivery', 'rapidas', 'express', 'sin_anulaciones', 'sin_bajas', 'proporcion', 'vuelven', 'opiniones',
+                    'nombrada', 'sin_quejas', 'racha', 'cierre_cuadrado')
 $$;
 -- Las que solo se saben al cerrar la caja
 create or replace function public.mis_tipo_cierre(p_tipo text) returns boolean language sql immutable as $$
-  select p_tipo in ('top_ventas', 'sin_anulaciones', 'sin_bajas') $$;
+  select p_tipo in ('top_ventas', 'sin_anulaciones', 'sin_bajas', 'proporcion', 'sin_quejas', 'cierre_cuadrado') $$;
 
 -- Cuánto lleva y cuánto pide la misión: {"actual": 2, "meta": 3}
 create or replace function public.mis_medir(p_emp bigint, p_fecha date, p_tipo text, p_params jsonb) returns jsonb
@@ -229,6 +259,7 @@ begin
   when 'comandas_con' then
     select count(*) into a from public.mis_comandas(p_emp, p_fecha) c
     where case p_params ->> 'con' when 'postre' then c.postres >= 1 when '2postres' then c.postres >= 2
+               when 'postres' then c.postres >= coalesce((p_params ->> 'min')::numeric, 2)
                when 'bebida_ramen' then c.bebida and c.ramen when 'completa' then c.entrada and c.ramen and c.bebida and c.postres >= 1 else false end;
   when 'promedio' then
     select case when count(*) >= coalesce((p_params ->> 'minimo')::int, 1) then round(avg(c.monto), 2) else 0 end into a
@@ -279,6 +310,78 @@ begin
              select 1 from public.pos_items i where i.created_by = p_emp and i.status = 'anulado' and i.voided_at >= dia0 and i.voided_at < dia1)
            then 1 else 0 end into a;
     m := 1;
+  when 'proporcion' then
+    -- al cierre: postre en al menos «pct» % de sus comandas, con un mínimo de comandas (la 45)
+    select case when count(*) >= coalesce((p_params ->> 'minimo')::int, 1)
+                 and count(*) filter (where c.postres >= 1) * 100 >= coalesce((p_params ->> 'pct')::numeric, 50) * count(*) then 1 else 0 end
+      into a from public.mis_comandas(p_emp, p_fecha) c;
+    m := 1;
+  when 'vuelven' then
+    -- clientes que ya habían venido antes (con «visitas»: los que llegan a esa visita o más), en los pedidos de hoy donde ella
+    -- anotó (las 63, 64 y 65; los clientes salen de los datos que se piden al cobrar)
+    select count(distinct o.customer_id) into a from public.pos_orders o
+    where o.customer_id is not null and o.status = 'cobrada' and o.closed_at >= dia0 and o.closed_at < dia1
+      and exists (select 1 from public.pos_items i where i.order_id = o.id and i.created_by = p_emp and i.status <> 'anulado')
+      and (select count(*) from public.pos_orders o2 where o2.customer_id = o.customer_id and o2.status = 'cobrada' and o2.closed_at < o.closed_at)
+          >= coalesce((p_params ->> 'visitas')::int, 2) - 1;
+  when 'opiniones' then
+    -- opiniones que los clientes respondieron hoy (QR del recibo), con «estrellas» o más, de pedidos donde ella anotó (la 69)
+    select count(*) into a from public.opiniones op
+    where op.answered_at >= dia0 and op.answered_at < dia1 and op.rating >= coalesce((p_params ->> 'estrellas')::int, 5)
+      and exists (select 1 from public.pos_items i where i.order_id = op.order_id and i.created_by = p_emp and i.status <> 'anulado');
+  when 'nombrada' then
+    -- una opinión de hoy, de un pedido suyo, que dice su nombre (el primero, como palabra entera) (la 72)
+    select count(*) into a from public.opiniones op
+    where op.answered_at >= dia0 and op.answered_at < dia1 and op.comment <> ''
+      and exists (select 1 from public.pos_items i where i.order_id = op.order_id and i.created_by = p_emp and i.status <> 'anulado')
+      and op.comment ~* ('\m' || regexp_replace(split_part(trim(coalesce((select e.name from public.employees e where e.id = p_emp), '')), ' ', 1),
+                                                 '([^[:alnum:]])', '\\\1', 'g') || '\M');
+  when 'sin_quejas' then
+    -- al cierre: al menos «minimo» opiniones de hoy en sus pedidos y ninguna de 3 estrellas o menos (la 73)
+    select case when count(*) >= coalesce((p_params ->> 'minimo')::int, 2) and count(*) filter (where op.rating <= 3) = 0 then 1 else 0 end
+      into a from public.opiniones op
+    where op.answered_at >= dia0 and op.answered_at < dia1 and op.rating is not null
+      and exists (select 1 from public.pos_items i where i.order_id = op.order_id and i.created_by = p_emp and i.status <> 'anulado');
+    m := 1;
+  when 'racha' then
+    -- días de trabajo seguidos, hasta hoy, en que cumplió la misión de «nivel» (o al menos una, si no dice nivel) (las 91 y 92).
+    -- Cuenta como día de trabajo el día en que anotó o cobró algo; la racha se completa cuando hoy también está cumplido.
+    m := coalesce((p_params ->> 'dias')::numeric, 3);
+    declare dia date; hoy_ok boolean := false;
+    begin
+      for dia in
+        select z.d from (
+          select (i.created_at at time zone 'America/Caracas')::date d from public.pos_items i
+          where i.created_by = p_emp and i.status <> 'anulado' and i.created_at >= ((p_fecha - 30)::timestamp at time zone 'America/Caracas') and i.created_at < dia1
+          union
+          select (o.closed_at at time zone 'America/Caracas')::date from public.pos_orders o
+          where o.closed_by = p_emp and o.status = 'cobrada' and o.closed_at >= ((p_fecha - 30)::timestamp at time zone 'America/Caracas') and o.closed_at < dia1
+          union select p_fecha) z
+        order by z.d desc
+      loop
+        if exists (select 1 from public.mis_logros l where l.employee_id = p_emp and l.fecha = dia
+                   and (not p_params ? 'nivel' or l.nivel = (p_params ->> 'nivel')::int)) then
+          a := a + 1;
+          if dia = p_fecha then hoy_ok := true; end if;
+        elsif dia <> p_fecha then
+          exit;
+        end if;
+        exit when a >= m;
+      end loop;
+      if not hoy_ok then a := least(a, m - 1); end if;
+    end;
+  when 'cierre_cuadrado' then
+    -- al cierre (cajera): cerró la caja de ese día, contó algo y la diferencia total quedó por debajo de «monto» Ref (la 97)
+    select case when exists (
+             select 1 from public.pos_sessions s
+             where s.closed_by = p_emp and s.status = 'cerrada' and (s.opened_at at time zone 'America/Caracas')::date = p_fecha
+               and exists (select 1 from jsonb_object_keys(s.counted) k where k not like '\_%' and jsonb_typeof(s.counted -> k) = 'number')
+               and (select coalesce(sum(abs((s.counted ->> k)::numeric - coalesce((s.expected ->> k)::numeric, 0))
+                              / case when k in ('efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito') then nullif(public.pos_rate(), 0) else 1 end), 0)
+                    from jsonb_object_keys(s.counted) k where k not like '\_%' and jsonb_typeof(s.counted -> k) = 'number')
+                   < coalesce((p_params ->> 'monto')::numeric, 1))
+           then 1 else 0 end into a;
+    m := 1;
   when 'sin_bajas' then
     -- al cierre: 1 si cerró al menos «minimo» comandas y ninguna suya quedó por debajo de «monto»
     select case when count(*) >= coalesce((p_params ->> 'minimo')::int, 1) and min(c.monto) >= v_monto then 1 else 0 end into a
@@ -289,24 +392,36 @@ begin
   return jsonb_build_object('actual', coalesce(a, 0), 'meta', m);
 end $$;
 
--- ---------------------------------------------------------------- Las 3 misiones del día
--- Se eligen la primera vez que alguien las pide: una por nivel, entre las activas para ese tipo de día,
--- sin repetir la de ayer si hay otra. Las de un tipo de día concreto van primero ese día.
+-- ---------------------------------------------------------------- Las misiones del día
+-- Se eligen la primera vez que alguien las pide, para las meseras y para las cajeras por separado: una por nivel (1, 2 y 3)
+-- y la extra (nivel 0), entre las activas para ese grupo y ese tipo de día, sin repetir la de ayer si hay otra. Las de un
+-- tipo de día concreto van primero ese día. Las que tienen «frecuencia» salen ese porcentaje de los días (y ese día
+-- van primero); las del plato de la semana, solo si hay plato elegido; las de la promo del día, solo si hay promo.
 create or replace function public.mis_asignar(p_fecha date) returns void
 language plpgsql security definer set search_path = public as $$
-declare t text := public.mis_tipo_dia(p_fecha); n int; c record;
+declare t text := public.mis_tipo_dia(p_fecha); g text; n int; c record;
+  plato text := coalesce(public.mis_ajustes() ->> 'plato_semana', ''); promo boolean := public.mis_hay_promo(p_fecha);
 begin
-  for n in 1..3 loop
-    if exists (select 1 from public.mis_dia where fecha = p_fecha and nivel = n) then continue; end if;
-    select k.* into c from public.mis_catalogo k
-    where k.activa and k.nivel = n and k.dias in ('todos', t) and public.mis_tipo_medible(k.tipo)
-      and (not coalesce((k.params ->> 'semana')::boolean, false) or coalesce(public.mis_ajustes() ->> 'plato_semana', '') <> '')
-    order by (k.id is not distinct from (select d.catalogo_id from public.mis_dia d where d.fecha = p_fecha - 1 and d.nivel = n)),
-             (k.dias = t) desc, md5(p_fecha::text || '-' || k.id::text)
-    limit 1;
-    if c.id is null then continue; end if;
-    insert into public.mis_dia (fecha, nivel, catalogo_id, texto, tipo, params, puntos)
-    values (p_fecha, n, c.id, c.texto, c.tipo, c.params, n) on conflict do nothing;
+  foreach g in array array['meseras', 'cajeras'] loop
+    for n in 0..3 loop
+      if exists (select 1 from public.mis_dia where fecha = p_fecha and grupo = g and nivel = n) then continue; end if;
+      select k.* into c from public.mis_catalogo k
+      where k.activa and k.para in ('todas', g) and k.dias in ('todos', t) and public.mis_tipo_medible(k.tipo)
+        and case when n = 0 then k.extra else not k.extra and k.nivel = n end
+        and (not coalesce((k.params ->> 'semana')::boolean, false) or plato <> '')
+        and (not coalesce((k.params ->> 'promo')::boolean, false) or promo)
+        and (not k.params ? 'frecuencia' or public.mis_azar(p_fecha, k.id) < (k.params ->> 'frecuencia')::int)
+      order by (k.params ? 'frecuencia') desc,
+               (k.id is not distinct from (select d.catalogo_id from public.mis_dia d where d.fecha = p_fecha - 1 and d.grupo = g and d.nivel = n)),
+               (k.dias = t) desc, md5(p_fecha::text || '-' || g || '-' || k.id::text)
+      limit 1;
+      if c.id is null then continue; end if;
+      insert into public.mis_dia (fecha, grupo, nivel, catalogo_id, texto, tipo, params, puntos)
+      values (p_fecha, g, n, c.id,
+              c.texto || case when coalesce((c.params ->> 'semana')::boolean, false) then ' (' || plato || ')' else '' end,
+              c.tipo, c.params, c.nivel)
+      on conflict do nothing;
+    end loop;
   end loop;
 end $$;
 
@@ -317,7 +432,7 @@ language plpgsql security definer set search_path = public as $$
 declare d record; r jsonb; lid bigint; nuevos int := 0;
 begin
   if not public.mis_juega(p_emp) or not coalesce((public.mis_ajustes() ->> 'activo')::boolean, true) then return 0; end if;
-  for d in select * from public.mis_dia where fecha = p_fecha order by nivel loop
+  for d in select * from public.mis_dia where fecha = p_fecha and grupo = public.mis_grupo(p_emp) order by nivel loop
     if exists (select 1 from public.mis_logros where employee_id = p_emp and fecha = p_fecha and nivel = d.nivel) then continue; end if;
     if public.mis_tipo_cierre(d.tipo) and not p_cierre then continue; end if;
     if (d.tipo like 'equipo_%' or public.mis_tipo_cierre(d.tipo)) and not public.mis_trabajo(p_emp, p_fecha) then continue; end if;
@@ -399,11 +514,12 @@ begin
     'saludo_hoy', exists (select 1 from public.mis_saludos where employee_id = p_emp and fecha = f),
     'misiones', coalesce((select jsonb_agg(jsonb_build_object('nivel', d.nivel, 'texto', d.texto, 'puntos', d.puntos, 'tipo', d.tipo,
                   'actual', (m ->> 'actual')::numeric, 'meta', (m ->> 'meta')::numeric, 'al_cierre', public.mis_tipo_cierre(d.tipo),
-                  'equipo', d.tipo like 'equipo_%', 'hecha', l.id is not null) order by d.nivel)
+                  'equipo', d.tipo like 'equipo_%', 'extra', d.nivel = 0, 'hecha', l.id is not null) order by d.nivel = 0, d.nivel)
                 from public.mis_dia d
                 left join public.mis_logros l on l.employee_id = p_emp and l.fecha = d.fecha and l.nivel = d.nivel
                 cross join lateral (select public.mis_medir(p_emp, f, d.tipo, d.params) m) z
-                where d.fecha = f), '[]'::jsonb),
+                where d.fecha = f and d.grupo = public.mis_grupo(p_emp)), '[]'::jsonb),
+    'grupo', public.mis_grupo(p_emp),
     'nuevos', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'nivel', l.nivel, 'texto', l.texto, 'puntos', l.puntos) order by l.at)
                 from public.mis_logros l where l.employee_id = p_emp and not l.visto), '[]'::jsonb),
     'puntos', public.mis_saldo(p_emp), 'fichas', public.mis_fichas_saldo(p_emp),
@@ -721,7 +837,8 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.jgo_ganado_hoy(bigint), public.mis_items(bigint, date), public.mis_comandas(bigint, date), public.mis_venta_dia(bigint, date),
   public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
-  public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas()
+  public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
+  public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date)
   from anon, public, authenticated;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)
