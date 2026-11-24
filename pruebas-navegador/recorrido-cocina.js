@@ -95,6 +95,13 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     await cocina.click('#stations [data-st="1"]'); await cocina.waitForTimeout(400);
     ok(/Empacar: 2 × Bolsa · 1 × Envase grande/.test(await cocina.textContent("#board")) && (await cocina.locator(".card .item").count()) === 1,
       "la tarjeta dice qué empacar (envases y bolsas) sin pedir que se marquen");
+    // Tablet fija en la pared: recuerda el sonido y, si se publica una versión nueva, se recarga sola
+    await cocina.click("#sound"); await cocina.waitForTimeout(100);
+    const htmlNuevo = fs.readFileSync(path.join(ROOT, "comandas.html"), "utf8").replace(/comandas\.js\?v=[0-9a-f]+/, "comandas.js?v=0000000001");
+    await cocina.route(/comandas\.html\?act=/, (r) => r.request().isNavigationRequest() ? r.continue() : r.fulfill({ contentType: "text/html; charset=utf-8", body: htmlNuevo }));
+    await Promise.all([cocina.waitForURL(/comandas\.html\?act=/, { timeout: 5000 }), cocina.evaluate(() => window.revisarVersion())]);
+    await cocina.waitForTimeout(600);
+    ok(/act=/.test(cocina.url()) && /Sonido activo/.test(await cocina.textContent("#sound")), "con una versión nueva la pantalla de cocina se recarga sola y sigue con el sonido activo");
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message.split("\n")[0]); }
   ok(errores.length === 0, "sin errores de JavaScript" + (errores.length ? ": " + errores.join(" | ") : ""));
   await browser.close(); server.close();

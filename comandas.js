@@ -131,6 +131,25 @@
         g.gain.setValueAtTime(0.25, audio.currentTime + d); g.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + d + 0.18); o.start(audio.currentTime + d); o.stop(audio.currentTime + d + 0.2); });
     } catch (e) { /* sin sonido */ }
   }
-  $("sound").addEventListener("click", function () { soundOn = !soundOn; this.classList.toggle("on", soundOn); this.textContent = soundOn ? "🔔 Sonido activo" : "🔔 Sonido"; if (soundOn) beep(); });
+  $("sound").addEventListener("click", function () { soundOn = !soundOn; try { localStorage.setItem("comandas-sonido", soundOn ? "1" : ""); } catch (e) { /* sigue igual */ } this.classList.toggle("on", soundOn); this.textContent = soundOn ? "🔔 Sonido activo" : "🔔 Sonido"; if (soundOn) beep(); });
   $("full").addEventListener("click", function () { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); });
+
+  // ---------------------------------------------------------------- Pantalla fija (tablet en la pared, sin nadie que la recargue)
+  // Recuerda el sonido, no deja que la pantalla se apague y, si se publica una versión nueva, se recarga sola.
+  try { if (localStorage.getItem("comandas-sonido") === "1") { soundOn = true; $("sound").classList.add("on"); $("sound").textContent = "🔔 Sonido activo"; } } catch (e) { /* sin almacenamiento */ }
+  // El navegador no deja sonar hasta el primer toque: cualquier toque en la pantalla lo vuelve a activar
+  document.addEventListener("pointerdown", function () { try { if (audio && audio.state === "suspended") audio.resume(); } catch (e) { /* nada */ } });
+  function despierta() { try { if (navigator.wakeLock) navigator.wakeLock.request("screen").catch(function () { /* no se pudo: sigue igual */ }); } catch (e) { /* nada */ } }
+  function firma(h) { return (String(h).match(/(?:comandas|monitoreo)\.(?:js|css)\?v=[0-9a-f]+/g) || []).sort().join(","); }
+  var FIRMA = firma(document.documentElement.innerHTML);
+  function revisarVersion() {
+    fetch(location.pathname + "?act=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.ok ? r.text() : ""; }).then(function (h) {
+      var f = firma(h);
+      if (f && FIRMA && f !== FIRMA) location.replace(location.pathname + "?act=" + Date.now() + location.hash);
+    }).catch(function () { /* sin internet: se revisa en la próxima vuelta */ });
+  }
+  window.revisarVersion = revisarVersion;
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { despierta(); revisarVersion(); } });
+  setInterval(revisarVersion, 5 * 60e3);
+  despierta();
 })();
