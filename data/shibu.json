@@ -1,5 +1,5 @@
 {
-  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás son propuestas que Edgar aprueba en el documento «100 misiones de Shibu». Las tablets las leen de aquí: no se escriben dentro de las pantallas.",
+  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas.",
   "nombre": "Shibu",
   "titulo": "el jefe",
   "manana": [
@@ -16,23 +16,23 @@
     "Hoy hay mucha gente. Grrr. No me hagas quedar mal."
   ],
   "mision": [
-    "Grrr... cumpliste. No te acostumbres.",
-    "Misión hecha. Anotado. Yo anoto todo.",
+    "Grrr... cumpliste. Pura suerte.",
     "Hmph. Bien. Ahora la siguiente.",
     "Lero lero camionero... la lograste. No le digas a nadie que lo dije.",
     "¿Ya? Mmm. Pensé que tardarías más.",
     "Te ganaste tus puntos. Ni uno más.",
     "Una menos. Quedan las difíciles. Grrr.",
-    "Así se vende. Yo lo hacía con una pata.",
+    "Así se vende. Aunque yo lo habría hecho mejor.",
     "Hmph. Hasta yo estoy impresionado. Un poco.",
-    "Toma tu ficha. No la gastes toda en la tragamonedas."
+    "Toma tu ficha."
   ],
   "dia_completo": [
     "Las tres. Grrr... me obligas a estar orgulloso. Bórralo.",
     "Tres de tres. ¿Hiciste trampa? Mmm. Ya revisé: no.",
     "Día perfecto. Mañana te las pongo más difíciles.",
-    "Lero lero camionero... las tres. No le cuentes a Dango.",
-    "Hmph. Ni yo lo habría hecho mejor. Bueno, sí. Pero casi."
+    "Lero lero camionero... las tres. Te respeto 1% más.",
+    "Hmph. Ni yo lo habría hecho mejor. Bueno, sí. Pero casi.",
+    "Grr... Estoy orgulloso de ti. Tus habilidades de venta han mejorado muchísimo. Sé que llegarás a ser una maid excelente."
   ],
   "canje_aprobado": [
     "🎁 Tu premio va a cocina. Para que no digas que soy tacaño.",

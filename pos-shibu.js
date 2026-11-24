@@ -4,7 +4,7 @@
 // puntos y el premio sale a cocina de una vez (queda en el cierre de caja).
 // Todo lo decide la base (mis_estado, tienda_canjear): la tablet solo muestra. Las frases salen de data/shibu.json.
 var SHIBU = { frases: null, est: null, timer: null };
-var NIVEL_TXT = { 1: "Fácil", 2: "Media", 3: "Difícil" };
+var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
 var MIS_PLATA = ["ventas", "promedio", "primera", "vs_ayer", "vs_semana", "top_ventas", "equipo_meta"];
 
 function shibuQuieto() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
@@ -93,8 +93,8 @@ function shibuTarjetas(lista) {
   return '<div class="mis-list">' + lista.map(function (x, i) {
     var a = Number(x.actual) || 0, m = Number(x.meta) || 1, pct = x.hecha ? 100 : Math.max(0, Math.min(100, Math.round(a / m * 100)));
     if (x.al_cierre && !x.hecha) pct = 0;
-    return '<div class="mis-card n' + x.nivel + (x.hecha ? " hecha" : "") + '" style="animation-delay:' + (i * 0.18).toFixed(2) + 's">' +
-      '<div class="mis-nivel"><span>' + "★".repeat(x.nivel) + "</span> " + esc(NIVEL_TXT[x.nivel] || "") + " · " + x.puntos + " punto" + (x.puntos === 1 ? "" : "s") +
+    return '<div class="mis-card n' + (x.extra ? 0 : x.nivel) + (x.hecha ? " hecha" : "") + '" style="animation-delay:' + (i * 0.18).toFixed(2) + 's">' +
+      '<div class="mis-nivel"><span>' + (x.extra ? "＋" : "★".repeat(x.nivel)) + "</span> " + esc(NIVEL_TXT[x.extra ? 0 : x.nivel] || "") + " · " + x.puntos + " punto" + (x.puntos === 1 ? "" : "s") +
       (x.equipo ? ' <em class="mis-eq">Equipo</em>' : "") + "</div>" +
       '<div class="mis-texto">' + esc(x.texto) + "</div>" +
       '<div class="mis-barra"><i style="width:' + pct + '%"></i></div><div class="mis-avance">' + esc(shibuAvance(x)) + "</div></div>";
@@ -119,7 +119,9 @@ function shibuBienvenida() {
 function shibuCelebra() {
   var e = SHIBU.est; if (!e || !(e.nuevos || []).length) return;
   var nuevos = e.nuevos, pts = nuevos.reduce(function (s, x) { return s + (x.puntos || 0); }, 0);
-  var todas = (e.misiones || []).length > 0 && (e.misiones || []).every(function (x) { return x.hecha; });
+  // «Las tres»: el día completo son las 3 del día (fácil, media y difícil); la extra suma aparte
+  var regulares = (e.misiones || []).filter(function (x) { return !x.extra; });
+  var todas = nuevos.some(function (x) { return x.nivel > 0; }) && regulares.length > 0 && regulares.every(function (x) { return x.hecha; });
   var confeti = "";
   if (!shibuQuieto()) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" +

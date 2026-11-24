@@ -31,6 +31,7 @@
 .mis-card.n1 { border-left:8px solid var(--ok); }
 .mis-card.n2 { border-left:8px solid var(--info); }
 .mis-card.n3 { border-left:8px solid var(--accent); }
+.mis-card.n0 { border-left:8px solid var(--shibu); }
 .mis-card.hecha { background:var(--ok-soft); }
 .mis-nivel { font-size:12px; font-weight:700; color:var(--muted); }
 .mis-nivel span { color:var(--imo); }

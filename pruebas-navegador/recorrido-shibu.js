@@ -11,7 +11,8 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
   var M=window.__MIS={saludo:{},nuevos:{},puntos:{1:8,2:12},fichas:{1:1,2:0},canjes:[],marcar:[],seq:50,
     misiones:[{nivel:1,texto:'Vende 3 postres',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false},
               {nivel:2,texto:'Comanda promedio de $18 o más (mínimo 8 comandas)',puntos:2,tipo:'promedio',actual:14.5,meta:18,hecha:false},
-              {nivel:3,texto:'Equipo: el local pasa la meta del día por 20 %',puntos:3,tipo:'equipo_meta',actual:310,meta:540,hecha:false,equipo:true}],
+              {nivel:3,texto:'Equipo: el local pasa la meta del día por 20 %',puntos:3,tipo:'equipo_meta',actual:310,meta:540,hecha:false,equipo:true},
+              {nivel:0,extra:true,texto:'Vende 3 artículos de la tienda del menú',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false}],
     tienda:[{id:1,nombre:'Refresco',puntos:6},{id:2,nombre:'Taiyaki',puntos:7},{id:3,nombre:'Amaterasu',puntos:10}]};
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
@@ -37,7 +38,9 @@ await p.goto("http://localhost:8797/pos.html");await p.fill("#devEmail","a@b.c")
 await pin("1111");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 if(await p.isVisible("#annDlg")) await p.keyboard.press("Escape");
 await p.waitForSelector("#shibuDlg[open]",{timeout:6000});await p.waitForTimeout(2200);
-ok(await p.locator("#shibuBody .mis-card").count()===3&&/Tus misiones de hoy/.test(await p.textContent("#shibuBody")),"al entrar por primera vez en el día, Shibu la recibe con sus 3 misiones");
+ok(await p.locator("#shibuBody .mis-card").count()===4&&/Tus misiones de hoy/.test(await p.textContent("#shibuBody")),"al entrar por primera vez en el día, Shibu la recibe con sus 3 misiones y la extra");
+ok(await p.evaluate(()=>{const c=[...document.querySelectorAll("#shibuBody .mis-card")].pop();return c.classList.contains("n0")&&/Extra del día · 1 punto/.test(c.textContent)&&/Vende 3 artículos de la tienda del menú/.test(c.textContent)&&/1 de 3/.test(c.textContent);}),
+  "la extra del día (la tienda del menú) va al final, con su punto y su avance");
 const frase=await p.textContent("#shibuTxt");
 const fr=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8"));
 ok(frase.length>5&&fr.manana.concat(fr.manana_fuerte).indexOf(frase)>=0,"la frase sale de data/shibu.json, letra por letra («"+frase+"»)");
@@ -46,7 +49,7 @@ ok(/Ref 14,50 de Ref 18,00/.test(await p.textContent("#shibuBody"))&&/1 de 3/.te
 await foto("bienvenida.png");
 await p.click("#shibuOk");await p.waitForTimeout(300);
 ok((await M()).marcar.some(x=>x.emp===1&&x.saludo===true),"al cerrar, la base anota que ya la saludó hoy");
-ok(await p.isVisible("#btnShibu")&&/★ 0\/3/.test(await p.textContent("#btnShibu"))&&/8 pts/.test(await p.textContent("#btnShibu")),"arriba queda la chapita de Shibu con su avance y sus puntos");
+ok(await p.isVisible("#btnShibu")&&/★ 0\/4/.test(await p.textContent("#btnShibu"))&&/8 pts/.test(await p.textContent("#btnShibu")),"arriba queda la chapita de Shibu con su avance y sus puntos");
 // 2) Al cumplir una misión, Shibu celebra (una sola vez)
 await p.evaluate(()=>{window.__MIS.misiones[0].hecha=true;window.__MIS.misiones[0].actual=3;window.__MIS.nuevos[1]=[{id:9,nivel:1,texto:'Vende 3 postres',puntos:1}];window.__MIS.puntos[1]=9;window.__MIS.fichas[1]=2;});
 await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1600);
@@ -54,7 +57,7 @@ ok(/¡Misión cumplida!/.test(await p.textContent("#shibuBody"))&&/\+1\s*punto �
 ok(fr.mision.indexOf(await p.textContent("#shibuTxt"))>=0,"la frase de la celebración también sale del archivo de frases");
 await foto("celebracion.png");
 await p.click("#shibuOk");await p.waitForTimeout(300);
-ok((await M()).marcar.some(x=>x.emp===1&&x.logros&&x.logros[0]===9)&&/★ 1\/3/.test(await p.textContent("#btnShibu")),"la celebración se marca como vista y la chapita sube a 1/3");
+ok((await M()).marcar.some(x=>x.emp===1&&x.logros&&x.logros[0]===9)&&/★ 1\/4/.test(await p.textContent("#btnShibu")),"la celebración se marca como vista y la chapita sube a 1/4");
 await p.evaluate(()=>shibuPoll(false));await p.waitForTimeout(400);
 ok(!(await p.isVisible("#shibuDlg")),"no vuelve a celebrar la misma misión");
 // 3) Mi perfil: puntos, fichas, misiones y tienda; canjea lo que le alcanza
