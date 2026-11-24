@@ -108,7 +108,7 @@ begin
       insert into public.cam_fotos (camara_id, motivo, pedida_por) values (c.id, 'revision', 'automática');
     end if;
   end loop;
-  select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'canal', k.canal, 'detalle', f.detalle, 'camara', k.nombre) order by f.id), '[]'::jsonb) into r
+  select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'canal', k.canal, 'detalle', f.detalle, 'camara', k.nombre, 'motivo', f.motivo) order by f.id), '[]'::jsonb) into r
     from (select * from public.cam_fotos where lista_at is null and error is null order by id limit 8) f
     join public.cam_camaras k on k.id = f.camara_id;
   return r;

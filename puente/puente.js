@@ -1081,6 +1081,7 @@ async function camTick() {
         const ruta = `${mes}/${f.id}-${crypto.randomBytes(8).toString("hex")}.jpg`;
         await camStorage("POST", "camaras/" + ruta, jpg, "image/jpeg");
         await rpc("cam_foto_lista", { p_id: f.id, p_path: ruta, p_bytes: jpg.length, p_error: "" });
+        if (f.motivo === "revision") camRevisar(f.id);
         if (camOk !== true) log("Cámaras: el grabador responde bien");
         camOk = true; camUltimoError = "";
       } catch (e) {
@@ -1091,6 +1092,13 @@ async function camTick() {
     }
   } catch (e) { /* sin internet o la base todavía sin cámaras: se reintenta en la próxima vuelta */ }
   finally { camOcupado = false; }
+}
+// Revisión automática: Nex mira la foto y, si ve algo grave, le escribe al dueño (no se espera la respuesta)
+function camRevisar(id) {
+  fetch(`${URL_}/functions/v1/nex`, { method: "POST", body: JSON.stringify({ action: "revisar_foto", foto_id: id }),
+    headers: { apikey: cfg.anon_key, Authorization: `Bearer ${token}`, "Content-Type": "application/json" } })
+    .then((r) => r.json()).then((j) => { if (j && j.alerta) log(`Cámaras: Nex vio algo en ${j.camara}: ${j.lo_que_se_ve}`); })
+    .catch(() => { /* si Nex no responde, la foto queda igual en Gestión */ });
 }
 async function camLimpiar() {
   if (!camCfg()) return;

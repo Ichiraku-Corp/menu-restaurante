@@ -2,8 +2,9 @@
 //
 // La tablet de cocina (cocina.html) envía la conversación; esta función la pasa
 // a Claude con las acciones que Nex puede hacer (consultar stock y recetas,
-// registrar mermas y conteos, lista de compras, anular) y las ejecuta en la base
-// de datos con la service_role. La clave de Claude vive solo aquí, como secreto.
+// registrar mermas y conteos, lista de compras, anular, mirar por las cámaras) y las
+// ejecuta en la base de datos con la service_role. La clave de Claude vive solo aquí, como secreto.
+// El puente de la laptop también la llama («revisar_foto») para que Nex mire las revisiones automáticas.
 //
 // Secretos necesarios (Supabase → Edge Functions → Secrets):
 //   ANTHROPIC_API_KEY   la clave de la API de Claude
@@ -151,6 +152,21 @@ export const TOOLS: Tool[] = [
     strict: true,
     input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
   },
+  {
+    name: "ver_camara",
+    description: "Mira ahora mismo por una cámara del local y dice lo que se ve. Úsala cuando pregunten qué está pasando en la cocina, la caja, el salón o la despensa (si hay gente esperando, si está limpio, si quedan refrescos en la nevera…). Tarda unos segundos. Si las cámaras todavía no están instaladas, lo dice.",
+    strict: true,
+    input_schema: {
+      type: "object",
+      properties: {
+        camara: str("Nombre o área de la cámara (cocina, caja, salón, despensa…); vacío si no lo dijeron."),
+        pregunta: str("Qué hay que mirar, con las palabras de quien pregunta."),
+        detalle: { type: "string", enum: ["normal", "alto"], description: "«alto» solo si hay que leer algo pequeño (etiquetas, niveles); cuesta más." },
+      },
+      required: ["camara", "pregunta", "detalle"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 // ---------------------------------------------------------------- utilidades
@@ -179,6 +195,55 @@ async function loadIngredients(db: SupabaseClient): Promise<Ing[]> {
   return data as Ing[];
 }
 
+// ---------------------------------------------------------------- cámaras
+type Cam = { id: number; nombre: string; area: string; canal: number; solo_dueno: boolean; que_mirar: string };
+type Foto = { id: number; path: string | null; error: string | null; lista_at: string | null };
+const AREAS: Record<string, string> = { cocina: "cocina", caja: "caja", salon: "salon", arriba: "salon", despensa: "despensa", nevera: "despensa", neveras: "despensa", deposito: "despensa" };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+function aBase64(bytes: Uint8Array) {
+  let t = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) t += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(t);
+}
+const horaCaracas = (t: string | null) =>
+  t ? new Date(t).toLocaleTimeString("es-VE", { timeZone: "America/Caracas", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+export const CAMARA_PROMPT = `Describes fotos de las cámaras de Ichiraku Ramen, un restaurante en Venezuela, para la gerente Nex.
+Responde en español, en 2 a 4 frases, solo con lo que se ve en la foto; si algo no se distingue, dilo.
+No digas quién es una persona por su cara: describe lo que hace (por ejemplo, «una persona con delantal lava ollas»).
+Termina con una línea aparte: «ALERTA: sí» solo si el dueño debe saberlo ya (un riesgo, fuego o humo, suciedad grave, algo tirado en el piso, la caja abierta sin nadie, clientes esperando sin nadie que atienda); si no, «ALERTA: no».`;
+
+// Mira una foto con visión en una llamada aparte (así el historial de la conversación no carga la imagen),
+// anota lo que vio y, si es para alertar, le escribe al dueño (una vez por cámara y por hora).
+export async function mirarFoto(anthropic: Anthropic, db: SupabaseClient, foto: Foto, cam: Cam, pregunta: string, por: string) {
+  const { data: blob, error } = await db.storage.from("camaras").download(foto.path!);
+  if (error || !blob) return { error: "No pude abrir la foto de la cámara." };
+  const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
+    model: MODEL,
+    max_tokens: 4000,
+    system: CAMARA_PROMPT,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: aBase64(new Uint8Array(await blob.arrayBuffer())) } },
+        { type: "text", text: `Cámara: ${cam.nombre}.${cam.que_mirar ? ` Aquí se vigila: ${cam.que_mirar}.` : ""}\nPregunta: ${pregunta}` },
+      ],
+    }],
+    output_config: { effort: "low" as const },
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+  };
+  const res = await anthropic.beta.messages.create(params);
+  if (res.stop_reason === "refusal") return { error: "No pude describir esa foto." };
+  const texto = res.content.filter((b) => b.type === "text").map((b) => (b as Anthropic.Beta.BetaTextBlock).text).join(" ").trim();
+  const alerta = /ALERTA:\s*s[ií]/i.test(texto);
+  const resumen = texto.replace(/\s*ALERTA:\s*(s[ií]|no)\.?\s*$/i, "").trim() || "No se distingue bien.";
+  await db.rpc("cam_anotar", { p_foto: foto.id, p_pregunta: pregunta, p_resumen: resumen, p_alerta: alerta, p_por: por });
+  if (alerta) {
+    await db.rpc("pos_alerta", { p_clave: `camara-${cam.id}-${new Date().toISOString().slice(0, 13)}`, p_titulo: `Nex vio algo en la cámara ${cam.nombre}`, p_lineas: [resumen] });
+  }
+  return { camara: cam.nombre, hora: horaCaracas(foto.lista_at), lo_que_se_ve: resumen, alerta };
+}
+
 function notFound(kind: string, query: string, many?: { name: string }[]) {
   return many && many.length
     ? { error: `Hay varios ${kind} parecidos a "${query}". Pregunta cuál es.`, opciones: many.slice(0, 8).map((m) => m.name) }
@@ -186,8 +251,38 @@ function notFound(kind: string, query: string, many?: { name: string }[]) {
 }
 
 // ---------------------------------------------------------------- acciones
-export async function runTool(db: SupabaseClient, name: string, input: Record<string, unknown>, employeeId: number | null) {
+export async function runTool(
+  db: SupabaseClient, name: string, input: Record<string, unknown>, employeeId: number | null,
+  ctx: { anthropic?: Anthropic; role?: string; esperaMs?: number } = {},
+) {
   switch (name) {
+    case "ver_camara": {
+      if (!ctx.anthropic) return { error: "Desde aquí no puedo mirar las cámaras." };
+      const { data, error } = await db.from("cam_camaras").select("id,nombre,area,canal,solo_dueno,que_mirar").eq("activa", true).order("canal");
+      const todas = (error ? [] : data ?? []) as Cam[];
+      if (!todas.length) return { error: "Las cámaras todavía no están instaladas: cuando las configuren en Gestión podré mirar por ellas." };
+      const dueno = ["dueño", "admin"].includes(String(ctx.role ?? ""));
+      const cams = todas.filter((c) => dueno || !c.solo_dueno);
+      if (!cams.length) return { error: "Desde aquí no puedo mirar por las cámaras: eso lo ve el dueño." };
+      const q = norm(String(input.camara ?? ""));
+      const cam = !q ? (cams.length === 1 ? cams[0] : undefined)
+        : cams.find((c) => norm(c.nombre) === q) ?? cams.find((c) => c.area === (AREAS[q] ?? q)) ??
+          matchByName(cams.map((c) => ({ ...c, name: c.nombre })), q).one;
+      if (!cam) return { error: q ? `No encontré la cámara «${input.camara}» (o no se puede ver desde aquí).` : "¿Por cuál cámara miro?", camaras: cams.map((c) => c.nombre) };
+      const { data: fotoId, error: e1 } = await db.rpc("cam_pedir_foto", { p_camara: cam.id, p_motivo: "nex", p_detalle: input.detalle === "alto" ? "alto" : "normal", p_por: "Nex" });
+      if (e1) return { error: e1.message };
+      // La foto la toma la laptop de caja (cada 3 s mira si hay pedidos): se espera hasta 15 s.
+      let foto: Foto | undefined;
+      const fin = Date.now() + (ctx.esperaMs ?? 15000);
+      while (!foto && Date.now() < fin) {
+        const { data: f } = await db.from("cam_fotos").select("id,path,error,lista_at").eq("id", fotoId).limit(1);
+        const row = (f ?? [])[0] as Foto | undefined;
+        if (row?.error) return { error: `No pude ver la cámara ${cam.nombre}: ${row.error}.` };
+        if (row?.path) foto = row; else await sleep(500);
+      }
+      if (!foto) return { error: `La laptop de caja no mandó la foto de ${cam.nombre}. ¿Está encendida y con internet?` };
+      return await mirarFoto(ctx.anthropic, db, foto, cam, String(input.pregunta ?? "").slice(0, 300) || "¿Qué se ve?", "Nex");
+    }
     case "consultar_stock": {
       const ings = await loadIngredients(db);
       const q = String(input.insumo ?? "");
@@ -316,7 +411,7 @@ export async function runTool(db: SupabaseClient, name: string, input: Record<st
 
 // ---------------------------------------------------------------- conversación
 export async function converse(
-  anthropic: Anthropic, db: SupabaseClient, history: Anthropic.Beta.BetaMessageParam[], employeeId: number | null,
+  anthropic: Anthropic, db: SupabaseClient, history: Anthropic.Beta.BetaMessageParam[], employeeId: number | null, role = "",
 ): Promise<{ added: Anthropic.Beta.BetaMessageParam[]; reply: string }> {
   const added: Anthropic.Beta.BetaMessageParam[] = [];
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -349,7 +444,7 @@ export async function converse(
     for (const block of res.content) {
       if (block.type !== "tool_use") continue;
       try {
-        const out = await runTool(db, block.name, block.input as Record<string, unknown>, employeeId);
+        const out = await runTool(db, block.name, block.input as Record<string, unknown>, employeeId, { anthropic, role });
         results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(out), is_error: !!(out as { error?: string })?.error });
       } catch (e) {
         results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify({ error: String((e as Error).message ?? e) }), is_error: true });
@@ -375,7 +470,7 @@ export async function handler(req: Request, env = Deno.env.toObject(), anthropic
   if (roleErr || !role) return json({ error: "Sin acceso a Nex" }, 403);
 
   const db = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-  let body: { action?: string; messages?: Anthropic.Beta.BetaMessageParam[]; employee_id?: number };
+  let body: { action?: string; messages?: Anthropic.Beta.BetaMessageParam[]; employee_id?: number; foto_id?: number };
   try { body = await req.json(); } catch { return json({ error: "JSON no válido" }, 400); }
 
   // 2) Lista de empleados activos para elegir quién habla (la tablet no lee la tabla).
@@ -383,6 +478,24 @@ export async function handler(req: Request, env = Deno.env.toObject(), anthropic
     const { data, error } = await db.from("employees").select("id,name,job_title").eq("active", true).order("name");
     if (error) return json({ error: error.message }, 500);
     return json({ empleados: data });
+  }
+
+  // 2b) Revisión automática de una cámara: el puente subió la foto y Nex la mira (y alerta si hace falta).
+  if (body.action === "revisar_foto") {
+    if (!["impresora", "dueño", "admin"].includes(String(role))) return json({ error: "Sin permiso" }, 403);
+    const fid = Number(body.foto_id);
+    if (!Number.isInteger(fid)) return json({ error: "Falta la foto" }, 400);
+    const { data: f } = await db.from("cam_fotos").select("id,path,error,lista_at,camara_id").eq("id", fid).limit(1);
+    const foto = (f ?? [])[0] as (Foto & { camara_id: number }) | undefined;
+    if (!foto?.path) return json({ error: "Esa foto no está" }, 404);
+    const { data: c } = await db.from("cam_camaras").select("id,nombre,area,canal,solo_dueno,que_mirar").eq("id", foto.camara_id).limit(1);
+    const cam = (c ?? [])[0] as Cam | undefined;
+    if (!cam) return json({ error: "Esa cámara no está" }, 404);
+    try {
+      return json(await mirarFoto(anthropic ?? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }), db, foto, cam, cam.que_mirar || "¿Está todo en orden?", "revisión automática"));
+    } catch (e) {
+      return json({ error: String((e as Error).message ?? e) }, 500);
+    }
   }
 
   // 3) Conversación.
@@ -394,7 +507,7 @@ export async function handler(req: Request, env = Deno.env.toObject(), anthropic
 
   const client = anthropic ?? new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   try {
-    return json(await converse(client, db, history, employeeId));
+    return json(await converse(client, db, history, employeeId, String(role)));
   } catch (e) {
     if (e instanceof Anthropic.RateLimitError) return json({ error: "Nex está ocupada, intenta en un momento", retry: true }, 429);
     if (e instanceof Anthropic.AuthenticationError) return json({ error: "Falta configurar la clave de Claude" }, 500);

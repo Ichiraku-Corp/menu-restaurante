@@ -39,6 +39,7 @@ const md5 = (t) => crypto.createHash("md5").update(t).digest("hex");
       if (rpc === "cam_viejas") return json([{ id: 3, path: "2026-11/3-aaaaaaaa.jpg" }, { id: 4, path: "2026-11/4-bbbbbbbb.jpg" }]);
       if (rpc === "cam_borradas") { sb.borradas = args.p_ids; return json(2); }
       if (req.method === "POST" && req.url.startsWith("/storage/v1/object/camaras/")) { sb.subidas[req.url.slice("/storage/v1/object/camaras/".length)] = { tipo: req.headers["content-type"], cuerpo }; return json({ Key: "ok" }); }
+      if (req.method === "POST" && req.url === "/functions/v1/nex") { sb.nex = JSON.parse(cuerpo.toString()); return json({ camara: "Cocina", alerta: false, lo_que_se_ve: "Todo en orden" }); }
       if (req.method === "DELETE" && req.url === "/storage/v1/object/camaras") { sb.borrado = JSON.parse(cuerpo.toString()); return json([]); }
       res.writeHead(404); res.end();
     });
@@ -93,6 +94,12 @@ const md5 = (t) => crypto.createHash("md5").update(t).digest("hex");
     sb.listas = []; sb.pendientes = [{ id: 26, canal: 1, detalle: "normal", camara: "Cocina" }];
     await P.camTick();
     ok(sb.listas[0] && /no se llega al grabador/.test(sb.listas[0].p_error), "si el grabador no responde, avisa «no se llega al grabador»");
+
+    // 4b) Revisión automática: después de subirla, le pide a Nex que la mire
+    config({ marca: "hikvision", host: "127.0.0.1", puerto: grabador.address().port, usuario: "nex", clave: nvr.clave }); P.reloadConfig();
+    sb.nex = null; sb.pendientes = [{ id: 30, canal: 1, detalle: "normal", camara: "Cocina", motivo: "revision" }];
+    await P.camTick(); await new Promise((r) => setTimeout(r, 200));
+    ok(sb.nex && sb.nex.action === "revisar_foto" && sb.nex.foto_id === 30, "una foto de revisión automática se manda a Nex para que la mire");
 
     // 5) Limpieza: borra del bucket las fotos viejas y lo anota
     await P.camLimpiar();

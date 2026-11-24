@@ -200,3 +200,63 @@ Deno.test("resumen del turno: cola de cocina, agotados y lo que queda poco afuer
   eq(r.agotados, ["Luffy"], "agotados");
   eq(r.queda_poco_afuera, ["Agua"], "queda poco afuera");
 });
+
+// ---------------------------------------------------------------- Cámaras
+function fakeCamDb(tables: Record<string, Row[]>, fotoId = 41) {
+  const rpcCalls: { fn: string; args: Row }[] = [];
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 0xff, 0xd9]);
+  const db = {
+    rpcCalls, bytes,
+    from(t: string) {
+      let rows = [...(tables[t] ?? [])];
+      const q = {
+        select() { return q; },
+        order() { return q; },
+        eq(c: string, v: unknown) { rows = rows.filter((r) => r[c] === v); return q; },
+        limit(n: number) { rows = rows.slice(0, n); return q; },
+        then(res: (v: { data: Row[]; error: null }) => unknown) { return Promise.resolve({ data: rows, error: null }).then(res); },
+      };
+      return q;
+    },
+    rpc(fn: string, args: Row) { rpcCalls.push({ fn, args }); return Promise.resolve({ data: fn === "cam_pedir_foto" ? fotoId : true, error: null }); },
+    storage: { from: (_b: string) => ({ download: (_p: string) => Promise.resolve({ data: new Blob([bytes]), error: null }) }) },
+  };
+  return db;
+}
+const CAMS = [{ id: 1, nombre: "Cocina", area: "cocina", canal: 1, solo_dueno: false, que_mirar: "que esté limpia", activa: true },
+              { id: 2, nombre: "Caja", area: "caja", canal: 2, solo_dueno: true, que_mirar: "", activa: true }];
+
+Deno.test("ver_camara: sin cámaras instaladas lo dice, y desde la cocina no se ve la de la caja", async () => {
+  const { client } = fakeAnthropic([]);
+  const r1 = await runTool(fakeCamDb({ cam_camaras: [] }) as never, "ver_camara", { camara: "", pregunta: "¿hay gente?", detalle: "normal" }, 7, { anthropic: client, role: "cocina" }) as Row;
+  assert(/todavía no están instaladas/.test(String(r1.error)), "sin cámaras: lo dice");
+  const r2 = await runTool(fakeCamDb({ cam_camaras: CAMS }) as never, "ver_camara", { camara: "caja", pregunta: "¿hay gente?", detalle: "normal" }, 7, { anthropic: client, role: "cocina" }) as Row;
+  assert(/No encontré la cámara «caja»/.test(String(r2.error)) && JSON.stringify(r2.camaras) === '["Cocina"]', "la cocina solo ve las cámaras que no son solo del dueño");
+});
+
+Deno.test("ver_camara: pide la foto, la mira con visión aparte, anota lo que vio y alerta al dueño", async () => {
+  const db = fakeCamDb({ cam_camaras: CAMS, cam_fotos: [{ id: 41, path: "2026-11/41-abcdef0123456789.jpg", error: null, lista_at: new Date().toISOString() }] });
+  const { client, requests } = fakeAnthropic([{ stop_reason: "end_turn", content: [{ type: "text", text: "La cocina está ordenada, pero hay una olla en el piso junto a la nevera.\nALERTA: sí" }] }]);
+  const r = await runTool(db as never, "ver_camara", { camara: "Cocina", pregunta: "¿Está limpia la cocina?", detalle: "normal" }, 7, { anthropic: client, role: "cocina", esperaMs: 2000 }) as Row;
+  eq(r.lo_que_se_ve, "La cocina está ordenada, pero hay una olla en el piso junto a la nevera.", "devuelve lo que vio, sin la línea de ALERTA");
+  eq(r.alerta, true, "marca la alerta");
+  const body = requests[0].body as { model: string; system: string; messages: { content: Row[] }[] };
+  const img = body.messages[0].content[0] as { type: string; source: { media_type: string; data: string } };
+  eq(img.type, "image", "manda la foto como imagen");
+  eq(img.source.media_type, "image/jpeg", "en JPEG");
+  eq(img.source.data, btoa(String.fromCharCode(...db.bytes)), "con los bytes de la foto en base64");
+  eq(body.model, "claude-opus-5-5", "con el mismo modelo de Nex");
+  assert(/No digas quién es una persona por su cara/.test(body.system), "sin reconocer caras");
+  assert(/que esté limpia/.test(String((body.messages[0].content[1] as Row).text)), "le dice qué se vigila en esa cámara");
+  eq(db.rpcCalls.map((c) => c.fn), ["cam_pedir_foto", "cam_anotar", "pos_alerta"], "pide la foto, anota y avisa al dueño");
+  eq(db.rpcCalls[0].args.p_camara, 1, "la foto es de la cámara de la cocina");
+  assert(/Cocina/.test(String(db.rpcCalls[2].args.p_titulo)), "el aviso dice qué cámara");
+});
+
+Deno.test("ver_camara: si el puente no pudo tomar la foto, lo explica", async () => {
+  const db = fakeCamDb({ cam_camaras: CAMS, cam_fotos: [{ id: 41, path: null, error: "no se llega al grabador (EHOSTUNREACH)", lista_at: new Date().toISOString() }] });
+  const { client, requests } = fakeAnthropic([]);
+  const r = await runTool(db as never, "ver_camara", { camara: "cocina", pregunta: "¿hay gente?", detalle: "normal" }, 7, { anthropic: client, role: "dueño", esperaMs: 1500 }) as Row;
+  assert(/No pude ver la cámara Cocina: no se llega al grabador/.test(String(r.error)), "dice por qué no pudo");
+  eq(requests.length, 0, "no gasta una llamada a Claude sin foto");
+});
