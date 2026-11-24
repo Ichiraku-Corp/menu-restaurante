@@ -14,13 +14,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
 <link rel="stylesheet" href="pos.css?v=630c6ac8d7">
-<link rel="stylesheet" href="shibu.css">
+<link rel="stylesheet" href="shibu.css?v=159b840ab7">
+<link rel="stylesheet" href="juegos.css?v=ba26327fcc">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
 <script src="reporte-cierre.js?v=11537cf295"></script>
-<script src="pos-base.js?v=1f7d49def2" defer></script>
+<script src="pos-base.js?v=5d33299dc4" defer></script>
 <script src="pos-acceso.js?v=032fa8aebf" defer></script>
 <script src="pos-mesas.js?v=3c82eb1f1e" defer></script>
 <script src="pos-pedido.js?v=74cd17acd5" defer></script>
@@ -28,6 +29,7 @@
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=15dc6dfc47" defer></script>
 <script src="pos-caja.js?v=04b5c8d8d1" defer></script>
+<script src="pos-juegos.js?v=496f54158e" defer></script>
 <script src="pos-shibu.js?v=cf5525ea4f" defer></script>
 </head>
 <body>
@@ -343,6 +345,88 @@
 <dialog id="cashDlg" style="width:min(720px, calc(100vw - 20px))">
   <div class="row between"><h2 style="margin:0">Caja</h2><button type="button" id="cashClose">Cerrar ventana</button></div>
   <div id="cashBody"></div>
+</dialog>
+
+<!-- Juegos del personal con fichas (pos-juegos.js y juegos.css): tragamonedas, ruleta y blackjack. Lo que sale lo decide
+     el servidor; la tablet solo lo anima. Se abre con abrirJuegos(). -->
+<dialog id="jgoDlg" aria-labelledby="jgoTit">
+  <div class="jgo-top">
+    <h2 id="jgoTit">Juegos</h2>
+    <div class="jgo-cont">
+      <span class="jgo-pill jgo-fichas" id="jgoFichasBox"><i class="jgo-moneda" aria-hidden="true"></i><span id="jgoFichas">Fichas: –</span></span>
+      <span class="jgo-pill"><span id="jgoPuntos">Puntos: –</span></span>
+      <span class="jgo-hoy"><span id="jgoHoy">Hoy ganaste 0 de 3 puntos jugando</span><span class="jgo-pips" id="jgoPips" aria-hidden="true"></span></span>
+    </div>
+    <button type="button" class="jgo-cerrar" id="jgoCerrar">Cerrar</button>
+  </div>
+  <!-- Shibu, la mascota: mientras no exista su imagen (assets/shibu/shibu.png) sale un círculo con su nombre -->
+  <div class="jgo-shibu">
+    <span class="shibu-ava"><img class="shibu-img" data-src="assets/shibu/shibu.png" alt="Shibu" hidden><span class="shibu-badge" aria-hidden="true">Shibu</span></span>
+    <p class="shibu-bub" id="jgoBub" role="status" aria-live="polite"></p>
+  </div>
+  <!-- Elegir juego -->
+  <div class="jgo-menu" id="jgoMenu">
+    <p class="jgo-apagado hidden" id="jgoApagado" role="status">Los juegos están apagados por hoy</p>
+    <div class="jgo-cards">
+      <button type="button" class="jgo-card" data-jgo="slot">
+        <span class="jgo-arte jgo-arte-slot" aria-hidden="true"><i>🍜</i><i>🐶</i><i>🍣</i></span>
+        <b>Tragamonedas</b><small>Tres carretes: junta símbolos iguales</small><span class="jgo-costo">1 ficha por jugada</span>
+      </button>
+      <button type="button" class="jgo-card" data-jgo="rul">
+        <span class="jgo-arte jgo-arte-rul" aria-hidden="true"><i></i></span>
+        <b>Ruleta</b><small>Apuesta a un color, a par o impar, o a un número</small><span class="jgo-costo">1 ficha por jugada</span>
+      </button>
+      <button type="button" class="jgo-card" data-jgo="bj">
+        <span class="jgo-arte jgo-arte-bj" aria-hidden="true"><i>A<em>&#x2660;&#xFE0E;</em></i><i class="roja">K<em>&#x2665;&#xFE0E;</em></i></span>
+        <b>Blackjack</b><small>Acércate a 21 sin pasarte</small><span class="jgo-costo">1 ficha por mano</span>
+      </button>
+    </div>
+    <p class="jgo-nota">Las fichas se ganan cumpliendo las misiones del día. Lo que sale en cada jugada lo decide el sistema.</p>
+  </div>
+  <!-- Tragamonedas -->
+  <section class="jgo-vista hidden" id="jgoSlot" aria-labelledby="jgoSlotTit">
+    <div class="jgo-vhead"><button type="button" class="jgo-volver" data-volver>Volver</button><h3 id="jgoSlotTit">Tragamonedas</h3>
+      <p class="jgo-premios"><b>Premios:</b> 3 iguales = 3 puntos · 2 iguales = 1 punto</p></div>
+    <div class="jgo-maquina" id="jgoMaquina"><div class="jgo-carretes" id="jgoCarretes" role="group" aria-label="Carretes"></div></div>
+    <p class="jgo-res" id="jgoSlotRes" aria-live="polite"></p>
+    <div class="jgo-jugar"><button type="button" class="primary big" id="jgoGirar">Girar (1 ficha)</button></div>
+  </section>
+  <!-- Ruleta -->
+  <section class="jgo-vista hidden" id="jgoRul" aria-labelledby="jgoRulTit">
+    <div class="jgo-vhead"><button type="button" class="jgo-volver" data-volver>Volver</button><h3 id="jgoRulTit">Ruleta</h3>
+      <p class="jgo-premios"><b>Premios:</b> color o par/impar = 1 punto · número exacto = 3 puntos</p></div>
+    <div class="jgo-rul-izq"><div class="jgo-rueda" id="jgoRuedaBox"></div><div class="jgo-hist" id="jgoHist" aria-label="Últimos números"></div></div>
+    <div class="jgo-rul-der">
+      <p class="jgo-sub">Apuesta a…</p>
+      <div class="jgo-apuestas" id="jgoApuestas" role="group" aria-label="Apuesta">
+        <button type="button" class="ap-rojo" data-ap="rojo" aria-pressed="false">Rojo</button>
+        <button type="button" class="ap-negro" data-ap="negro" aria-pressed="false">Negro</button>
+        <button type="button" data-ap="par" aria-pressed="false">Par</button>
+        <button type="button" data-ap="impar" aria-pressed="false">Impar</button>
+      </div>
+      <p class="jgo-sub">…o a un número exacto</p>
+      <div class="jgo-nums" id="jgoNums" role="group" aria-label="Número exacto"></div>
+    </div>
+    <p class="jgo-res" id="jgoRulRes" aria-live="polite"></p>
+    <div class="jgo-jugar"><span class="jgo-tuap" id="jgoTuAp">Elige tu apuesta</span><button type="button" class="primary big" id="jgoRulGirar" disabled>Girar (1 ficha)</button></div>
+  </section>
+  <!-- Blackjack -->
+  <section class="jgo-vista hidden" id="jgoBj" aria-labelledby="jgoBjTit">
+    <div class="jgo-vhead"><button type="button" class="jgo-volver" data-volver>Volver</button><h3 id="jgoBjTit">Blackjack</h3>
+      <p class="jgo-premios"><b>Premios:</b> ganar = 1 punto · blackjack = 2 puntos · empate = te devuelve la ficha</p></div>
+    <div class="jgo-mesa" id="jgoMesa">
+      <div class="jgo-mazo" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="jgo-mano"><p class="jgo-mano-tit">Crupier <b id="jgoBjTotC"></b></p><div class="jgo-cartas" id="jgoBjC"></div></div>
+      <p class="jgo-res" id="jgoBjRes" aria-live="polite"></p>
+      <div class="jgo-mano"><p class="jgo-mano-tit">Tú <b id="jgoBjTotJ"></b></p><div class="jgo-cartas" id="jgoBjJ"></div></div>
+    </div>
+    <div class="jgo-jugar">
+      <button type="button" class="primary big" id="jgoRepartir">Repartir (1 ficha)</button>
+      <button type="button" class="primary big hidden" id="jgoPedir">Pedir</button>
+      <button type="button" class="big hidden" id="jgoPlantarse">Plantarse</button>
+      <button type="button" class="primary big hidden" id="jgoOtra">Otra mano (1 ficha)</button>
+    </div>
+  </section>
 </dialog>
 
 <!-- Teléfono: navegación abajo y barra del pedido -->

@@ -1,0 +1,291 @@
+/* Juegos del personal con fichas (pos-juegos.js): tragamonedas, ruleta y blackjack, en el estilo «Pop dulce» de la
+   marca: crema con puntos, contornos Azul Noche tipo sticker y Rosa, Celeste y Oro. Usa los colores de pos.css (--ink es
+   el Azul Noche, --accent el Rosa, --bg la Crema); aquí solo se suman los que no estaban. Con «reducir movimiento» no hay
+   giros ni confeti (pos.css ya apaga las animaciones y pos-juegos.js no anima). */
+#jgoDlg { --jgo-oro:#FFC928; --jgo-celeste:#2FB2E8; --jgo-rojo:#D7263D; --jgo-negro:#1E2233; --jgo-verde:#1F9D55;
+  width:min(1000px, calc(100vw - 20px)); padding:16px 20px 20px;
+  background:var(--bg) radial-gradient(rgba(234,91,166,.13) 1.3px, transparent 1.7px) 0 0 / 20px 20px; }
+
+/* ---- Cabecera: fichas, puntos y lo ganado hoy */
+.jgo-top { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; }
+.jgo-top h2 { margin:0; font-size:24px; font-weight:900; letter-spacing:-.01em; }
+.jgo-cont { display:flex; align-items:center; gap:8px 10px; flex-wrap:wrap; flex:1 1 auto; }
+.jgo-pill { display:inline-flex; align-items:center; gap:7px; min-height:38px; padding:4px 14px; border-radius:999px; background:#fff; border:2px solid var(--ink);
+  box-shadow:2px 3px 0 var(--ink); color:var(--ink); font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.jgo-fichas { background:var(--jgo-oro); }
+.jgo-fichas.cero { background:#fff; color:var(--muted); }
+.jgo-moneda { width:20px; height:20px; flex:none; border-radius:50%; border:2px solid var(--ink);
+  background:radial-gradient(circle at 50% 50%, transparent 0 4px, rgba(27,45,107,.35) 4px 5.5px, transparent 5.5px), radial-gradient(circle at 35% 30%, #FFF3B8, var(--jgo-oro) 55%, #E5A900); }
+.jgo-hoy { display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--ink); }
+.jgo-pips { display:inline-flex; gap:4px; }
+.jgo-pips i { width:14px; height:14px; border-radius:50%; border:2px solid var(--ink); background:#fff; }
+.jgo-pips i.on { background:var(--accent); }
+.jgo-cerrar { margin-left:auto; border-radius:999px; border-color:var(--ink); background:#fff; }
+
+/* ---- Shibu: imagen (assets/shibu/shibu.png) o, mientras no exista, un círculo con su nombre; y su globito */
+.jgo-shibu { display:flex; align-items:center; gap:16px; margin:14px 0 12px; }
+.shibu-ava { flex:none; min-width:62px; height:62px; display:grid; place-items:center; }
+.shibu-badge { width:58px; height:58px; border-radius:50%; display:grid; place-items:center; background:var(--jgo-oro); border:2.5px solid var(--ink);
+  box-shadow:2px 3px 0 var(--ink); color:var(--ink); font-weight:900; font-size:14px; letter-spacing:.01em; transform:rotate(-7deg); }
+.shibu-img { height:62px; width:auto; max-width:96px; object-fit:contain; }
+.shibu-bub { position:relative; flex:1 1 auto; min-width:0; min-height:48px; margin:0; display:flex; align-items:center; padding:9px 16px; background:#fff; color:var(--ink);
+  border:2.5px solid var(--ink); border-radius:18px; box-shadow:3px 3px 0 var(--ink); font-weight:700; font-size:15.5px; line-height:1.3; }
+.shibu-bub:empty { visibility:hidden; }
+.shibu-bub::before { content:""; position:absolute; left:-9.5px; top:calc(50% - 8px); width:14px; height:14px; background:inherit; border-left:2.5px solid var(--ink);
+  border-bottom:2.5px solid var(--ink); transform:rotate(45deg); }
+.shibu-bub.gana { background:#FFF3C4; }
+.shibu-bub.error { background:var(--danger-soft); }
+.shibu-bub.info { background:#DDF2FC; }
+.shibu-bub.pop { animation:jgoPop .32s ease-out; }
+@keyframes jgoPop { from { transform:scale(.95); } }
+
+/* ---- Menú: tres tarjetas grandes */
+.jgo-apagado { margin:0 0 12px; padding:10px 14px; border:2px solid var(--ink); border-radius:16px; background:var(--imo-t); color:var(--ink); font-weight:800; text-align:center; }
+.jgo-cards { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:18px; }
+.jgo-card { --c:var(--accent); position:relative; overflow:hidden; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:6px;
+  min-height:250px; padding:20px 16px 16px; border:2.5px solid var(--ink); border-radius:24px; background:#fff; box-shadow:4px 5px 0 var(--ink); text-align:center; color:var(--ink); }
+.jgo-card::before { content:""; position:absolute; left:0; right:0; top:0; height:78px; background:var(--c); border-bottom:2.5px solid var(--ink);
+  background-image:radial-gradient(rgba(255,255,255,.35) 1.5px, transparent 2px); background-size:14px 14px; }
+.jgo-card > * { position:relative; }
+.jgo-card[data-jgo="rul"] { --c:var(--jgo-celeste); }
+.jgo-card[data-jgo="bj"] { --c:var(--jgo-oro); }
+.jgo-card b { font-size:23px; font-weight:900; margin-top:6px; }
+.jgo-card small { font-size:14px; font-weight:600; color:var(--muted); line-height:1.35; }
+.jgo-costo { margin-top:auto; padding:3px 12px; border-radius:999px; border:2px solid var(--ink); background:var(--bg); font-size:13px; font-weight:800; }
+button.jgo-card:active:not(:disabled) { transform:translate(2px, 2px); box-shadow:2px 3px 0 var(--ink); }
+button.jgo-card:disabled { opacity:.5; box-shadow:none; }
+.jgo-arte { display:flex; align-items:center; justify-content:center; gap:4px; min-height:92px; margin-top:4px; }
+.jgo-arte-slot { padding:6px 8px; background:#fff; border:2.5px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink); min-height:0; margin-top:22px; }
+.jgo-arte-slot i { font-style:normal; font-size:32px; line-height:1; width:46px; height:50px; display:grid; place-items:center; background:var(--bg); border-radius:10px; }
+.jgo-arte-rul i { width:96px; height:96px; border-radius:50%; border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+  background:radial-gradient(circle, #fff 0 15%, var(--ink) 15% 19%, var(--bg) 19% 46%, transparent 46%),
+    repeating-conic-gradient(from -4.86deg, var(--jgo-rojo) 0 9.73deg, var(--jgo-negro) 9.73deg 19.46deg); }
+.jgo-arte-bj { gap:0; }
+.jgo-arte-bj i { width:58px; height:82px; border:2.5px solid var(--ink); border-radius:10px; background:#fff; box-shadow:3px 3px 0 var(--ink); font-style:normal; font-weight:900; font-size:24px;
+  color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; transform:rotate(-8deg); }
+.jgo-arte-bj i + i { transform:rotate(7deg) translate(-10px, 4px); }
+.jgo-arte-bj i.roja { color:var(--jgo-rojo); }
+.jgo-arte-bj em { font-style:normal; font-size:26px; }
+.jgo-nota { margin:16px 2px 0; font-size:13.5px; color:var(--muted); text-align:center; }
+
+/* ---- Cada juego */
+.jgo-vista { position:relative; animation:viewIn .22s ease-out; }
+.jgo-vhead { display:flex; align-items:center; gap:8px 14px; flex-wrap:wrap; margin-bottom:12px; }
+.jgo-vhead h3 { margin:0; font-size:22px; font-weight:900; }
+.jgo-volver { border-radius:999px; border-color:var(--ink); background:#fff; padding:8px 14px 8px 10px; }
+.jgo-premios { margin:0 0 0 auto; padding:6px 12px; border:2px dashed var(--ink); border-radius:12px; background:#fff; font-size:14px; font-weight:600; color:var(--ink); }
+.jgo-premios b { font-weight:900; }
+.jgo-res { min-height:50px; margin:14px 0 0; display:flex; align-items:center; justify-content:center; text-align:center; font-weight:800; font-size:18px; color:var(--ink); }
+.jgo-res span { display:inline-block; padding:7px 18px; border-radius:999px; border:2.5px solid var(--ink); background:#fff; box-shadow:3px 3px 0 var(--ink); }
+.jgo-res b { font-weight:900; }
+.jgo-res.gana span { background:var(--jgo-oro); font-size:20px; }
+.jgo-res.gana span.nuevo { animation:jgoBrinco .6s ease-out; }
+.jgo-res.gana b { color:var(--ink); }
+.jgo-res.empate span { background:#DDF2FC; }
+.jgo-res.pista span { border-style:dashed; box-shadow:none; background:transparent; font-weight:700; }
+.jgo-jugar { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:14px; }
+.jgo-jugar button { min-width:230px; font-size:19px; }
+@keyframes jgoBrinco { 0% { transform:scale(.6); } 55% { transform:scale(1.12); } 80% { transform:scale(.96); } 100% { transform:none; } }
+
+/* ---- Tragamonedas: un mueble rosa con luces y tres carretes */
+.jgo-maquina { position:relative; width:min(580px, 100%); margin:0 auto; padding:20px 18px; border:3px solid var(--ink); border-radius:30px; background:var(--accent);
+  box-shadow:5px 6px 0 var(--ink); }
+.jgo-maquina::before, .jgo-maquina::after { content:""; position:absolute; left:26px; right:26px; height:10px;
+  background:radial-gradient(circle, var(--jgo-oro) 0 3.4px, var(--ink) 3.6px 4.6px, transparent 4.8px) 0 50% / 20px 10px repeat-x; }
+.jgo-maquina::before { top:5px; }
+.jgo-maquina::after { bottom:5px; }
+.jgo-maquina.luces::before, .jgo-maquina.luces::after { animation:jgoLuces .36s steps(2) infinite; }
+@keyframes jgoLuces { 50% { background-position:10px 50%; } }
+.jgo-carretes { --fila:78px; position:relative; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; padding:10px; background:var(--ink); border-radius:20px; }
+.jgo-carrete { position:relative; height:calc(var(--fila) * 3); overflow:hidden; border-radius:13px; background:#fff; }
+.jgo-carrete::before { content:""; position:absolute; left:0; right:0; top:var(--fila); height:var(--fila); background:#FFF3C4; }   /* fila del premio */
+.jgo-carrete::after { content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(#fff 0, rgba(255,255,255,.7) 15%, rgba(255,255,255,0) 33%, rgba(255,255,255,0) 67%, rgba(255,255,255,.7) 85%, #fff 100%); }
+.jgo-tira { position:absolute; inset:0; }
+.jgo-sim { position:absolute; left:0; right:0; top:0; height:var(--fila); display:grid; place-items:center; font-size:calc(var(--fila) * .6); line-height:1; will-change:transform; }
+.jgo-carrete.gira .jgo-tira { filter:blur(1.4px); }
+.jgo-carrete.tope { animation:jgoTope .26s ease-out; }
+@keyframes jgoTope { 35% { translate:0 6px; } }
+.jgo-carrete.gana { box-shadow:0 0 0 4px var(--jgo-oro); }
+.jgo-carrete.gana.late .centro { animation:jgoLate .55s ease-in-out 3; }
+@keyframes jgoLate { 50% { scale:1.22; } }
+/* Línea de premio: flechitas oro a los lados de la fila del medio */
+.jgo-carretes::before, .jgo-carretes::after { content:""; position:absolute; top:50%; margin-top:-11px; border:11px solid transparent; z-index:1; }
+.jgo-carretes::before { left:-4px; border-left:14px solid var(--jgo-oro); border-right:0; }
+.jgo-carretes::after { right:-4px; border-right:14px solid var(--jgo-oro); border-left:0; }
+
+/* ---- Ruleta: rueda a la izquierda; apuestas, número y «Girar» a la derecha */
+#jgoRul { display:grid; grid-template-columns:300px minmax(0, 1fr); grid-template-areas:"head head" "izq der" "izq res" "izq jugar"; column-gap:26px; align-items:start; }
+#jgoRul > .jgo-vhead { grid-area:head; }
+.jgo-rul-izq { grid-area:izq; }
+.jgo-rul-der { grid-area:der; min-width:0; }
+#jgoRulRes { grid-area:res; margin-top:10px; }
+#jgoRul > .jgo-jugar { grid-area:jugar; margin-top:10px; }
+.jgo-rueda { width:100%; max-width:300px; aspect-ratio:1; margin:0 auto; }
+.jgo-rueda svg { display:block; width:100%; height:100%; overflow:visible; filter:drop-shadow(4px 5px 0 var(--ink)); }
+.jgo-rueda .r-borde { fill:var(--ink); }
+.jgo-rueda .r-pista { fill:var(--jgo-oro); }
+.jgo-rueda .c-rojo { fill:var(--jgo-rojo); }
+.jgo-rueda .c-negro { fill:var(--jgo-negro); }
+.jgo-rueda .c-verde { fill:var(--jgo-verde); }
+.jgo-rueda path { stroke:#fff; stroke-width:.55; }
+.jgo-rueda .r-hondo { fill:none; stroke:rgba(0,0,0,.24); stroke-width:15.2; }       /* las casillas, un poco más hondas */
+.jgo-rueda .r-raya { fill:none; stroke:var(--jgo-oro); stroke-width:.9; }
+.jgo-rueda .r-num { fill:#fff; font-family:var(--font); font-size:8.6px; font-weight:800; text-anchor:middle; dominant-baseline:central; }
+.jgo-rueda .r-centro { fill:var(--bg); stroke:var(--ink); stroke-width:2; }
+.jgo-rueda .r-rayo { stroke:var(--jgo-oro); stroke-width:4.5; stroke-linecap:round; }
+.jgo-rueda .r-perilla { fill:var(--accent); stroke:var(--ink); stroke-width:1.4; }
+.jgo-rueda .r-brillo { fill:none; stroke:var(--jgo-oro); stroke-width:2.6; stroke-linejoin:round; }
+.jgo-rueda .r-hub { fill:#fff; stroke:var(--ink); stroke-width:2.5; }
+.jgo-rueda .r-hub.h-rojo { fill:var(--jgo-rojo); }
+.jgo-rueda .r-hub.h-negro { fill:var(--jgo-negro); }
+.jgo-rueda .r-hub.h-verde { fill:var(--jgo-verde); }
+.jgo-rueda .r-hubn { fill:var(--ink); font-family:var(--font); font-size:21px; font-weight:900; text-anchor:middle; dominant-baseline:central; }
+.jgo-rueda .r-hubn.blanco { fill:#fff; }
+.jgo-rueda .r-bola { fill:#fff; stroke:var(--ink); stroke-width:1.5; }
+.jgo-hist { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:5px; min-height:30px; margin-top:12px; font-size:13px; font-weight:700; color:var(--muted); }
+.jgo-hist span { margin-right:2px; }
+.jgo-hist i { min-width:28px; height:28px; padding:0 4px; border-radius:50%; display:inline-grid; place-items:center; font-style:normal; font-weight:800; color:#fff; border:2px solid var(--ink); font-variant-numeric:tabular-nums; }
+.jgo-hist i:first-of-type { box-shadow:0 0 0 2px var(--jgo-oro); }
+.h-rojo { background:var(--jgo-rojo); } .h-negro { background:var(--jgo-negro); } .h-verde { background:var(--jgo-verde); }
+.jgo-sub { margin:0 0 6px; font-size:14px; font-weight:800; color:var(--ink); }
+.jgo-sub + .jgo-apuestas { margin-bottom:14px; }
+.jgo-apuestas { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; }
+.jgo-apuestas button { min-height:54px; padding:6px; border:2.5px solid var(--ink); border-radius:16px; background:#fff; color:var(--ink); font-size:18px; font-weight:900; box-shadow:2px 3px 0 var(--ink); }
+.jgo-apuestas .ap-rojo { background:var(--jgo-rojo); color:#fff; }
+.jgo-apuestas .ap-negro { background:var(--jgo-negro); color:#fff; }
+.jgo-nums { display:grid; grid-template-columns:50px repeat(12, minmax(0, 1fr)); grid-auto-rows:46px; gap:4px; }
+.jgo-nums button { min-height:0; padding:0; border:2px solid var(--ink); border-radius:10px; color:#fff; font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }
+.jgo-nums .n-rojo { background:var(--jgo-rojo); }
+.jgo-nums .n-negro { background:var(--jgo-negro); }
+.jgo-nums .n-verde { background:var(--jgo-verde); grid-row:span 3; }
+/* Apuesta elegida: aro oro y un poco levantada; el número que salió, con borde oro */
+.jgo-apuestas button.on, .jgo-nums button.on { outline:4px solid var(--jgo-oro); outline-offset:1px; transform:translateY(-2px); box-shadow:2px 4px 0 var(--ink); position:relative; z-index:1; }
+.jgo-nums button.salio { box-shadow:inset 0 0 0 3px var(--jgo-oro); transition:none; }
+.jgo-apuestas button:disabled, .jgo-nums button:disabled { opacity:1; }
+.jgo-tuap { font-weight:800; color:var(--ink); font-size:15px; }
+#jgoRul .jgo-jugar { justify-content:space-between; }
+
+/* ---- Blackjack: mesa Azul Noche con las cartas */
+.jgo-mesa { position:relative; overflow:hidden; display:grid; gap:6px; padding:14px 18px 16px; border:3px solid var(--ink); border-radius:28px;
+  background:radial-gradient(ellipse at 50% 35%, #2E4A9E 0%, #22397F 45%, var(--ink) 100%); box-shadow:5px 6px 0 var(--accent); }
+.jgo-mesa::before { content:""; position:absolute; inset:8px; border:2px dashed rgba(255,201,40,.45); border-radius:21px; pointer-events:none; }
+.jgo-mano { position:relative; }
+.jgo-mano-tit { margin:0 0 6px; display:flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:15px; letter-spacing:.02em; }
+.jgo-mano-tit b { min-width:36px; padding:1px 10px; border-radius:999px; border:2px solid var(--ink); background:#fff; color:var(--ink); text-align:center; font-weight:900; font-variant-numeric:tabular-nums; }
+.jgo-mano-tit b:empty { visibility:hidden; }
+.jgo-cartas { display:flex; flex-wrap:wrap; gap:8px; min-height:106px; }
+.jgo-mesa .jgo-res { min-height:46px; margin:2px 0; }
+.jgo-mesa .jgo-res.casi span { background:#fff; }
+.jgo-mesa .jgo-res.pista span { color:#fff; border-color:rgba(255,255,255,.6); }
+.jgo-carta { width:74px; height:104px; flex:none; perspective:700px; }
+.jgo-carta-in { position:relative; width:100%; height:100%; transform-style:preserve-3d; transition:transform .5s cubic-bezier(.3,.7,.3,1); }
+.jgo-carta.tapada .jgo-carta-in { transform:rotateY(180deg); }
+.jgo-carta .cara, .jgo-carta .dorso { position:absolute; inset:0; border:2.5px solid var(--ink); border-radius:11px; -webkit-backface-visibility:hidden; backface-visibility:hidden; }
+.jgo-carta .cara { background:#fff; color:var(--ink); box-shadow:2px 3px 0 rgba(0,0,0,.35); }
+.jgo-carta.roja .cara { color:var(--jgo-rojo); }
+.jgo-carta .dorso { transform:rotateY(180deg); background:radial-gradient(rgba(255,255,255,.55) 1.8px, transparent 2.3px) 0 0 / 10px 10px, var(--accent); box-shadow:inset 0 0 0 4px #fff, 2px 3px 0 rgba(0,0,0,.35); }
+.jgo-carta .esq { position:absolute; left:6px; top:5px; display:flex; flex-direction:column; align-items:center; font-weight:900; font-size:18px; line-height:1; }
+.jgo-carta .esq i { font-style:normal; font-size:15px; margin-top:1px; }
+.jgo-carta .esq.abajo { left:auto; top:auto; right:6px; bottom:5px; transform:rotate(180deg); }
+.jgo-carta .pinta { position:absolute; inset:0; display:grid; place-items:center; font-size:40px; line-height:1; }
+.jgo-carta.entra { animation:jgoReparte .4s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes jgoReparte { from { transform:translate(240px, -60px) rotate(16deg) scale(.9); opacity:0; } 30% { opacity:1; } }
+/* El mazo, arriba a la derecha: de ahí salen las cartas */
+.jgo-mazo { position:absolute; right:22px; top:18px; width:62px; height:86px; }
+.jgo-mazo i { position:absolute; inset:0; border:2.5px solid var(--ink); border-radius:10px;
+  background:radial-gradient(rgba(255,255,255,.55) 1.8px, transparent 2.3px) 0 0 / 10px 10px, var(--accent); box-shadow:inset 0 0 0 4px #fff; }
+.jgo-mazo i:nth-child(2) { transform:translate(-3px, -3px); }
+.jgo-mazo i:nth-child(3) { transform:translate(-6px, -6px); }
+#jgoBj .jgo-jugar button { min-width:200px; }
+
+/* ---- Confeti cuando hay premio */
+.jgo-confeti { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:5; }
+.jgo-confeti i { position:absolute; top:-18px; width:9px; height:15px; border-radius:2px; border:1.5px solid var(--ink); opacity:0;
+  animation:jgoCae var(--t, 1.4s) var(--d, 0s) cubic-bezier(.3,.6,.45,1) forwards; }
+@keyframes jgoCae { 0% { opacity:1; transform:translate(0, 0) rotate(0); } 85% { opacity:1; } 100% { opacity:0; transform:translate(var(--x, 0), 560px) rotate(var(--r, 540deg)); } }
+
+/* ---- Pantallas medianas (tablets chicas, ventanas angostas): la ruleta más compacta (el 0 a la izquierda y 4 filas de 9) */
+@media (max-width: 1059px) {
+  #jgoRul { grid-template-columns:250px minmax(0, 1fr); column-gap:18px; }
+  .jgo-nums { grid-template-columns:46px repeat(9, minmax(0, 1fr)); grid-auto-rows:44px; }
+  .jgo-nums .n-verde { grid-row:span 4; }
+}
+@media (max-width: 760px) {
+  .jgo-cards { gap:12px; }
+  .jgo-card { min-height:220px; }
+  #jgoRul { grid-template-columns:minmax(0, 1fr); grid-template-areas:"head" "izq" "der" "res" "jugar"; }
+  .jgo-rueda { max-width:250px; }
+  .jgo-rul-der { margin-top:6px; }
+  .jgo-nums { grid-template-columns:repeat(6, minmax(0, 1fr)); }
+  .jgo-nums .n-verde { grid-row:auto; grid-column:1 / -1; }
+}
+/* ---- Pantallas bajas (tablets chicas acostadas, ~960×600) y teléfonos: el botón de jugar queda fijo abajo de la
+   ventana, siempre a la mano aunque el juego no quepa entero */
+@media (max-height: 700px), (max-width: 560px) {
+  #jgoDlg { padding-bottom:0; }
+  .jgo-menu { padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px)); }
+  .jgo-jugar { position:sticky; bottom:0; z-index:6; margin:12px -20px 0; padding:10px 20px calc(10px + env(safe-area-inset-bottom, 0px)); background:var(--surface);
+    border-top:2px solid var(--ink); }
+}
+@media (max-height: 700px) and (min-width: 761px) { #jgoRul { grid-template-areas:"head head" "izq der" "izq res" "jugar jugar"; } }
+@media (max-height: 700px) and (min-width: 561px) {
+  .jgo-shibu { margin:8px 0; }
+  .shibu-ava { min-width:52px; height:52px; }
+  .shibu-badge { width:50px; height:50px; font-size:12.5px; }
+  .shibu-img { height:52px; }
+  .shibu-bub { min-height:42px; padding:7px 14px; }
+  .jgo-vhead { margin-bottom:8px; }
+  .jgo-carretes { --fila:66px; }
+  .jgo-maquina { padding:16px 14px; }
+  .jgo-res { margin-top:8px; }
+}
+/* ---- Teléfono: todo en una columna; el botón de jugar queda fijo abajo de la hoja */
+@media (max-width: 560px) {
+  #jgoDlg { padding:14px 12px 0; }
+  .jgo-top { gap:8px; }
+  .jgo-top h2 { font-size:20px; }
+  .jgo-cont { order:3; flex-basis:100%; gap:6px 8px; }
+  .jgo-pill { min-height:34px; padding:3px 11px; font-size:14px; }
+  .jgo-hoy { font-size:13px; }
+  .jgo-shibu { gap:14px; margin:12px 0 10px; }
+  .shibu-ava { min-width:50px; height:52px; }
+  .shibu-badge { width:50px; height:50px; font-size:12.5px; }
+  .shibu-img { height:52px; }
+  .shibu-bub { font-size:14.5px; padding:8px 12px; }
+  .jgo-cards { grid-template-columns:minmax(0, 1fr); gap:12px; }
+  .jgo-card { min-height:0; display:grid; grid-template-columns:104px minmax(0, 1fr); grid-template-rows:auto auto auto; column-gap:14px; row-gap:2px; align-items:center;
+    padding:12px 14px 12px 12px; text-align:left; justify-items:start; }
+  .jgo-card::before { right:auto; bottom:0; width:116px; height:auto; border-bottom:0; border-right:2.5px solid var(--ink); }
+  .jgo-card .jgo-arte { grid-row:1 / 4; justify-self:center; margin:0; min-height:0; }
+  .jgo-card b { margin:0; font-size:20px; }
+  .jgo-card small { font-size:13px; }
+  .jgo-costo { margin:4px 0 0; }
+  .jgo-arte-slot { margin:0; padding:4px; gap:2px; }
+  .jgo-arte-slot i { width:28px; height:34px; font-size:20px; border-radius:7px; }
+  .jgo-arte-rul i { width:78px; height:78px; }
+  .jgo-arte-bj i { width:44px; height:62px; font-size:18px; }
+  .jgo-arte-bj em { font-size:20px; }
+  .jgo-vhead { margin-bottom:10px; }
+  .jgo-vhead h3 { font-size:20px; }
+  .jgo-premios { margin:0; flex-basis:100%; font-size:13px; }
+  .jgo-maquina { padding:16px 10px; border-radius:24px; }
+  .jgo-maquina::before, .jgo-maquina::after { left:18px; right:18px; }
+  .jgo-carretes { --fila:64px; gap:6px; padding:7px; border-radius:16px; }
+  .jgo-res { font-size:16px; margin-top:10px; }
+  .jgo-res.gana span { font-size:17px; }
+  .jgo-jugar { margin:12px -12px 0; padding-left:12px; padding-right:12px; }
+  .jgo-jugar button { flex:1 1 auto; min-width:0 !important; font-size:17px; }
+  #jgoRul .jgo-jugar { flex-wrap:nowrap; }
+  .jgo-tuap { flex:none; font-size:14px; max-width:42%; }
+  .jgo-apuestas button { min-height:48px; font-size:16px; }
+  .jgo-mesa { padding:12px 12px 14px; border-radius:22px; }
+  .jgo-mazo { display:none; }
+  .jgo-carta { width:58px; height:82px; }
+  .jgo-carta .esq { font-size:15px; left:4px; top:4px; }
+  .jgo-carta .esq i { font-size:12px; }
+  .jgo-carta .esq.abajo { right:4px; bottom:4px; }
+  .jgo-carta .pinta { font-size:30px; }
+  .jgo-cartas { gap:6px; min-height:84px; }
+}
+@media (prefers-reduced-motion: reduce) { .jgo-confeti { display:none; } .jgo-carrete.gira .jgo-tira { filter:none; } }
