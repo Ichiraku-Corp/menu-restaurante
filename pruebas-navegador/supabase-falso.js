@@ -131,6 +131,57 @@
     pos_top_dishes:function(){ return menu.dishes.filter(function(d){return d.name==='Gyozas'||d.name==='Imo mochi';}).map(function(d){return d.id;}); },
     pos_lan_token:function(){ return {token:'llave-de-prueba', ips:['192.168.0.122'], port:8080}; }
   };
+  // ---- Juegos (fichas) ---------------------------------------------------------------------------------------------
+  // Tragamonedas, ruleta y blackjack del personal (pos-juegos.js). El estado vive en S.jgo y empieza con 3 fichas.
+  // Una prueba fuerza lo que sale con window.__JGO: {carretes:['ramen','ramen','sushi']}, {numero:17} o
+  // {mazo:['5♠','10♣','6♥','7♦','9♣']} (se reparte jugador, crupier, jugador, crupier y luego en orden); sin eso, al azar.
+  // Premios como los del servidor: tragamonedas 3 iguales = 3 y 2 iguales = 1; ruleta color o par/impar = 1 y número
+  // exacto = 3; blackjack ganar = 1, blackjack = 2 y empate devuelve la ficha. Tope: 3 puntos al día por jugar.
+  S.jgo={fichas:3,puntos:0,ganado_hoy:0,tope_dia:3,activo:true,manos:{}};
+  (function(){
+    var SIM=['shibu','ramen','sushi','taiyaki','dango','estrella'], ROJOS=[1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+    var RANGOS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'], PALOS=['♠','♥','♦','♣'];
+    function forzado(k){ return window.__JGO&&window.__JGO[k]!=null?window.__JGO[k]:null; }
+    function cuenta(o){ var J=S.jgo; return Object.assign(o,{fichas:J.fichas,puntos:J.puntos,ganado_hoy:J.ganado_hoy,tope_dia:J.tope_dia}); }
+    function cobra(a){ var J=S.jgo; auth(a); (window.__jgoLlamadas=window.__jgoLlamadas||[]).push(a);
+      if(!J.activo) throw {message:'Los juegos están apagados por hoy'};
+      if(J.ganado_hoy>=J.tope_dia) throw {message:'Ya ganaste el tope de hoy ('+J.tope_dia+' puntos). ¡Vuelve mañana!'};
+      if(J.fichas<1) throw {message:'No tienes fichas: cumple una misión para ganar una'};
+      J.fichas--; }
+    function paga(n){ var J=S.jgo; n=Math.max(0,Math.min(n,J.tope_dia-J.ganado_hoy)); J.puntos+=n; J.ganado_hoy+=n; return n; }
+    function pts(n){ return n+(n===1?' punto':' puntos'); }
+    function valor(c){ var r=c.slice(0,-1); return r==='A'?11:(r==='J'||r==='Q'||r==='K')?10:+r; }
+    function total(m){ var t=0,ases=0; m.forEach(function(c){ var v=valor(c); t+=v; if(v===11) ases++; }); while(t>21&&ases){ t-=10; ases--; } return t; }
+    function baraja(){ var d=[]; PALOS.forEach(function(p){ RANGOS.forEach(function(r){ d.push(r+p); }); });
+      for(var i=d.length-1;i>0;i--){ var k=Math.floor(Math.random()*(i+1)), x=d[i]; d[i]=d[k]; d[k]=x; } return d; }
+    function saca(m){ if(!m.mazo.length) m.mazo=baraja(); return m.mazo.shift(); }
+    function termina(m,estado){ var p=0; m.estado=estado;
+      if(estado==='blackjack') p=paga(2); else if(estado==='gano') p=paga(1); else if(estado==='empate') S.jgo.fichas++;
+      m.premio=p; m.mensaje=estado==='blackjack'?'¡Blackjack! Ganaste '+pts(p)+'.':estado==='gano'?'¡Le ganaste al crupier! Ganaste '+pts(p)+'.':
+        estado==='empate'?'Empate: te devolvemos la ficha.':total(m.j)>21?'Te pasaste de 21. ¡Otra vez será!':'Ganó el crupier. ¡Otra vez será!'; }
+    function crupierJuega(m){ var tj=total(m.j); while(total(m.c)<17) m.c.push(saca(m)); var tc=total(m.c); termina(m,tc>21||tj>tc?'gano':tj===tc?'empate':'perdio'); }
+    function mano(m){ var fin=m.estado!=='jugando', o={id:m.id,jugador:m.j.slice(),crupier:fin?m.c.slice():[m.c[0],null],total:total(m.j),estado:m.estado,premio:m.premio||0,
+      mensaje:m.mensaje||'Tienes '+total(m.j)+'. ¿Pides otra carta o te plantas?'}; if(fin) o.total_crupier=total(m.c); return cuenta(o); }
+    Object.assign(R,{
+      jgo_estado:function(a){ auth(a); return cuenta({activo:S.jgo.activo,mensaje:''}); },
+      jgo_tragamonedas:function(a){ cobra(a); var c=forzado('carretes')||[0,1,2].map(function(){ return SIM[Math.floor(Math.random()*SIM.length)]; });
+        var iguales=c[0]===c[1]&&c[1]===c[2]?3:c[0]===c[1]||c[1]===c[2]||c[0]===c[2]?2:0, p=paga(iguales===3?3:iguales===2?1:0);
+        return cuenta({carretes:c.slice(),premio:p,mensaje:p?(iguales===3?'¡Tres iguales! ':'¡Dos iguales! ')+'Ganaste '+pts(p)+'.':'¡Casi! Esta vez no hubo premio.'}); },
+      jgo_ruleta:function(a){ var ap=String(a.p_apuesta==null?'':a.p_apuesta); if(!/^(rojo|negro|par|impar|[0-9]|[12][0-9]|3[0-6])$/.test(ap)) throw {message:'Elige una apuesta'};
+        cobra(a); var n=forzado('numero'); n=n==null?Math.floor(Math.random()*37):+n; var color=n===0?'verde':ROJOS.indexOf(n)>=0?'rojo':'negro';
+        var gana=ap===color||ap===String(n)||(n>0&&((ap==='par'&&n%2===0)||(ap==='impar'&&n%2===1))), p=gana?paga(/^\d+$/.test(ap)?3:1):0;
+        return cuenta({numero:n,color:color,apuesta:ap,premio:p,mensaje:'Salió el '+n+' '+color+'. '+(p?'¡Ganaste '+pts(p)+'!':'¡Otra vez será!')}); },
+      jgo_bj_empezar:function(a){ cobra(a); var f=forzado('mazo'), m={id:++id,emp:a.p_emp,mazo:f?f.slice():baraja(),j:[],c:[],estado:'jugando'};
+        m.j.push(saca(m)); m.c.push(saca(m)); m.j.push(saca(m)); m.c.push(saca(m)); S.jgo.manos[m.id]=m;
+        var nj=total(m.j)===21, nc=total(m.c)===21; if(nj||nc) termina(m,nj&&nc?'empate':nj?'blackjack':'perdio'); return mano(m); },
+      jgo_bj_accion:function(a){ auth(a); var m=S.jgo.manos[a.p_id]; if(!m||m.emp!==a.p_emp) throw {message:'Esa mano ya no está: reparte otra'};
+        if(m.estado!=='jugando') throw {message:'Esa mano ya terminó'};
+        if(a.p_accion==='pedir'){ m.j.push(saca(m)); var t=total(m.j); if(t>21) termina(m,'perdio'); else if(t===21) crupierJuega(m); }
+        else if(a.p_accion==='plantarse') crupierJuega(m); else throw {message:'Esa jugada no existe'};
+        return mano(m); }
+    });
+  })();
+  // ---- fin de Juegos (fichas) ---------------------------------------------------------------------------------------
   window.__R=R;   // las pruebas pueden añadir funciones (p. ej. las de WhatsApp)
   function Q(t){ this.t=t; } Q.prototype.select=function(){return this}; Q.prototype.order=function(){return this};
   Q.prototype.then=function(res,rej){ if(window.__OFFLINE) return Promise.resolve({data:null,error:{message:'TypeError: Failed to fetch'}}).then(res,rej); var d=this.t==='categories'?menu.categories:menu.dishes; return Promise.resolve({data:JSON.parse(JSON.stringify(d)),error:null}).then(res,rej); };
