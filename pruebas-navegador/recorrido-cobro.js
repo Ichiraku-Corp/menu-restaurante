@@ -81,6 +81,21 @@ await p.check("#selloChk");
 ok(await p.evaluate(()=>document.getElementById("selloBox").classList.contains("marcada")),"al marcar la casilla queda en verde: «Se anota un sello en esta compra»");
 await p.click('#payMethods [data-m="punto_debito"]');await p.waitForTimeout(200);await p.click("#payOk");await p.waitForTimeout(500);
 ok(await p.evaluate(()=>window.__sello===true),"al cobrar se manda «Tarjeta entregada» con el pago");
+// Quien viene solo a canjear su premio: la cuenta queda en Ref 0 y se cierra sin pago
+if(await p.isVisible("#back"))await p.click("#back");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
+await p.click('#areas [data-area="Feria"]');await p.click('#areaBody [data-table] .num:text-is("9")');await p.waitForSelector("#orderView:not(.hidden)");
+await p.click('#cats button:has-text("Bebidas")');for(let k=0;k<2;k++){await p.click('#dishes button:has-text("Limonada rosa")');await p.waitForTimeout(60);}
+await p.click("#send");await p.waitForTimeout(400);
+await p.click("#pay");await p.waitForTimeout(300);await cliente();
+ok(await p.isDisabled("#payOk")&&(await p.textContent("#payOk"))==="Confirmar cobro","con saldo, sin elegir cómo paga no deja confirmar");
+await p.click("#canjeBtn");await p.waitForSelector("#canjeDlg[open]");
+await p.click('#canjeList [data-cj="1"]');await p.click('#canjeList [data-cj="1"]');await p.click("#canjeOk");await p.waitForTimeout(700);
+ok(/Ref 0,00/.test(await p.textContent("#payTotal"))&&!(await p.isDisabled("#payOk"))&&(await p.textContent("#payOk"))==="Cerrar cuenta (Ref 0)",
+  "con solo el premio la cuenta queda en Ref 0 y el botón dice «Cerrar cuenta (Ref 0)»");
+await p.screenshot({path:process.env.CAPTURA_REF0||"/dev/null"}).catch(()=>{});
+await p.click("#payOk");await p.waitForTimeout(500);
+ok(await p.evaluate(()=>window.__lastPay&&window.__lastPay.payments.length===0&&window.__S.orders.filter(o=>o.status==="cobrada").length>0)&&await p.isVisible("#tablesView"),
+  "al tocarlo se cierra sin pago y vuelve a las mesas");
 // Consumo de un empleado: se puede seguir sin datos del cliente, pero solo cargándolo a su cuenta
 if(await p.isVisible("#back"))await p.click("#back");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 await p.click('#areas [data-area="Feria"]');await p.click('#areaBody [data-table] .num:text-is("7")');await p.waitForSelector("#orderView:not(.hidden)");

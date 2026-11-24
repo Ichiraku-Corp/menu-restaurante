@@ -288,6 +288,10 @@ grant execute on function public.menu_tasa() to anon, authenticated;
 create or replace function public.pos_money(x numeric) returns text
 language sql immutable as $$ select to_char(coalesce(x, 0), 'FM999G999G990D00') $$;
 
+-- Un número de verdad y de tamaño razonable: abs(NaN) e infinito nunca son menores que el máximo.
+create or replace function public.pos_num_ok(x numeric, maximo numeric default 1e9) returns boolean
+language sql immutable as $$ select x is not null and abs(x) < maximo $$;
+
 create or replace function public.pos_order_label(p_order bigint) returns text
 language sql stable security definer set search_path = public as $$
   select case when o.kind = 'mesa' then coalesce(t.area || ' ' || t.number, 'Mesa')
@@ -721,7 +725,7 @@ begin
     select * into d from public.dishes where id = it.dish_id;
     if d.id is null then raise exception 'Plato no encontrado'; end if;
     if not d.available then raise exception '% está agotado', d.name; end if;
-    if coalesce(it.qty, 0) <= 0 or it.qty > 99 then raise exception 'Cantidad no válida'; end if;
+    if coalesce(round(it.qty, 2), 0) <= 0 or it.qty > 99 then raise exception 'Cantidad no válida'; end if;
     price := d.price;
     if jsonb_typeof(d.variants) = 'array' and jsonb_array_length(d.variants) > 0 then
       select (v ->> 'price')::numeric into price from jsonb_array_elements(d.variants) v where v ->> 'label' = coalesce(it.variant, '');
@@ -833,7 +837,8 @@ create or replace function public.pos_discount(p_emp bigint, p_pin text, p_order
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
-  if coalesce(p_amount, 0) < 0 then raise exception 'Monto no válido'; end if;
+  p_amount := coalesce(p_amount, 0);  -- vacío = sin descuento
+  if p_amount < 0 or not public.pos_num_ok(p_amount, 1e7) then raise exception 'Monto no válido'; end if;
   if p_amount > 0 and length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo del descuento'; end if;
   update public.pos_orders set discount = round(p_amount, 2), discount_reason = trim(coalesce(p_reason, '')), discount_by = p_emp
   where id = p_order and status = 'abierta';
@@ -1009,6 +1014,7 @@ create or replace function public.pos_precuenta(p_emp bigint, p_pin text, p_orde
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
+  if not exists (select 1 from public.pos_orders where id = p_order) then raise exception 'Pedido no encontrado'; end if;
   -- Dos toques seguidos (o dos tablets a la vez) imprimen una sola precuenta
   if exists (select 1 from public.pos_orders where id = p_order and precuenta_at > now() - interval '5 seconds') then return; end if;
   update public.pos_orders set precuenta_at = now() where id = p_order;
@@ -1128,7 +1134,11 @@ begin
     rt := coalesce((select eur from public.pos_rates where rate_date <= (p_at at time zone 'America/Caracas')::date order by rate_date desc limit 1), rt);
   end if;
   for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text, tip boolean, tab_employee_id bigint) loop
-    if coalesce(p.amount, 0) <= 0 then continue; end if;
+    if p.amount is null or round(p.amount, 2) <= 0 then continue; end if;
+    if not public.pos_num_ok(p.amount) then raise exception 'Monto no válido'; end if;
+    if coalesce(p.method, '') not in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta') then
+      raise exception 'Método de pago no válido: %', coalesce(nullif(p.method, ''), 'vacío');
+    end if;
     if p.method = 'cuenta' and coalesce(p.tip, false) then raise exception 'La propina no puede ir a cuenta'; end if;
     if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
     who := coalesce(p.person, who);
@@ -1169,7 +1179,13 @@ begin
     if p.method <> 'cuenta' then lm := p.method; lc := cur; end if;
     paid := paid + ref;
   end loop;
-  if paid <= 0 then raise exception 'Escribe el monto a cobrar'; end if;
+  if paid <= 0 then
+    -- Cuenta en Ref 0 (un canje de la tarjeta de puntos o una cortesía con todo descontado): se cierra sin pago
+    if due > 0.009 then raise exception 'Escribe el monto a cobrar'; end if;
+    if not exists (select 1 from public.pos_items where order_id = p_order and status <> 'anulado') then
+      raise exception 'La cuenta está vacía: anúlala en vez de cobrarla';
+    end if;
+  end if;
   perform public.pos_match_incoming();  -- si el pago real ya había llegado, queda comprobado de una vez
   if paid < due - 0.02 then
     if not coalesce(p_partial, false) then raise exception 'Falta por cobrar Ref %', public.pos_money(due - paid); end if;
@@ -1207,11 +1223,11 @@ begin
   else
   -- Recibo: el shiba arriba (como la precuenta) y el QR de opinión abajo; la comanda de cocina no lleva el shiba
   perform public.pos_print('caja', E'@logo\n' || public.pos_bill_text(p_order, 'RECIBO - no es factura fiscal') || E'\n=\n' ||
-    (select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case when p2.is_tip then 'Propina ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
+    coalesce((select string_agg(public.pos_line(case when p2.person is not null then 'P' || p2.person || ' ' else '' end || case when p2.is_tip then 'Propina ' else '' end || case p2.method when 'efectivo_usd' then 'Efectivo $' when 'efectivo_bs' then 'Efectivo Bs'
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
-     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina') || E'\n\n~Gracias por tu visita!' || public.opinion_qr(p_order));
+     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina'), public.pos_line('Sin pago', 'Ref 0,00')) || E'\n\n~Gracias por tu visita!' || public.opinion_qr(p_order));
   end if;
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, case when p_offline then 'cobrar_sin_internet' else 'cobrar' end, p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);
@@ -1269,7 +1285,7 @@ declare d date := (now() at time zone 'America/Caracas')::date;
 begin
   if coalesce(public.staff_role(), '') <> 'impresora' then perform public.pos_auth_charge(p_emp, p_pin);
   elsif p_date is not null and p_date between d - 7 and d + 7 then d := p_date; end if;
-  if coalesce(p_rate, 0) <= 0 then raise exception 'Tasa no válida'; end if;
+  if coalesce(p_rate, 0) <= 0 or not public.pos_num_ok(p_rate) then raise exception 'Tasa no válida'; end if;
   insert into public.pos_rates (rate_date, eur, source, updated_at)
   values (d, round(p_rate, 4), coalesce(p_source, 'manual'), now())
   on conflict (rate_date) do update set eur = excluded.eur, source = excluded.source, updated_at = now();
@@ -1283,6 +1299,9 @@ declare sid bigint;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   if exists (select 1 from public.pos_sessions where status = 'abierta') then raise exception 'La caja ya está abierta'; end if;
+  if coalesce(p_usd, 0) < 0 or coalesce(p_bs, 0) < 0 or not public.pos_num_ok(coalesce(p_usd, 0)) or not public.pos_num_ok(coalesce(p_bs, 0)) then
+    raise exception 'Fondo de caja no válido';
+  end if;
   insert into public.pos_sessions (opened_by, opening_usd, opening_bs) values (p_emp, coalesce(p_usd, 0), coalesce(p_bs, 0)) returning id into sid;
   insert into public.pos_log (employee_id, action, detail) values (p_emp, 'abrir_caja', jsonb_build_object('fondo_usd', p_usd, 'fondo_bs', p_bs));
   return sid;
@@ -1483,6 +1502,12 @@ begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into s from public.pos_sessions where status = 'abierta' for update;
   if s.id is null then raise exception 'La caja no está abierta'; end if;
+  if p_counted is not null and jsonb_typeof(p_counted) <> 'object' then raise exception 'El conteo no es válido'; end if;
+  if exists (select 1 from jsonb_each(coalesce(p_counted, '{}'::jsonb)) e
+             where e.key not like '\_%' and (jsonb_typeof(e.value) not in ('number', 'null')
+                   or (jsonb_typeof(e.value) = 'number' and not public.pos_num_ok((e.value #>> '{}')::numeric, 1e12)))) then
+    raise exception 'El conteo tiene un monto que no es válido';
+  end if;
   delete from public.pos_orders o where o.status = 'abierta' and not exists (select 1 from public.pos_items i where i.order_id = o.id)
     and not exists (select 1 from public.pos_payments p where p.order_id = o.id);
   if exists (select 1 from public.pos_orders where status = 'abierta') then raise exception 'Hay mesas abiertas: cóbralas o anúlalas antes de cerrar'; end if;
@@ -1571,8 +1596,9 @@ returns void language plpgsql security definer set search_path = public as $$
 declare sess bigint; rt numeric; cur text; pid bigint;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
-  if p_method not in ('efectivo_usd', 'efectivo_bs') then raise exception 'Las salidas de caja son solo de efectivo'; end if;
-  if coalesce(p_amount, 0) <= 0 then raise exception 'Escribe el monto'; end if;
+  if coalesce(p_method, '') not in ('efectivo_usd', 'efectivo_bs') then raise exception 'Las salidas de caja son solo de efectivo'; end if;
+  if coalesce(round(p_amount, 2), 0) <= 0 then raise exception 'Escribe el monto'; end if;
+  if not public.pos_num_ok(p_amount) then raise exception 'Monto no válido'; end if;
   if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Escribe el motivo (ej.: pago delivery semanal, compra de hielo)'; end if;
   select id into sess from public.pos_sessions where status = 'abierta';
   if sess is null then raise exception 'La caja está cerrada'; end if;
@@ -1619,7 +1645,11 @@ begin
   if sess is null then raise exception 'La caja está cerrada: ábrela antes de recibir abonos'; end if;
   rt := public.pos_rate();
   for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text) loop
-    if coalesce(p.amount, 0) <= 0 or p.method = 'cuenta' then continue; end if;
+    if p.amount is null or round(p.amount, 2) <= 0 or p.method = 'cuenta' then continue; end if;
+    if not public.pos_num_ok(p.amount) then raise exception 'Monto no válido'; end if;
+    if coalesce(p.method, '') not in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito') then
+      raise exception 'Método de pago no válido: %', coalesce(nullif(p.method, ''), 'vacío');
+    end if;
     cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal') then 'REF' else 'BS' end;
     if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
     ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
@@ -1699,6 +1729,7 @@ declare oid bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Escribe el nombre del cliente'; end if;
+  if p_fee is not null and not public.pos_num_ok(p_fee, 10000) then raise exception 'Tarifa de delivery no válida'; end if;
   insert into public.pos_orders (kind, label, phone, address, delivery_fee, service_pct, opened_by, day_number, channel)
   values ('delivery', left(trim(p_name), 40), left(trim(coalesce(p_phone, '')), 30), left(trim(coalesce(p_address, '')), 200), greatest(coalesce(p_fee, 0), 0), 0, p_emp, public.pos_next_number(),
           case when p_channel = 'yummy' then 'yummy' else 'propio' end)
@@ -1712,6 +1743,7 @@ create or replace function public.pos_set_delivery(p_emp bigint, p_pin text, p_o
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
+  if p_fee is not null and not public.pos_num_ok(p_fee, 10000) then raise exception 'Tarifa de delivery no válida'; end if;
   update public.pos_orders set label = left(trim(coalesce(p_name, label)), 40), phone = left(trim(coalesce(p_phone, '')), 30),
     address = left(trim(coalesce(p_address, '')), 200), delivery_fee = greatest(coalesce(p_fee, 0), 0),
     channel = case when p_channel in ('propio', 'yummy') then p_channel else channel end
@@ -1816,6 +1848,7 @@ begin
   select name into who from public.employees where id = p_emp;
   for c in select * from jsonb_to_recordset(coalesce(p_counts, '[]'::jsonb)) as x(id bigint, qty numeric) loop
     if c.qty is null or c.qty < 0 then continue; end if;
+    if not public.pos_num_ok(c.qty, 1e6) then raise exception 'Cantidad no válida'; end if;
     perform public.register_movement(c.id::text, 'conteo', c.qty, null, 'Conteo desde caja', who, 'pos');
     n := n + 1;
   end loop;
@@ -2035,7 +2068,8 @@ begin
   if p_photo is not null and not public.pos_factura_ok(p_photo) then raise exception 'La foto de la factura no es válida'; end if;
   select name into who from public.employees where id = p_emp;
   for c in select * from jsonb_to_recordset(coalesce(p_items, '[]'::jsonb)) as x(id bigint, qty numeric) loop
-    if coalesce(c.qty, 0) <= 0 then continue; end if;
+    if c.qty is null or c.qty <= 0 then continue; end if;
+    if not public.pos_num_ok(c.qty, 1e6) then raise exception 'Cantidad no válida'; end if;
     perform public.register_movement(c.id::text, 'compra', c.qty, null, 'Llegó mercancía (caja)', who, 'pos');
     n := n + 1;
   end loop;
@@ -2393,5 +2427,26 @@ begin
   if to_regprocedure('public.can_manage_or_service()') is not null then grant execute on function public.can_manage_or_service() to authenticated; end if;
   foreach f in array array['inv_check()', 'log_price_change()', 'touch_updated_at()'] loop
     if to_regprocedure('public.' || f) is not null then execute format('revoke execute on function public.%s from authenticated', f); end if;
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------- Números siempre de verdad
+-- Montos y cantidades nunca son NaN, infinito ni absurdos, venga de donde venga (abs(NaN) no es menor que nada).
+do $$
+declare c record;
+begin
+  for c in select * from (values
+      ('pos_payments', 'pos_payments_numeros', 'abs(amount) < 1e12 and abs(amount_ref) < 1e12 and abs(coalesce(rate, 0)) < 1e12'),
+      ('pos_orders', 'pos_orders_numeros', 'abs(discount) < 1e12 and abs(coalesce(delivery_fee, 0)) < 1e12 and abs(coalesce(rate, 0)) < 1e12 and abs(coalesce(service_pct, 0)) <= 100'),
+      ('pos_items', 'pos_items_numeros', 'abs(qty) < 1e6 and abs(unit_price) < 1e12 and abs(coalesce(list_price, 0)) < 1e12'),
+      ('pos_rates', 'pos_rates_numeros', 'abs(eur) < 1e12'),
+      ('pos_tab_moves', 'pos_tab_moves_numeros', 'abs(amount_ref) < 1e12'),
+      ('pos_sessions', 'pos_sessions_numeros', 'abs(coalesce(opening_usd, 0)) < 1e12 and abs(coalesce(opening_bs, 0)) < 1e12'),
+      ('ingredients', 'ingredients_numeros', 'abs(coalesce(stock_qty, 0)) < 1e9'),
+      ('inventory_movements', 'inventory_movements_numeros', 'abs(qty) < 1e9 and abs(coalesce(qty_stock, 0)) < 1e9 and abs(coalesce(stock_after, 0)) < 1e9')
+    ) as t(tabla, nombre, regla) loop
+    if not exists (select 1 from pg_constraint where conname = c.nombre) then
+      execute format('alter table public.%I add constraint %I check (%s)', c.tabla, c.nombre, c.regla);
+    end if;
   end loop;
 end $$;

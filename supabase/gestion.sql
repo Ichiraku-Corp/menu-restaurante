@@ -445,7 +445,7 @@ begin
   -- La cuenta «sala» (caja, con PIN) solo registra conteos y compras que llegan.
   if not (public.can_manage_or_service() or (coalesce(public.staff_role(), '') = 'sala' and p_kind in ('conteo', 'compra'))) then raise exception 'Sin permiso'; end if;
   if p_kind not in ('compra', 'merma', 'consumo', 'conteo', 'ajuste') then raise exception 'Tipo no válido: %', p_kind; end if;
-  if p_qty is null or (p_kind <> 'ajuste' and p_qty < 0) then raise exception 'Cantidad no válida'; end if;
+  if p_qty is null or not (abs(p_qty) < 1e7) or (p_kind <> 'ajuste' and p_qty < 0) then raise exception 'Cantidad no válida'; end if;
 
   if p_ingredient ~ '^\d+$' then select * into ing from public.ingredients where id = p_ingredient::bigint for update;
   else select * into ing from public.ingredients where lower(name) = lower(trim(p_ingredient)) for update; end if;

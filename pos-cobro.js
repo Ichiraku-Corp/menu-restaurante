@@ -164,7 +164,10 @@ function updatePaySums() {
   // Con vuelto hay que decir cómo se entrega: así el cierre de caja cuadra con lo que de verdad salió
   var needChg = s.rest < -0.02 && !changeCur;
   $("changeAsk").classList.toggle("need", needChg);
-  $("payOk").disabled = !pays.length || s.rest > 0.02 || needChg;
+  // Cuenta en Ref 0 (canje de la tarjeta de puntos o cortesía con todo descontado): se cierra sin pago
+  var cero = !payPerson && !pays.length && s.total <= 0.009;
+  $("payOk").disabled = (!pays.length && !cero) || s.rest > 0.02 || needChg;
+  if (!payPerson) $("payOk").textContent = cero ? "Cerrar cuenta (Ref 0)" : "Confirmar cobro";
   show("payPartial", pays.length > 0 && s.rest > 0.02 && s.paid > 0 && !payPerson && !(typeof SR !== "undefined" && SR.on));
   $("payPartial").textContent = "Cobrar solo " + ref(s.paid) + " (abono)";
   var foot = $("payDlg").querySelector(".payfoot");
@@ -264,7 +267,7 @@ function doPay(partial) {
       toast((payPerson ? pname(payPerson) + " pagó " : "Abono de ") + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder();
     }
     var ch = r && r.change;
-    toast("Cobrado " + ref(r.total) + (ch ? (ch.currency === "PROPINA" ? " · " : " · Vuelto ") + chgTxt(ch) : ""));
+    toast(num(r.total) > 0.009 ? "Cobrado " + ref(r.total) + (ch ? (ch.currency === "PROPINA" ? " · " : " · Vuelto ") + chgTxt(ch) : "") : "Cuenta cerrada en Ref 0");
     chgAlert(ch);
     goTables();
   }).catch(function (e) { $("payErr").textContent = errMsg(e); if (/PIN incorrecto/.test(errMsg(e))) lock(); })
