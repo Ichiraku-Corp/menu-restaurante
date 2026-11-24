@@ -11,7 +11,7 @@ const menu=fs.readFileSync(path.join(ROOT,"data/menu.json"),"utf8");
 await p.route("**/vendor/supabase-js-*/supabase.js",r=>r.fulfill({contentType:"application/javascript",body:"window.__MENU="+menu+";"+fs.readFileSync(path.join(ROOT,"pruebas-navegador/supabase-falso.js"),"utf8")}));
 const pin=async(e,c)=>{for(const k of c)await p.click(`#pad [data-k="${k}"]`);};
 // Para cobrar se piden los datos del cliente (nombre y teléfono)
-const cliente=async()=>{if(await p.isVisible("#cliDlg")){await p.fill("#cQ","04141112233");await p.waitForSelector("#cName",{state:"visible"});await p.fill("#cName","Cliente Prueba");await p.click("#cOk");await p.waitForSelector("#payDlg[open]");}};
+const cliente=async()=>{if(await p.isVisible("#cliDlg")){await p.fill("#cQ","04141112233");await p.waitForSelector("#cName:visible, #cFicha:visible");if(await p.isVisible("#cName"))await p.fill("#cName","Cliente Prueba");await p.click("#cOk");await p.waitForSelector("#payDlg[open]");}};
 await p.goto("http://localhost:8795/pos.html");await p.fill("#devEmail","a@b.c");await p.fill("#devPass","x");await p.click("#device button");
 await pin(2,"2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(400);
 if(await p.isVisible("#annDlg")) await p.keyboard.press("Escape");

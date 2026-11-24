@@ -163,7 +163,7 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
       "la mesa que pidió la cuenta hace 7 min lo dice y se avisa arriba (" + t3 + ")");
     await page.click('#areaBody [data-table] .num:text-is("3")'); await page.waitForSelector("#orderView:not(.hidden)");
     await page.click("#pay"); await page.waitForTimeout(200);
-    if (await page.isVisible("#cliDlg")) { await page.fill("#cQ", "04241234567"); await page.waitForSelector("#cName", { state: "visible" }); await page.fill("#cName", "Cliente Caja"); await page.click("#cOk"); await page.waitForSelector("#payDlg[open]"); }
+    if (await page.isVisible("#cliDlg")) { await page.fill("#cQ", "04241234567"); await page.waitForSelector("#cName:visible, #cFicha:visible"); if (await page.isVisible("#cName")) await page.fill("#cName", "Cliente Caja"); await page.click("#cOk"); await page.waitForSelector("#payDlg[open]"); }
     const orden = await page.evaluate(() => [...document.querySelectorAll("#payMethods [data-m]")].slice(0, 2).map((b) => b.dataset.m + (b.classList.contains("top") ? "*" : "")).join(","));
     ok(orden === "punto_debito*,pago_movil*", "al cobrar, punto y pago móvil salen primero y más grandes (" + orden + ")");
     await page.click('#payMethods [data-m="punto_debito"]'); await page.waitForTimeout(200);
