@@ -871,7 +871,8 @@ function srValid(e) {
 }
 function srHora(at) { return new Date(at).toLocaleString("es-VE", { timeZone: "America/Caracas", hour12: false, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(",", ""); }
 const SR_METODOS = { efectivo_usd: ["Efectivo $", "REF"], efectivo_bs: ["Efectivo Bs", "BS"], pago_movil: ["Pago movil", "BS"], punto_debito: ["Punto debito", "BS"],
-  punto_credito: ["Punto credito", "BS"], zelle: ["Zelle", "REF"], binance: ["Binance", "REF"], paypal: ["PayPal", "REF"] };
+  punto_credito: ["Punto credito", "BS"], zelle: ["Zelle", "REF"], binance: ["Binance", "REF"], paypal: ["PayPal", "REF"],
+  yummy: ["Yummy", "REF"] };  // Yummy le paga al restaurante después: también se anota sin internet
 function srValidPago(e) {
   if (!e || typeof e !== "object") return "Datos no válidos";
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(String(e.uuid || ""))) return "Falta el identificador del cobro";

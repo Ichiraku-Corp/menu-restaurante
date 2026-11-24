@@ -7,11 +7,13 @@ var pays = [], changeCur = null, payPerson = 0;  // changeCur: cómo se da el vu
 var sinCliente = false;
 $("pay").addEventListener("click", function () {
   var off = typeof SR !== "undefined" && SR.on;
-  if (!off && cur.data && !clienteListo(cur.data)) { clientForm(true); return; }
-  abrirCobro(false);
+  if (!off && cur.data && !clienteListo(cur.data) && !esYummy(cur.data)) { clientForm(true); return; }
+  abrirCobro(esYummy(cur.data) ? "yummy" : false);
 });
-function abrirCobro(soloCuenta) {
-  sinCliente = !!soloCuenta;
+// modo: true = consumo de un empleado (solo a su cuenta); "yummy" = pedido de Yummy (sin datos del cliente)
+function abrirCobro(modo) {
+  sinCliente = modo === true;
+  var yummy = modo === "yummy";
   refreshState().then(function () {
     if (!ST.session) { toast("La caja está cerrada: ábrela en «Caja»", true); return; }
     pays = []; changeCur = null; $("payErr").textContent = "";
@@ -31,10 +33,16 @@ function abrirCobro(soloCuenta) {
     $("payMethods").innerHTML = METHODS.slice().sort(function (a, b) { return cobroOrden(a[0]) - cobroOrden(b[0]); }).map(function (m, i) {
       return '<button type="button" class="mbtn' + (i < 2 ? " top" : "") + '" data-m="' + m[0] + '"' + (m[2] === "BS" && !ST.rate ? " disabled" : "") + ">" + logo(m[0]) + "<span>" + m[1] + "</span></button>"; }).join("") +
       (off ? "" : '<button type="button" class="mbtn" data-m="cuenta">' + logo("cuenta") + "<span>A cuenta (empleado)</span></button>") +
+      '<button type="button" class="mbtn" data-m="yummy">' + logo("yummy") + "<span>Yummy</span></button>" +
       '<button type="button" class="mbtn" data-tip="1">' + logo("propina") + "<span>+ Propina</span></button>";
     TABS = []; if (!off) q(sb.rpc("pos_tabs_list")).then(function (t) { TABS = t || []; if ($("payDlg").open) drawPays(); }).catch(function () {});
     $("payErr").textContent = off ? "Sin internet: el recibo sale en la laptop y el cobro se sube cuando vuelva la conexión."
-      : sinCliente ? "Sin datos del cliente: solo se puede cargar a la cuenta de un empleado." : "";
+      : sinCliente ? "Sin datos del cliente: solo se puede cargar a la cuenta de un empleado."
+      : yummy ? "Pedido de Yummy: queda anotado como Yummy (por cobrar). No pide datos del cliente." : "";
+    // La nota de Yummy es informativa (azul); los errores siguen en rojo
+    $("payErr").style.color = yummy && !off ? "var(--info)" : "var(--danger)";
+    // Un pedido de Yummy llega con el pago de Yummy ya puesto por lo que falta: solo queda confirmar
+    if (yummy && dueNow > 0.009) pays = [{ method: "yummy", amount: (Math.round(dueNow * 100) / 100).toFixed(2), reference: "" }];
     $("selloChk").checked = !!cur.data.sello; show("canjeBtn", !off); drawSello();
     drawPayPersons(); drawPays(); $("payDlg").showModal();
   }).catch(fail);
@@ -252,11 +260,11 @@ $("payCancel").addEventListener("click", function () { $("payDlg").close(); });
 var paying = false;
 $("payOk").addEventListener("click", function () { doPay(false); });
 function doPay(partial) {
-  if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = "";
+  if (paying) return; paying = true; $("payOk").disabled = true; $("payErr").textContent = ""; $("payErr").style.color = "var(--danger)";
   var list = pays.map(function (p) { return { method: p.method, amount: num(p.amount), reference: p.reference, person: payPerson || null, incoming_id: p.incoming_id || null, device: devName() || "Sin nombre", tip: !!p.tip, tab_employee_id: p.tab_employee_id || null }; }).filter(function (p) { return p.amount > 0; });
   // Al cobrarle a una persona, el resto de la mesa sigue abierto (abono), salvo que sea lo último que falta.
-  if (!(typeof SR !== "undefined" && SR.on) && !clienteListo(cur.data) && list.some(function (p) { return !p.tip && p.method !== "cuenta"; })) {
-    $("payErr").textContent = "Faltan los datos del cliente: sin ellos solo se puede cargar a la cuenta de un empleado."; paying = false; updatePaySums(); return;
+  if (!(typeof SR !== "undefined" && SR.on) && !clienteListo(cur.data) && list.some(function (p) { return !p.tip && p.method !== "cuenta" && p.method !== "yummy"; })) {
+    $("payErr").textContent = "Faltan los datos del cliente: sin ellos solo se puede cobrar con Yummy o cargar a la cuenta de un empleado."; paying = false; updatePaySums(); return;
   }
   if (list.some(function (p) { return p.method === "cuenta" && !p.tab_employee_id; })) { $("payErr").textContent = "Elige a qué empleado se carga la cuenta."; paying = false; updatePaySums(); return; }
   if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + (p.tip ? 0 : payRef(p)); }, 0); partial = restAll > 0.02; }
@@ -280,7 +288,11 @@ function doPay(partial) {
 var SELLO_DESDE = 20;
 function drawSello() {
   if (!cur.data) return;
-  var marcada = $("selloChk").checked, lleva = num(cur.data.totals.total) >= SELLO_DESDE - 0.005;
+  var lleva = num(cur.data.totals.total) >= SELLO_DESDE - 0.005;
+  // Por debajo de Ref 20 no hay sello: la casilla no se puede marcar
+  if (!lleva) $("selloChk").checked = false;
+  $("selloChk").disabled = !lleva;
+  var marcada = $("selloChk").checked;
   $("selloBox").classList.toggle("marcada", marcada);
   $("selloBox").classList.toggle("lleva", lleva && !marcada);
   $("selloHint").textContent = marcada ? "Se anota un sello en esta compra"

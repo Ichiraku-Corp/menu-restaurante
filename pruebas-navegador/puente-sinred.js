@@ -57,6 +57,8 @@ function ok(c, m) { if (c) console.log("ok: " + m); else { fallos++; console.log
     ok(rec.indexOf("\x1d\x76\x30") >= 0 && rec.indexOf("\x1d\x76\x30") < rec.indexOf("RECIBO SIN INTERNET"), "el recibo sin internet también lleva el shiba arriba");
     const com = impreso.find((x) => x.includes("Gyozas") && !x.includes("RECIBO")) || "";
     ok(com && com.indexOf("\x1d\x76\x30") < 0, "la comanda de cocina sale sin el shiba");
+    const py = Object.assign({}, pago, { lines: [{ method: "yummy", amount: 11 }], change_currency: "", change: null, at: new Date().toISOString() });
+    ok(P.srValidPago(py) === "" && /Yummy\s+Ref 11\.00/.test(P.srRecibo(py)), "un pedido de Yummy también se cobra sin internet (el recibo dice Yummy)");
     const rx = (c) => P.srRecibo(Object.assign({}, pago, { at: new Date().toISOString(), change_currency: c.currency, change: c }));
     ok(/Vuelto\s+\$ 9\.00 \+ Bs 50\.00/.test(rx({ currency: "MIX", amount: 9.5, usd: 9, bs: 50 })) && /Vuelto\s+Bs 950\.00 p\. movil/.test(rx({ currency: "MOVIL", amount: 950 })) &&
        /Propina \(vuelto\)\s+Ref 9\.00/.test(rx({ currency: "PROPINA", amount: 9 })), "el vuelto sale como en el ticket del sistema (mixto, pago móvil, propina)");

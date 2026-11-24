@@ -84,7 +84,8 @@ select prueba.ok(:q = 1 and (select qty from public.pos_items where id = :lim) =
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
 select public.pos_open(:mesera, '2222', null, 'Taiyakis') as o4 \gset
-select public.pos_add(:mesera, '2222', :o4, jsonb_build_array(jsonb_build_object('dish_id', :taiyaki, 'qty', 6), jsonb_build_object('dish_id', :teuchi, 'variant', 'Gr', 'qty', 1)));
+-- (2 Teuchi: lo que se paga pasa de Ref 20, así que esta compra también lleva sello)
+select public.pos_add(:mesera, '2222', :o4, jsonb_build_array(jsonb_build_object('dish_id', :taiyaki, 'qty', 6), jsonb_build_object('dish_id', :teuchi, 'variant', 'Gr', 'qty', 2)));
 select public.pos_send(:mesera, '2222', :o4);
 reset role;
 select id as tai6 from public.pos_items where order_id = :o4 and dish_id = :taiyaki \gset

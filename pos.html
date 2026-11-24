@@ -18,15 +18,15 @@
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
 <script src="vendor/supabase-js-2.45.4/supabase.js"></script>
-<script src="reporte-cierre.js?v=f9f2d5eead"></script>
-<script src="pos-base.js?v=9be70a67ad" defer></script>
+<script src="reporte-cierre.js?v=11537cf295"></script>
+<script src="pos-base.js?v=1f7d49def2" defer></script>
 <script src="pos-acceso.js?v=42384c4aa0" defer></script>
 <script src="pos-mesas.js?v=b5ea79844b" defer></script>
-<script src="pos-pedido.js?v=35b39c079e" defer></script>
-<script src="pos-cobro.js?v=4103028bf7" defer></script>
+<script src="pos-pedido.js?v=74cd17acd5" defer></script>
+<script src="pos-cobro.js?v=0d3fd431bb" defer></script>
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=15dc6dfc47" defer></script>
-<script src="pos-caja.js?v=c0abb22846" defer></script>
+<script src="pos-caja.js?v=04b5c8d8d1" defer></script>
 </head>
 <body>
 <header>
@@ -202,7 +202,8 @@
   <label class="row" id="cConsentRow" style="margin-top:10px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="cConsent" style="width:22px;height:22px;flex:none"> Acepta recibir promociones por WhatsApp o correo</label>
   <p id="cErr" class="muted" style="color:var(--danger)"></p>
   <div class="row between"><button type="button" id="cCancel">Cancelar</button><button type="button" class="primary" id="cOk">Guardar en el pedido</button></div>
-  <p id="cSkipBox" class="hidden" style="text-align:center;margin:12px 0 0"><button type="button" id="cSkip" style="min-height:40px;font-size:14px">Es consumo de un empleado (va a su cuenta)</button></p>
+  <p id="cSkipBox" class="hidden" style="text-align:center;margin:12px 0 0"><button type="button" id="cSkip" style="min-height:40px;font-size:14px">Es consumo de un empleado (va a su cuenta)</button>
+    <button type="button" id="cSkipYummy" style="min-height:40px;font-size:14px;margin-left:8px">Es un pedido de Yummy</button></p>
 </dialog>
 
 <!-- Delivery -->

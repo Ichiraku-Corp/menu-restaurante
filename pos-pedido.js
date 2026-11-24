@@ -608,6 +608,7 @@ $("cConfNo").addEventListener("click", function () {
 $("cOk").addEventListener("click", function () { cliGuardar(""); });
 $("cCancel").addEventListener("click", function () { $("cliDlg").close(); });
 $("cSkip").addEventListener("click", function () { $("cliDlg").close(); abrirCobro(true); });
+$("cSkipYummy").addEventListener("click", function () { $("cliDlg").close(); abrirCobro("yummy"); });
 $("btnClient").addEventListener("click", clientForm);
 
 // ---------------------------------------------------------------- Delivery

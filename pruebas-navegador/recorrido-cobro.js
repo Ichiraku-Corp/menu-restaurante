@@ -21,12 +21,15 @@ await p.click('#cats button:has-text("Entradas")');await p.click('#dishes button
 await p.click("#pay");await p.waitForTimeout(300);
 // Datos del cliente obligatorios al cobrar: sin nombre y teléfono no deja seguir
 ok(await p.isVisible("#cliDlg")&&(await p.textContent("#cTitle"))==="Datos del cliente para cobrar"&&!(await p.isVisible("#payDlg")),"al cobrar sin cliente, primero pide sus datos");
+const selloBloqueado=async()=>await p.isDisabled("#selloChk")&&!(await p.isChecked("#selloChk"));
 await p.fill("#cQ","Cliente Prueba");await p.waitForSelector("#cRes [data-nuevo]");await p.click("#cRes [data-nuevo]");
 ok(await p.inputValue("#cName")==="Cliente Prueba","«registrar cliente nuevo» lleva lo que se buscó al nombre");
 await p.click("#cOk");await p.waitForTimeout(200);
 ok(/teléfono/.test(await p.textContent("#cErr"))&&await p.isVisible("#cliDlg"),"sin teléfono no deja seguir");
 await p.fill("#cPhone","0414-111.22.33");await p.click("#cOk");await p.waitForSelector("#payDlg[open]");
 ok(await p.evaluate(()=>{const o=window.__S.orders.find(x=>x.id===cur.order);return !!o.client&&o.client.phone==="04141112233"&&o.client.name==="Cliente Prueba";}),"con nombre y teléfono los guarda en el pedido y abre el cobro");
+ok(await selloBloqueado(),"con menos de Ref 20 la casilla del sello no se puede marcar");
+await p.screenshot({path:process.env.CAPTURA_SELLO||"/dev/null"}).catch(()=>{});
 await p.click('#payMethods [data-m="punto_debito"]');
 const full=await p.inputValue("#payLines .amt");const half=(Number(full)/2).toFixed(2);
 await p.fill("#payLines .amt",half);await p.locator("#payLines .amt").dispatchEvent("input");
@@ -96,14 +99,36 @@ await p.screenshot({path:process.env.CAPTURA_REF0||"/dev/null"}).catch(()=>{});
 await p.click("#payOk");await p.waitForTimeout(500);
 ok(await p.evaluate(()=>window.__lastPay&&window.__lastPay.payments.length===0&&window.__S.orders.filter(o=>o.status==="cobrada").length>0)&&await p.isVisible("#tablesView"),
   "al tocarlo se cierra sin pago y vuelve a las mesas");
+// Pedido de Yummy: no pide datos del cliente y el cobro llega con Yummy puesto por el total
+if(await p.isVisible("#back"))await p.click("#back");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
+const yid=await p.evaluate(()=>rpc("pos_open_delivery",{p_name:"Cliente Yummy",p_phone:"",p_address:"",p_fee:0,p_channel:"yummy"}));
+await p.evaluate((id)=>openOrder(id),yid);await p.waitForSelector("#orderView:not(.hidden)");
+await p.click('#cats button:has-text("Entradas")');await p.click('#dishes button:has-text("Gyozas")');await p.click("#send");await p.waitForTimeout(300);
+await p.click("#pay");await p.waitForTimeout(400);
+ok(!(await p.isVisible("#cliDlg"))&&await p.isVisible("#payDlg")&&/Yummy/.test(await p.textContent("#payLines"))&&/Pedido de Yummy/.test(await p.textContent("#payErr"))&&!(await p.isDisabled("#payOk")),
+  "un pedido de Yummy no pide datos del cliente y el cobro llega con Yummy por el total");
+const colorNota=()=>p.evaluate(()=>getComputedStyle(document.getElementById("payErr")).color);
+ok(await colorNota()==="rgb(26, 127, 178)","la nota de Yummy sale en azul (informativa), no en rojo de error");
+await p.setViewportSize({width:1000,height:1000});await p.waitForTimeout(200);
+await p.screenshot({path:process.env.CAPTURA_YUMMY||"/dev/null"}).catch(()=>{});
+await p.setViewportSize({width:1280,height:700});await p.waitForTimeout(200);
+await p.click("#payOk");await p.waitForTimeout(500);
+ok(await p.evaluate((id)=>window.__S.orders.find(o=>o.id===id).status==="cobrada"&&window.__lastPay.payments.length===1&&window.__lastPay.payments[0].method==="yummy",yid),"se cobra con el método Yummy");
+await p.click("#btnCaja");await p.waitForTimeout(400);
+ok(/Yummy \(por cobrar, no va en la gaveta\)\s*Ref 5,00/.test(await p.textContent("#cashBody")),"en «Caja» el resumen del turno muestra lo de Yummy aparte");
+await p.screenshot({path:process.env.CAPTURA_YUMMY_CAJA||"/dev/null"}).catch(()=>{});
+await p.click("#cashClose").catch(()=>{});await p.waitForTimeout(200);
 // Consumo de un empleado: se puede seguir sin datos del cliente, pero solo cargándolo a su cuenta
 if(await p.isVisible("#back"))await p.click("#back");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 await p.click('#areas [data-area="Feria"]');await p.click('#areaBody [data-table] .num:text-is("7")');await p.waitForSelector("#orderView:not(.hidden)");
 await p.click('#cats button:has-text("Entradas")');await p.click('#dishes button:has-text("Gyozas")');await p.click("#send");await p.waitForTimeout(300);
-await p.click("#pay");await p.waitForSelector("#cliDlg[open]");await p.click("#cSkip");await p.waitForSelector("#payDlg[open]");
+await p.click("#pay");await p.waitForSelector("#cliDlg[open]");
+ok(await p.isVisible("#cSkipYummy"),"en los datos del cliente está el botón «Es un pedido de Yummy»");
+await p.screenshot({path:process.env.CAPTURA_YUMMY_BOTON||"/dev/null"}).catch(()=>{});
+await p.click("#cSkip");await p.waitForSelector("#payDlg[open]");
 ok(/solo se puede cargar a la cuenta de un empleado/.test(await p.textContent("#payErr")),"«Es consumo de un empleado» abre el cobro y avisa que solo va a su cuenta");
 await p.click('#payMethods [data-m="punto_debito"]');await p.waitForTimeout(150);await p.click("#payOk");await p.waitForTimeout(300);
-ok(/Faltan los datos del cliente/.test(await p.textContent("#payErr"))&&await p.isVisible("#payDlg")&&!(await p.evaluate(()=>window.__S.orders.find(x=>x.id===cur.order).status==="cobrada")),"sin datos del cliente no deja cobrar con punto");
+ok(/Faltan los datos del cliente/.test(await p.textContent("#payErr"))&&await colorNota()==="rgb(179, 38, 30)"&&await p.isVisible("#payDlg")&&!(await p.evaluate(()=>window.__S.orders.find(x=>x.id===cur.order).status==="cobrada")),"sin datos del cliente no deja cobrar con punto");
 await p.click("#payCancel");
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE COBRO EN VARIOS PASES PASARON");})();

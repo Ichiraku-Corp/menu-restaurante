@@ -162,7 +162,7 @@ alter table public.pos_payments add column if not exists tab_employee_id bigint 
 alter table public.pos_payments add column if not exists is_tip boolean not null default false;   -- propina (no cuenta para la cuenta del pedido)
 alter table public.pos_payments drop constraint if exists pos_payments_method_check;
 alter table public.pos_payments add constraint pos_payments_method_check check (method in ('efectivo_usd', 'zelle', 'binance', 'paypal',
-  'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta'));
+  'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta', 'yummy'));
 alter table public.employees add column if not exists pos_can_charge boolean not null default false; -- puede cobrar, descontar, anular y manejar caja
 
 -- Pagos recibidos que el puente lee de Binance / PayPal (y luego Banesco) para verificar los cobros.
@@ -236,12 +236,45 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Comprueba dispositivo + PIN; devuelve el id del empleado o lanza un error.
+-- Freno a los PIN equivocados en las funciones de la caja (alguien probando PIN contra la base, sin pasar por la pantalla).
+-- La pantalla ya frena sola (pos_pin_login y pos_check_pin anotan cada error); aquí el error termina en una excepción
+-- que deshace todo, así que se cuenta con secuencias, que no se deshacen: 10 PIN equivocados en un minuto → un minuto
+-- de espera para todos. ichiraku.pin_freno cambia el tope (solo la base de pruebas lo sube).
+create sequence if not exists public.pos_pin_fallos_seq;
+create sequence if not exists public.pos_pin_ventana_seq;
+revoke all on sequence public.pos_pin_fallos_seq, public.pos_pin_ventana_seq from anon, authenticated, public;
+create or replace function public.pos_pin_frenado() returns boolean
+language sql stable security definer set search_path = public as $$
+  select (select case when is_called then last_value else 0 end from public.pos_pin_fallos_seq)
+           >= coalesce(nullif(current_setting('ichiraku.pin_freno', true), ''), '10')::int
+     and extract(epoch from clock_timestamp()) - (select last_value from public.pos_pin_ventana_seq) < 60
+$$;
+create or replace function public.pos_pin_fallo() returns void
+language plpgsql volatile security definer set search_path = public as $$
+declare t bigint := extract(epoch from clock_timestamp())::bigint;
+begin
+  if t - (select last_value from public.pos_pin_ventana_seq) >= 60 then
+    perform setval('public.pos_pin_ventana_seq', t);
+    perform setval('public.pos_pin_fallos_seq', 1, true);
+  else
+    perform nextval('public.pos_pin_fallos_seq');
+  end if;
+exception when others then null;  -- en una consulta de solo lectura no se puede contar: no pasa nada
+end $$;
+revoke execute on function public.pos_pin_frenado(), public.pos_pin_fallo() from anon, public, authenticated;
+
 create or replace function public.pos_auth(p_emp bigint, p_pin text) returns bigint
 language plpgsql stable security definer set search_path = public, extensions as $$
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
+  if public.pos_pin_frenado() then raise exception 'Demasiados PIN equivocados en las tablets: espera un minuto y vuelve a entrar.'; end if;
+  -- Mismo tope que la pantalla: 5 PIN equivocados de una persona en 10 minutos
+  if (select count(*) from public.pos_log where employee_id = p_emp and action = 'pin_fallido' and at > now() - interval '10 minutes') >= 5 then
+    raise exception 'Demasiados intentos. Espera 10 minutos.';
+  end if;
   if not exists (select 1 from public.employees e where e.id = p_emp and e.active and e.pos_pin_hash is not null
                  and e.pos_pin_hash = extensions.crypt(coalesce(p_pin, ''), e.pos_pin_hash)) then
+    perform public.pos_pin_fallo();
     raise exception 'PIN incorrecto. Vuelve a entrar.';
   end if;
   return p_emp;
@@ -1136,13 +1169,14 @@ begin
   for p in select * from jsonb_to_recordset(coalesce(p_payments, '[]'::jsonb)) as x(method text, amount numeric, reference text, person int, incoming_id bigint, device text, tip boolean, tab_employee_id bigint) loop
     if p.amount is null or round(p.amount, 2) <= 0 then continue; end if;
     if not public.pos_num_ok(p.amount) then raise exception 'Monto no válido'; end if;
-    if coalesce(p.method, '') not in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta') then
+    if coalesce(p.method, '') not in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'efectivo_bs', 'pago_movil', 'punto_debito', 'punto_credito', 'cuenta', 'yummy') then
       raise exception 'Método de pago no válido: %', coalesce(nullif(p.method, ''), 'vacío');
     end if;
     if p.method = 'cuenta' and coalesce(p.tip, false) then raise exception 'La propina no puede ir a cuenta'; end if;
     if p.person is not null and (p.person < 1 or p.person > coalesce((o.split ->> 'n')::int, 0)) then p.person := null; end if;
     who := coalesce(p.person, who);
-    cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'cuenta') then 'REF' else 'BS' end;
+    -- Yummy: se anota en Ref; Yummy le paga al restaurante después por pago móvil (queda «por cobrar», no va en la gaveta)
+    cur := case when p.method in ('efectivo_usd', 'zelle', 'binance', 'paypal', 'cuenta', 'yummy') then 'REF' else 'BS' end;
     if cur = 'BS' and rt is null then raise exception 'Falta la tasa del día para cobrar en bolívares'; end if;
     ref := case when cur = 'REF' then round(p.amount, 2) else round(p.amount / rt, 2) end;
     if p.method = 'cuenta' then
@@ -1243,7 +1277,10 @@ declare r jsonb;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   r := public.pos_pay_core(p_emp, p_order, p_payments, p_change_currency, p_partial, now(), false);
-  if p_sello is not null then update public.pos_orders set sello = p_sello where id = p_order; end if;
+  -- Un sello por compra de Ref 20 o más: por debajo no se anota aunque llegue marcado
+  if p_sello is not null then
+    update public.pos_orders set sello = p_sello and (select t.total from public.pos_totals(p_order) t) >= 19.995 where id = p_order;
+  end if;
   return r;
 end $$;
 
@@ -1357,7 +1394,7 @@ begin
     coalesce(sum(t.subtotal - t.discount + t.delivery), 0), coalesce(sum(t.service), 0),
     coalesce((select jsonb_object_agg(k, v) from (
       select case p.method when 'punto_debito' then 'debito' when 'punto_credito' then 'credito' when 'pago_movil' then 'pago_movil'
-                           when 'efectivo_usd' then 'efectivo' when 'efectivo_bs' then 'efectivo' else 'otros' end k, round(sum(p.amount_ref), 2) v
+                           when 'efectivo_usd' then 'efectivo' when 'efectivo_bs' then 'efectivo' when 'yummy' then 'yummy' else 'otros' end k, round(sum(p.amount_ref), 2) v
       from public.pos_payments p join public.pos_orders o2 on o2.id = p.order_id
       where o2.status = 'cobrada' and (o2.closed_at at time zone 'America/Caracas')::date = p_date group by 1) m), '{}'::jsonb),
     count(*), 'pos', 'Sistema de ventas propio', now()
@@ -1443,6 +1480,12 @@ language sql stable security definer set search_path = public as $$
                    'method', p.method, 'amount', p.amount, 'amount_ref', p.amount_ref, 'at', p.created_at) order by p.created_at), '[]'::jsonb)
                  from public.pos_payments p where p.session_id = p_session and p.device <> 'Caja' and p.amount > 0),
     'tips', (select coalesce(sum(amount_ref), 0) from public.pos_payments where session_id = p_session and is_tip),
+    -- Lo vendido por Yummy en el mes del cierre (cada mes arranca de cero)
+    'yummy_mes', (select jsonb_build_object('ref', coalesce(round(sum(p.amount_ref), 2), 0), 'pedidos', count(distinct p.order_id))
+                  from public.pos_payments p join public.pos_orders yo on yo.id = p.order_id
+                  where p.method = 'yummy' and yo.status = 'cobrada'
+                    and date_trunc('month', yo.closed_at at time zone 'America/Caracas')
+                        = date_trunc('month', coalesce((select closed_at from s), now()) at time zone 'America/Caracas')),
     'outs', (select coalesce(jsonb_agg(jsonb_build_object('method', method, 'amount', -amount, 'reason', cash_out_reason, 'by', public.pos_emp_name(created_by), 'at', created_at) order by created_at), '[]'::jsonb)
              from public.pos_payments where session_id = p_session and cash_out_reason <> ''),
     'unverified', (select coalesce(jsonb_agg(jsonb_build_object('label', coalesce(public.pos_order_label(p.order_id), 'Abono'), 'method', p.method,
@@ -1497,7 +1540,7 @@ create or replace function public.pos_cash_close(p_emp bigint, p_pin text, p_cou
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare s record; sm jsonb; exp jsonb; body text; d date; k text; rcp text;
   names jsonb := '{"efectivo_usd":"Efectivo $","zelle":"Zelle","binance":"Binance","paypal":"PayPal","efectivo_bs":"Efectivo Bs",
-                   "pago_movil":"Pago movil","punto_debito":"Punto debito","punto_credito":"Punto credito","cuenta":"A cuenta"}';
+                   "pago_movil":"Pago movil","punto_debito":"Punto debito","punto_credito":"Punto credito","cuenta":"A cuenta","yummy":"Yummy (por cobrar)"}';
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   select * into s from public.pos_sessions where status = 'abierta' for update;
@@ -1534,6 +1577,9 @@ begin
       case when p_counted ? k and abs((p_counted ->> k)::numeric - (exp ->> k)::numeric) >= 0.01
            then E'\n' || public.pos_line('  Diferencia', public.pos_money((p_counted ->> k)::numeric - (exp ->> k)::numeric)) else '' end || E'\n';
   end loop;
+  if coalesce((exp ->> 'yummy')::numeric, 0) > 0 then
+    body := body || public.pos_line('Yummy (por cobrar)', 'Ref ' || public.pos_money((exp ->> 'yummy')::numeric)) || E'\n';
+  end if;
   body := body || '=' || E'\n^ANULACIONES' || E'\n' ||
     coalesce((select string_agg(public.pos_line(trim_scale((v ->> 'qty')::numeric)::text || ' ' || (v ->> 'item'), 'Ref ' || public.pos_money((v ->> 'amount')::numeric)) ||
               E'\n  ' || (v ->> 'order') || ' - ' || coalesce(v ->> 'by', '') || E'\n  Motivo: ' || (v ->> 'reason'), E'\n')
@@ -2429,6 +2475,9 @@ begin
     if to_regprocedure('public.' || f) is not null then execute format('revoke execute on function public.%s from authenticated', f); end if;
   end loop;
 end $$;
+
+-- Para contar rápido los PIN equivocados de cada persona (pos_auth lo mira en cada llamada)
+create index if not exists pos_log_pin_fallido on public.pos_log (employee_id, at) where action = 'pin_fallido';
 
 -- ---------------------------------------------------------------- Números siempre de verdad
 -- Montos y cantidades nunca son NaN, infinito ni absurdos, venga de donde venga (abs(NaN) no es menor que nada).

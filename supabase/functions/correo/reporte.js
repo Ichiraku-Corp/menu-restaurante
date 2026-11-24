@@ -6,7 +6,8 @@ const module = { exports: {} };
    (vista previa antes de cerrar) y llega por correo (lo envía el puente de la laptop). */
 (function (root) {
 const MNAMES = { efectivo_usd: "Efectivo $", efectivo_bs: "Efectivo Bs", pago_movil: "Pago móvil", punto_debito: "Punto débito",
-  punto_credito: "Punto crédito", zelle: "Zelle", binance: "Binance", paypal: "PayPal", cuenta: "A cuenta (empleado)" };
+  punto_credito: "Punto crédito", zelle: "Zelle", binance: "Binance", paypal: "PayPal", cuenta: "A cuenta (empleado)", yummy: "Yummy (por cobrar)" };
+const FUERA = new Set(["cuenta", "yummy"]);   // no entran a la gaveta: no se cuentan en el arqueo
 const BS = new Set(["efectivo_bs", "pago_movil", "punto_debito", "punto_credito"]);
 const fm = (n) => Number(n || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fq = (n) => Number(n || 0).toLocaleString("es-VE", { maximumFractionDigits: 2 });
@@ -26,6 +27,7 @@ function reportHtml(d) {
   const methods = Object.keys(MNAMES).filter((k) => Number(exp[k] || 0) !== 0 || k in cnt).map((k) => {
     const cur = BS.has(k) ? "Bs " : "$ ", m = (d.methods || []).find((x) => x.method === k) || {};
     const diff = k in cnt ? Number(cnt[k]) - Number(exp[k] || 0) : null;
+    if (FUERA.has(k)) return [MNAMES[k], m.count || 0, cur + fm(m.amount), "Ref " + fm(m.amount_ref), "no va en la caja", "", ""];
     return [MNAMES[k], m.count || 0, cur + fm(m.amount), "Ref " + fm(m.amount_ref), cur + fm(exp[k]), k in cnt ? cur + fm(cnt[k]) : "sin contar",
       diff === null ? "" : `<b style="color:${Math.abs(diff) < 0.01 ? "#2f7d4f" : "#b3261e"}">${cur + fm(diff)}</b>`];
   });
@@ -36,6 +38,7 @@ ${H("Resumen")}${table([], [["Pedidos cobrados", fq(t.orders)], ["Pedidos anulad
     ["Descuentos", "Ref " + fm(t.discounts)], ["Servicio 10 %", "Ref " + fm(t.service)], ["Delivery", "Ref " + fm(t.delivery)], ["<b>Total cobrado</b>", "<b>Ref " + fm(t.total) + "</b>"],
     ["Fondo inicial", "$ " + fm(s.opening_usd) + " · Bs " + fm(s.opening_bs)]], [1])}
 ${H("Métodos de pago y arqueo")}${table(["Método", "Pagos", "Monto", "En Ref", "Esperado en caja", "Contado", "Diferencia"], methods, [1, 2, 3, 4, 5, 6])}
+${d.yummy_mes && Number(d.yummy_mes.ref) > 0 ? `<p style="margin:8px 0 0">Yummy en lo que va de mes: <b>Ref ${fm(d.yummy_mes.ref)}</b> (${fq(d.yummy_mes.pedidos)} ${Number(d.yummy_mes.pedidos) === 1 ? "pedido" : "pedidos"}), por cobrarle a Yummy.</p>` : ""}
 ${cnt._billetes ? `<p style="margin:-10px 0 16px;color:#555">Efectivo $ contado por billetes: ${Object.keys(cnt._billetes).map((k) => he(k === "otros" ? "monedas y otros $ " + fm(cnt._billetes[k]) : k + " × " + fq(cnt._billetes[k]))).join(" · ")}</p>` : ""}
 ${H("Cobros por persona")}${table(["Quién cobró", "Método", "Pagos", "Monto", "En Ref"], (d.cashiers || []).map((x) => [he(x.name), MNAMES[x.method] || he(x.method), x.count, (BS.has(x.method) ? "Bs " : "$ ") + fm(x.amount), "Ref " + fm(x.amount_ref)]), [2, 3, 4])}
 ${(d.outs || []).length ? H("Salidas de caja") + table(["Hora", "Motivo", "Monto", "Quién"], d.outs.map((x) => [hh(x.at), he(x.reason), (x.method === "efectivo_bs" ? "Bs " : "$ ") + fm(x.amount), he(x.by)]), [2]) : ""}

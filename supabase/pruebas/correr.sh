@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DB=${PRUEBAS_DB:-ichiraku_pruebas}
 psql -d postgres -qc "drop database if exists $DB" -c "create database $DB"
+# Las pruebas usan PIN equivocados a propósito: en esta base el freno de PIN se sube (99-pin-freno.sql prueba el de verdad)
+psql -d postgres -qc "alter database $DB set ichiraku.pin_freno = '100000'"
 run() { psql -d "$DB" -v ON_ERROR_STOP=1 -q -f "$1" > /tmp/prueba-$$.log 2>&1 || { cat /tmp/prueba-$$.log; echo "ERROR en $1"; exit 1; }; }
 run pruebas/00-entorno.sql
 for f in schema seed gestion pos servicio asistencia avisos datos whatsapp sinred auditoria correo inicio reportes facturas promos alertas nomina meta contador opiniones camaras; do run "$f.sql"; done

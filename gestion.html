@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-mxkINlZp3qKEcZF0bur9b5nCxdXGG0LDS4D4CNFzHqA='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-fMa4DSe522nkjGTuXNsXPwJO7JOr6FgStf8Wv+THDBM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Gestión · Ichiraku Ramen</title>
@@ -1138,7 +1138,7 @@
   // ---------------------------------------------------------------- Inicio › Panel: semáforos con meta, qué mirar, gráficos y platos
   // Las metas vienen de Ajustes (las recomendadas de fábrica). Cada estado va con su ícono y su palabra, no solo con el color.
   var PN = { data: null, horas: null };
-  var METODO = { debito: "Punto débito", credito: "Punto crédito", pago_movil: "Pago móvil", efectivo: "Efectivo", otros: "Otros" };
+  var METODO = { debito: "Punto débito", credito: "Punto crédito", pago_movil: "Pago móvil", efectivo: "Efectivo", yummy: "Yummy", otros: "Otros" };
   var ST_TXT = { good: "✓ Bien", warn: "! Atento", bad: "✕ Fuera de meta", none: "– Sin datos" }, ST_ICO = { good: "✓ ", warn: "! ", bad: "✕ ", none: "" };
   function estadoDe(v, meta, margen, mejor) {
     if (v == null || meta == null) return "none";
@@ -2623,7 +2623,7 @@
 
   // ---------------------------------------------------------------- Excel para el contador (Dinero › Ganancia)
   var MET_XL = [["efectivo_usd", "Efectivo $", "$"], ["efectivo_bs", "Efectivo Bs", "Bs"], ["pago_movil", "Pago móvil", "Bs"], ["punto_debito", "Punto débito", "Bs"],
-    ["punto_credito", "Punto crédito", "Bs"], ["zelle", "Zelle", "$"], ["binance", "Binance", "$"], ["paypal", "PayPal", "$"], ["cuenta", "A cuenta de empleado", "Ref"]];
+    ["punto_credito", "Punto crédito", "Bs"], ["zelle", "Zelle", "$"], ["binance", "Binance", "$"], ["paypal", "PayPal", "$"], ["cuenta", "A cuenta de empleado", "Ref"], ["yummy", "Yummy (por cobrar)", "Ref"]];
   var DIVISAS = { efectivo_usd: 1, zelle: 1, binance: 1, paypal: 1 };
   function r2(n) { return Math.round(num(n) * 100) / 100; }
   function fechaXl(d) { d = String(d).slice(0, 10); return d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4); }
