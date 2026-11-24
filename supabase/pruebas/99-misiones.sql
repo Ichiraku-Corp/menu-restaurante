@@ -144,12 +144,17 @@ select prueba.ok(public.mis_fichas_saldo(:mesera) = 1 and jsonb_array_length(:'t
   'la tragamonedas gasta 1 ficha y devuelve 3 símbolos y su premio');
 select prueba.ok(public.mis_saldo(:mesera) = 6 + (:'tm'::jsonb ->> 'premio')::int, 'el premio de la tragamonedas suma a sus puntos');
 set role authenticated;
-select prueba.falla(format('select public.jgo_ruleta(%s, %L, %L)', :mesera, '5555', 'azul'), 'Elige rojo', 'una apuesta que no existe no se acepta');
-select public.jgo_ruleta(:mesera, '5555', 'rojo') as ru \gset
+select public.jgo_ruleta(:mesera, '5555') as ru \gset
 reset role;
-select prueba.ok((:'ru'::jsonb ->> 'numero')::int between 0 and 36 and :'ru'::jsonb ->> 'color' in ('rojo', 'negro', 'verde')
-  and ((:'ru'::jsonb ->> 'color' = 'rojo') = ((:'ru'::jsonb ->> 'premio')::int > 0) or public.jgo_ganado_hoy(:mesera) >= 3),
-  'la ruleta paga si sale el color apostado');
+select prueba.ok((select count(*) = 15 and count(*) filter (where m > 0) * 100 / count(*) = 20
+                    and array_agg(m order by m) filter (where m > 0) = '{1,2,3}' from unnest(public.jgo_ruleta_casillas()) m),
+  'la rueda tiene 15 casillas: x1, x2 y x3 pagan (3 de 15 = 20 %) y las otras 12 son Shibu');
+select prueba.ok((:'ru'::jsonb ->> 'casilla')::int between 0 and 14
+  and (:'ru'::jsonb ->> 'mult')::int = (public.jgo_ruleta_casillas())[(:'ru'::jsonb ->> 'casilla')::int + 1]
+  and ((:'ru'::jsonb ->> 'premio')::int = (:'ru'::jsonb ->> 'mult')::int or (:'ru'::jsonb ->> 'al_tope')::boolean),
+  'la ruleta paga lo de la casilla que salió (x1, x2, x3 o nada con Shibu)');
+-- (lo que pagaron los juegos de arriba depende del azar: se borra para que aquí pese solo la falta de fichas)
+delete from public.mis_puntos where employee_id = :mesera and motivo like 'juego:%';
 set role authenticated;
 select prueba.falla(format('select public.jgo_tragamonedas(%s, %L)', :mesera, '5555'), 'No tienes fichas', 'sin fichas no se juega');
 reset role;

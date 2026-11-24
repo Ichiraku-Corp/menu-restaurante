@@ -9,7 +9,6 @@ const ROOT=path.join(__dirname,"..");let fallos=0;function ok(c,m){if(c)console.
 const T={".html":"text/html; charset=utf-8",".js":"text/javascript",".css":"text/css",".json":"application/json",".svg":"image/svg+xml",".png":"image/png",".webp":"image/webp",".woff2":"font/woff2"};
 const srv=http.createServer((q,r)=>{const f=path.join(ROOT,decodeURIComponent(q.url.split("?")[0]));if(!f.startsWith(ROOT)||!fs.existsSync(f)||fs.statSync(f).isDirectory()){r.writeHead(404);return r.end();}r.writeHead(200,{"Content-Type":T[path.extname(f)]||"application/octet-stream"});fs.createReadStream(f).pipe(r);});
 const CAP=process.env.CAPTURA_JUEGOS;if(CAP)fs.mkdirSync(CAP,{recursive:true});
-const RUEDA=[0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26];
 (async()=>{await new Promise(r=>srv.listen(8796,r));const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1280,height:800}})).newPage();
 const err=[];p.on("pageerror",e=>err.push(e.message));p.on("dialog",d=>d.accept());
 const menu=fs.readFileSync(path.join(ROOT,"data/menu.json"),"utf8");
@@ -22,6 +21,9 @@ const cont=async()=>(await txt("#jgoFichas"))+" · "+(await txt("#jgoPuntos"))+"
 const burbuja=re=>p.waitForFunction(s=>new RegExp(s).test(document.getElementById("jgoBub").textContent),re.source,{timeout:8000}).then(()=>true,()=>false);
 const FR=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8"));
 const dice=async k=>FR[k].includes((await txt("#jgoBub")).trim());   // ¿el globito dice una frase de Shibu de esa lista?
+// Qué casilla de la rueda quedó bajo la flecha (arriba): la rueda gira «w» grados y la casilla k está en k × 24°
+const bajoFlecha=()=>p.evaluate(()=>{const w=+/rotate\(([-\d.]+)\)/.exec(document.getElementById("jgoRueda").getAttribute("transform"))[1];
+  const n=document.querySelectorAll("#jgoRueda .r-cas").length,d=(((-w)%360)+360)%360;return {k:Math.round(d/(360/n))%n,resto:Math.abs(d/(360/n)-Math.round(d/(360/n)))};});
 const ir=async(desde,a)=>{if(desde)await p.click(`#${desde} [data-volver]`);await p.click(`#jgoMenu [data-jgo="${a}"]`);};
 try{
 await p.goto("http://localhost:8796/pos.html");await p.fill("#devEmail","a@b.c");await p.fill("#devPass","x");await p.click("#device button");
@@ -68,24 +70,22 @@ ok(await p.evaluate(()=>!!document.querySelector("#jgoSlot .jgo-confeti")),"fest
 ok(/Fichas: 2/.test(await txt("#jgoFichas"))&&/Puntos: 1/.test(await txt("#jgoPuntos"))&&(await txt("#jgoHoy"))==="Hoy ganaste 1 de 3 puntos jugando","las fichas y los puntos se ponen al día ("+await cont()+")");
 ok(await dice("juego_gana"),"con premio, Shibu dice una de sus frases de «gana»: «"+(await txt("#jgoBub"))+"»");
 await p.waitForTimeout(300);await foto("tragamonedas.png");
-// ---- Ruleta: apostar a rojo y sale el 17 (negro)
+// ---- Ruleta: una rueda de premios de 15 casillas (12 con la cara de Shibu, x1, x2 y x3); sale una casilla de Shibu
 await ir("jgoSlot","rul");
-ok(await p.isDisabled("#jgoRulGirar")&&await p.locator("#jgoNums button").count()===37,"en la ruleta «Girar» está apagado hasta elegir apuesta, y hay números del 0 al 36");
-ok(/color o par\/impar = 1 punto · número exacto = 3 puntos/.test(await txt("#jgoRul .jgo-premios")),"la ruleta muestra sus premios");
-await p.click('#jgoApuestas [data-ap="rojo"]');
-ok(!(await p.isDisabled("#jgoRulGirar"))&&(await txt("#jgoTuAp"))==="Tu apuesta: Rojo"&&(await p.getAttribute('#jgoApuestas [data-ap="rojo"]',"aria-pressed"))==="true","al elegir «Rojo» queda marcada y se puede girar");
-await p.evaluate(()=>{window.__JGO={numero:17};});
+ok(!(await p.isDisabled("#jgoRulGirar"))&&await p.locator("#jgoRueda .r-cas").count()===15&&await p.locator("#jgoRueda .r-cara").count()===12
+  &&(await p.$$eval("#jgoRueda .r-mult",l=>l.map(x=>x.textContent))).join()==="x3,x1,x2","la ruleta es una rueda de 15 casillas: 12 con Shibu y x1, x2 y x3; «Girar» listo sin apostar");
+ok(/x1 = 1 punto · x2 = 2 puntos · x3 = 3 puntos · Shibu = nada/.test(await txt("#jgoRulPremios")),"la ruleta muestra sus premios: «"+(await txt("#jgoRulPremios"))+"»");
+await p.evaluate(()=>{window.__JGO={casilla:3};});
 await p.click("#jgoRulGirar");
-ok(await p.evaluate(()=>document.getElementById("jgoRul").classList.contains("girando")&&document.querySelector('#jgoApuestas [data-ap="negro"]').disabled),"mientras gira no se puede cambiar la apuesta");
+ok(await p.evaluate(()=>document.getElementById("jgoRul").classList.contains("girando")&&document.getElementById("jgoRulGirar").disabled),"mientras gira no se puede volver a girar");
+ok(await dice("juego_suerte"),"mientras gira, Shibu dice una de sus frases de «suerte»");
 await libre("jgoRul");
-const bola=await p.evaluate(()=>{const g=el=>{const m=/rotate\(([-\d.]+)\)(?: translate\(0 ([-\d.]+)\))?/.exec(el.getAttribute("transform"));return [+m[1],m[2]==null?null:+m[2]];};
-  const w=g(document.getElementById("jgoRueda")),bb=g(document.getElementById("jgoBola"));return {d:(((bb[0]-w[0])%360)+360)%360,r:bb[1]};});
-const casilla=RUEDA[Math.round(bola.d/(360/37))%37];
-ok(casilla===17&&Math.abs(bola.r+65.5)<0.6,"la bola cae en la casilla del 17 de la rueda (casilla "+casilla+", radio "+bola.r+")");
-ok(/Salió el 17 negro · impar\. Sin premio esta vez/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHubN"))==="17","dice «"+(await txt("#jgoRulRes"))+"» y el centro de la rueda muestra el 17");
+let bajo=await bajoFlecha();
+ok(bajo.k===3&&bajo.resto<0.02,"la rueda frena con la casilla que dijo el servidor justo bajo la flecha (casilla "+bajo.k+")");
+ok(/Salió Shibu: sin premio esta vez/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHubN"))==="🐶"&&await p.evaluate(()=>document.querySelectorAll("#jgoRueda .r-cas")[3].classList.contains("sale")),
+  "dice «"+(await txt("#jgoRulRes"))+"», el centro muestra a Shibu y la casilla queda marcada");
 ok(await dice("juego_pierde"),"sin premio, Shibu dice una de sus frases de «pierde»: «"+(await txt("#jgoBub"))+"»");
-ok(/Fichas: 1/.test(await txt("#jgoFichas"))&&/Puntos: 1/.test(await txt("#jgoPuntos"))&&/Hoy ganaste 1 de 3/.test(await txt("#jgoHoy")),"apostó a rojo y salió negro: gasta la ficha y los puntos no cambian ("+await cont()+")");
-ok(await p.evaluate(()=>document.querySelector('#jgoNums [data-ap="17"]').classList.contains("salio")&&/Últimos:17/.test(document.getElementById("jgoHist").textContent)),"el 17 queda marcado en la cuadrícula y en «Últimos»");
+ok(/Fichas: 1/.test(await txt("#jgoFichas"))&&/Puntos: 1/.test(await txt("#jgoPuntos"))&&/Hoy ganaste 1 de 3/.test(await txt("#jgoHoy")),"salió Shibu: gasta la ficha y los puntos no cambian ("+await cont()+")");
 await p.waitForTimeout(600);await foto("ruleta.png");
 // ---- Blackjack con mazo fijo: 5♠ 6♥ contra 10♣ y la tapada 7♦; pide (9♣ → 20) y se planta: gana
 await ir("jgoRul","bj");
@@ -121,15 +121,14 @@ await libre("jgoSlot");
 ok(await p.evaluate(()=>document.getElementById("jgoBub").classList.contains("info"))&&!(await p.isDisabled("#jgoGirar"))&&
   (await p.$$eval("#jgoCarretes .jgo-carrete",cs=>cs.map(c=>c.dataset.sym).join()))==="ramen,ramen,sushi","el aviso no sale como error, los carretes no se movieron y se puede seguir usando");
 ok(await p.evaluate(()=>!document.getElementById("notice")||!document.getElementById("notice").classList.contains("show")),"no aparece el aviso grande de error (no hace falta tocar «Entendido»)");
-// ---- Número exacto y tope del día: paga 3, pero solo suma lo que faltaba para el tope; después, el aviso del tope
+// ---- x3 con el tope casi lleno: paga 3, pero solo suma lo que faltaba para el tope; después, el aviso del tope
 await p.evaluate(()=>{window.__S.jgo.fichas=2;});
 await ir("jgoSlot","rul");
-await p.click('#jgoNums [data-ap="17"]');
-ok((await txt("#jgoTuAp"))==="Tu apuesta: el 17"&&(await p.getAttribute('#jgoApuestas [data-ap="rojo"]',"aria-pressed"))==="false","se puede apostar a un número exacto (el 17) y «Rojo» se desmarca");
-await p.evaluate(()=>{window.__JGO={numero:17};});
+await p.evaluate(()=>{window.__JGO={casilla:0};});
 await p.click("#jgoRulGirar");await libre("jgoRul");
-ok(/\+1 punto \(llegaste al tope de hoy\)/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHoy"))==="Hoy ganaste 3 de 3 puntos jugando",
-  "acertó el número: el servidor paga lo que falta para el tope y abajo lo dice: «"+(await txt("#jgoRulRes"))+"» ("+await cont()+")");
+bajo=await bajoFlecha();
+ok(bajo.k===0&&/¡x3! \+1 punto \(llegaste al tope de hoy\)/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHubN"))==="x3"&&(await txt("#jgoHoy"))==="Hoy ganaste 3 de 3 puntos jugando",
+  "salió x3: el servidor paga lo que falta para el tope y abajo lo dice: «"+(await txt("#jgoRulRes"))+"» ("+await cont()+")");
 ok(await dice("tope"),"el tope recortó el premio: Shibu dice una de sus frases del «tope»: «"+(await txt("#jgoBub"))+"»");
 await p.click("#jgoRulGirar");
 ok(await aviso("jgoRulRes")&&/Ya ganaste el tope de hoy \(3 puntos\)\. ¡Vuelve mañana!/.test(await txt("#jgoRulRes"))&&await dice("tope"),
@@ -161,6 +160,14 @@ await p.click("#jgoPlantarse");await libre("jgoBj");
 ok(/Empate: te devolvemos la ficha/.test(await txt("#jgoBjRes"))&&await dice("juego_empate")&&/Fichas: 1/.test(await txt("#jgoFichas")),
   "17 contra 17: «"+(await txt("#jgoBjRes"))+"», la ficha vuelve ("+(await txt("#jgoFichas"))+") y Shibu: «"+(await txt("#jgoBub"))+"»");
 await p.click("#jgoBj [data-volver]");await p.click('#jgoMenu [data-jgo="slot"]');
+// ---- Ruleta con premio: sale x2 → +2 puntos, confeti y Shibu contento
+await p.evaluate(()=>{Object.assign(window.__S.jgo,{ganado_hoy:0,fichas:2});window.__JGO={casilla:10};});
+await ir("jgoSlot","rul");
+await p.click("#jgoRulGirar");await libre("jgoRul");
+ok((await bajoFlecha()).k===10&&/¡x2! \+2 puntos/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHubN"))==="x2"&&await dice("juego_gana")&&await p.evaluate(()=>!!document.querySelector("#jgoRul .jgo-confeti")),
+  "salió x2: «"+(await txt("#jgoRulRes"))+"», confeti y Shibu: «"+(await txt("#jgoBub"))+"»");
+await p.waitForTimeout(700);await foto("ruleta-gana.png");
+await p.click("#jgoRul [data-volver]");await p.click('#jgoMenu [data-jgo="slot"]');
 // ---- Tamaños: tablet (1280×800) y teléfono (390×844): nada se sale a lo ancho, los botones miden 44 px o más y en la
 //      tablet cada juego cabe entero sin desplazar
 await p.evaluate(()=>{Object.assign(window.__S.jgo,{ganado_hoy:0,fichas:3});});
@@ -178,8 +185,8 @@ for(const [nombre,w,h] of [["la tablet",1280,800],["el teléfono",390,844]]){
   ok(bien,"en "+nombre+" ("+w+"×"+h+") "+(w>1000?"cada vista cabe entera, ":"")+"nada se sale a lo ancho y los botones miden 44 px o más ("+detalle.join(", ")+")");
 }
 await p.click("#jgoBj [data-volver]");
-await p.click('#jgoMenu [data-jgo="rul"]');await p.click('#jgoNums [data-ap="36"]');
-ok(await p.evaluate(()=>{const b=document.getElementById("jgoRulGirar").getBoundingClientRect();return b.bottom<=innerHeight&&b.top>=0;}),"en el teléfono «Girar» queda a la vista aunque la apuesta esté abajo");
+await p.click('#jgoMenu [data-jgo="rul"]');await p.waitForTimeout(300);
+ok(await p.evaluate(()=>{const b=document.getElementById("jgoRulGirar").getBoundingClientRect();return b.bottom<=innerHeight&&b.top>=0;}),"en el teléfono «Girar» de la ruleta queda a la vista");
 }catch(e){fallos++;console.log("FALLÓ: la prueba se detuvo: "+e.message);}
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE LOS JUEGOS PASARON");})();

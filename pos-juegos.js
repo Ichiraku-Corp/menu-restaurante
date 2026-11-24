@@ -10,8 +10,6 @@ var JGO = {
   vista: "menu",      // menu · slot · rul · bj
   ocupado: false,     // hay una jugada en curso (esperando al servidor o animando): no se puede empezar otra
   st: { fichas: null, puntos: null, ganado_hoy: 0, tope_dia: 3, activo: true },
-  apuesta: null,      // ruleta: 'rojo', 'negro', 'par', 'impar' o el número como texto ('0'…'36')
-  historial: [],      // ruleta: los últimos números que salieron en esta tablet
   bjMostrado: null    // blackjack: la última respuesta que ya terminó de verse en la mesa (los botones y el id van según esta)
 };
 var JGO_VISTAS = { menu: "jgoMenu", slot: "jgoSlot", rul: "jgoRul", bj: "jgoBj" };
@@ -22,12 +20,8 @@ var JGO_ORDEN = [
   ["ramen", "shibu", "sushi", "estrella", "taiyaki", "dango"],
   ["sushi", "dango", "ramen", "taiyaki", "shibu", "estrella"],
   ["taiyaki", "estrella", "dango", "shibu", "ramen", "sushi"]];
-// Ruleta europea: orden de las casillas en la rueda (en el sentido de las agujas del reloj) y números rojos
-var JGO_RUEDA = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
-var JGO_ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
 var JGO_QUIETO = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
 
-function jgoColor(n) { return n === 0 ? "verde" : JGO_ROJOS.indexOf(n) >= 0 ? "rojo" : "negro"; }
 function jgoPts(n) { return n + (n === 1 ? " punto" : " puntos"); }
 // ¿Girar ya, mientras responde el servidor? Solo si según los últimos contadores la jugada va a pasar; si no (sin
 // fichas o con el tope del día lleno) se espera su respuesta para no girar en vano. Igual decide el servidor.
@@ -91,7 +85,7 @@ function abrirJuegos() {
   var frases = typeof shibuFrases === "function" ? shibuFrases() : Promise.resolve();
   jgoShibuImg();
   rpc("jgo_estado").then(function (r) { return frases.then(function () { return r; }); }).then(function (r) {
-    jgoTomar(r, true); jgoShibuImg();
+    jgoTomar(r, true); jgoShibuImg(); jgoRulCasillas(r && r.casillas);
     if (JGO.vista === "menu") jgoSaludo(r && r.mensaje);
   }).catch(function (e) { jgoError(e, true); });
 }
@@ -106,6 +100,7 @@ function jgoTomar(r, todo) {
     if (r.ganado_hoy != null) s.ganado_hoy = num(r.ganado_hoy);
     if (r.tope_dia != null) s.tope_dia = num(r.tope_dia) || 3;
     if (r.activo != null) s.activo = r.activo !== false;
+    if (r.casillas) jgoRulCasillas(r.casillas);
   }
   jgoPintaCont(); jgoBotones();
 }
@@ -124,8 +119,7 @@ function jgoBotones() {
   var act = JGO.st.activo, oc = JGO.ocupado, bj = JGO.bjMostrado, jugando = !!bj && bj.estado === "jugando";
   document.querySelectorAll("#jgoMenu [data-jgo]").forEach(function (b) { b.disabled = !act; });
   $("jgoGirar").disabled = !act || oc;
-  $("jgoRulGirar").disabled = !act || oc || JGO.apuesta == null;
-  document.querySelectorAll("#jgoRul [data-ap]").forEach(function (b) { b.disabled = oc; });
+  $("jgoRulGirar").disabled = !act || oc;
   show("jgoRepartir", !bj); show("jgoOtra", !!bj && !jugando); show("jgoPedir", jugando); show("jgoPlantarse", jugando);
   $("jgoRepartir").disabled = $("jgoOtra").disabled = !act || oc;
   $("jgoPedir").disabled = $("jgoPlantarse").disabled = oc;
@@ -152,7 +146,7 @@ function jgoSaludo(msg) {
   var s = JGO.st;
   if (!s.activo) return jgoDice("Los juegos están apagados por hoy", "info");
   if (JGO.vista === "slot") return jgoDice("Toca «Girar»: tres iguales pagan 3 puntos.");
-  if (JGO.vista === "rul") return jgoDice(JGO.apuesta == null ? "Elige tu apuesta y gira la ruleta." : "Tu apuesta: " + jgoApTxt(JGO.apuesta) + ". Toca «Girar».");
+  if (JGO.vista === "rul") return jgoDice("Toca «Girar»: si sale x1, x2 o x3, ganas esos puntos.");
   if (JGO.vista === "bj") return jgoDice(JGO.bjMostrado && JGO.bjMostrado.estado === "jugando" ? "Tienes una mano en juego: ¿pides otra carta o te plantas?" : "Pide cartas hasta acercarte a 21, sin pasarte.");
   if (msg) return jgoDice(msg);
   if (s.fichas === 0) return jgoDice(jgoFrase("sin_fichas", "Sin fichas por ahora: las misiones del día te dan más."));
@@ -230,13 +224,11 @@ function jgoSinEfectos() {
 function jgoReiniciar() {
   jgoAcabarYa();
   JGO.st = { fichas: null, puntos: null, ganado_hoy: 0, tope_dia: 3, activo: true };
-  JGO.ocupado = false; JGO.apuesta = null; JGO.historial = []; JGO.bjMostrado = null;
+  JGO.ocupado = false; JGO.bjMostrado = null;
   JGO_SLOT = null; JGO_RJ = null;
   jgoRes("jgoSlotRes", ""); jgoRes("jgoRulRes", ""); jgoRes("jgoBjRes", "Toca «Repartir» para empezar", "pista");
   JGO_CAR.forEach(function (c) { c.el.classList.remove("gana"); });
-  document.querySelectorAll("#jgoRul [data-ap]").forEach(function (b) { b.classList.remove("on", "salio"); b.setAttribute("aria-pressed", "false"); });
-  $("jgoTuAp").textContent = "Elige tu apuesta"; jgoHist(); jgoHub(null);
-  $("jgoBola").setAttribute("visibility", "hidden");
+  jgoHub(null);
   $("jgoBjJ").innerHTML = ""; $("jgoBjC").innerHTML = ""; $("jgoBjTotJ").textContent = ""; $("jgoBjTotC").textContent = ""; JGO_BJV = { j: [], c: [] };
   ["slot", "rul", "bj"].forEach(function (k) { $(JGO_VISTAS[k]).classList.remove("girando"); });
   jgoPintaCont(); jgoBotones();
@@ -369,163 +361,125 @@ function jgoSlotFin(jug) {
 }
 function jgoSlotListo(jug) { if (JGO_SLOT !== jug) return; JGO_SLOT = null; jgoOcupado(null); }
 
-// ---------------------------------------------------------------- Ruleta
-// La rueda gira despacio y la bola rápido al revés. Cuando llega el número, la bola frena (curva de Hermite que sale a
-// su velocidad) justo hasta la casilla de ese número —contando dónde estará la rueda en ese momento— y sigue con ella.
-var JGO_PASO = 360 / 37;
-var JGO_WW = 80, JGO_WA = 0.6, JGO_WT = 3.8;   // rueda: grados por segundo, arranque y frenada
-var JGO_BW = 720, JGO_BA = 0.35, JGO_BT = 3;   // bola: grados por segundo (al revés), arranque y frenada hasta la casilla
-var JGO_RB = 92, JGO_RP = 65.5;                // radio de la bola: en la pista y dentro de la casilla
-var JGO_RUL = { w: 0, b: 0, r: JGO_RB }, JGO_RJ = null;
+// ---------------------------------------------------------------- Ruleta (rueda de premios)
+// Una rueda de 15 casillas que gira; arriba, una flecha marca la que sale. 12 casillas tienen la cara de Shibu (sin
+// premio) y 3 pagan x1, x2 y x3 (1, 2 o 3 puntos): se gana 3 de cada 15 veces (20 %). La casilla la decide el servidor
+// (jgo_ruleta): la rueda gira mientras responde y frena justo en esa casilla. La lista de casillas también la manda el
+// servidor (jgo_estado → casillas); esta es la de respaldo.
+var JGO_CASILLAS = [3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0];
+var JGO_WV = 420, JGO_WA = 0.35, JGO_WF = 2.6;   // grados por segundo, arranque y frenada
+var JGO_RUL = { w: 0, cara: "" }, JGO_RJ = null;
+function jgoPaso() { return 360 / JGO_CASILLAS.length; }
 function jgoCuna(r1, r2, a1, a2) {
   function pt(r, a) { a = a * Math.PI / 180; return (r * Math.sin(a)).toFixed(2) + " " + (-r * Math.cos(a)).toFixed(2); }
   return "M" + pt(r2, a1) + "A" + r2 + " " + r2 + " 0 0 1 " + pt(r2, a2) + "L" + pt(r1, a2) + "A" + r1 + " " + r1 + " 0 0 0 " + pt(r1, a1) + "Z";
 }
+// La cara de Shibu en una casilla: su imagen (data/shibu.json → «imagen») o, mientras no esté, 🐶 en un círculo naranja
+function jgoCaraSvg() {
+  var img = JGO_RUL.cara;
+  return '<circle r="12.5" class="r-shibu"/>' + (img ? '<image href="' + esc(img) + '" x="-11" y="-11" width="22" height="22" clip-path="url(#jgoCaraClip)" preserveAspectRatio="xMidYMid slice"/>'
+    : '<text class="r-cara">🐶</text>');
+}
 function jgoRuedaCrear() {
-  var h = '<svg viewBox="-100 -100 200 200" aria-hidden="true"><circle r="99" class="r-borde"/><circle r="96.6" class="r-pista"/><circle r="87.6" class="r-borde"/><g id="jgoRueda">';
-  JGO_RUEDA.forEach(function (n, i) {
-    var a = i * JGO_PASO, c = "c-" + jgoColor(n);
-    h += '<path class="' + c + '" d="' + jgoCuna(58, 86.6, a - JGO_PASO / 2, a + JGO_PASO / 2) + '"/>' +
-      '<text class="r-num" transform="rotate(' + a.toFixed(2) + ') translate(0 -79.4)">' + n + "</text>";
+  var P = jgoPaso(), h = '<svg viewBox="-104 -112 208 216" aria-hidden="true"><defs><clipPath id="jgoCaraClip"><circle r="11"/></clipPath></defs>' +
+    '<circle r="99" class="r-borde"/><g id="jgoRueda">';
+  JGO_CASILLAS.forEach(function (m, i) {
+    var a = i * P;
+    h += '<path class="r-cas ' + (m ? "c-premio" : "c-" + (i % 2 ? "a" : "b")) + '" d="' + jgoCuna(30, 94, a - P / 2, a + P / 2) + '"/>' +
+      '<g transform="rotate(' + a.toFixed(2) + ') translate(0 -66)">' + (m ? '<text class="r-mult">x' + m + "</text>" : jgoCaraSvg()) + "</g>";
   });
-  h += '<circle r="65.6" class="r-hondo"/><circle r="72.8" class="r-raya"/><path id="jgoBrillo" class="r-brillo" d=""/><circle r="58" class="r-centro"/>';
-  for (var k = 0; k < 4; k++) h += '<g transform="rotate(' + (k * 90 + 45) + ')"><line class="r-rayo" x1="0" y1="-30" x2="0" y2="-50"/><circle class="r-perilla" cy="-51" r="3.6"/></g>';
-  h += '</g><circle r="27" id="jgoHubC" class="r-hub"/><text id="jgoHubN" class="r-hubn">?</text>' +
-    '<g id="jgoBola" visibility="hidden"><circle r="4.6" class="r-bola"/></g></svg>';
+  h += '</g><circle r="30" class="r-centro"/><text id="jgoHubN" class="r-hubn">?</text>' +
+    '<path class="r-flecha" d="M-11 -109 L11 -109 L0 -88 Z"/></svg>';
   $("jgoRuedaBox").innerHTML = h;
   jgoRulPinta();
 }
-function jgoRulPinta() {
-  $("jgoRueda").setAttribute("transform", "rotate(" + jgoMod(JGO_RUL.w).toFixed(2) + ")");
-  $("jgoBola").setAttribute("transform", "rotate(" + jgoMod(JGO_RUL.b).toFixed(2) + ") translate(0 " + (-JGO_RUL.r).toFixed(2) + ")");
+// La lista de casillas que manda el servidor y la cara de Shibu: si cambiaron, se vuelve a dibujar (nunca mientras gira)
+function jgoRulCasillas(l) {
+  var img = (typeof SHIBU !== "undefined" && SHIBU.frases && SHIBU.frases.imagen) || "";
+  var ok = Array.isArray(l) && l.length >= 2 && l.every(function (x) { return x >= 0 && x <= 3; });
+  if (JGO_RJ || ((!ok || l.join() === JGO_CASILLAS.join()) && img === JGO_RUL.cara)) return;
+  if (ok) JGO_CASILLAS = l.map(Number);
+  JGO_RUL.cara = img; jgoRuedaCrear(); jgoPremiosRul();
 }
-// Centro de la rueda: «?» mientras no hay número; el número en su color cuando sale
-function jgoHub(n, col) {
-  $("jgoHubC").setAttribute("class", "r-hub" + (n == null ? "" : " h-" + col));
-  $("jgoHubN").setAttribute("class", "r-hubn" + (n == null ? "" : " blanco"));
-  $("jgoHubN").textContent = n == null ? "?" : n;
-  if (n == null) $("jgoBrillo").setAttribute("d", "");
+function jgoPremiosRul() {
+  var ms = JGO_CASILLAS.filter(function (m) { return m > 0; }).sort();
+  $("jgoRulPremios").innerHTML = "<b>Premios:</b> " + ms.map(function (m) { return "x" + m + " = " + jgoPts(m); }).join(" · ") + " · Shibu = nada";
 }
-function jgoNumsCrear() {
-  var h = "";
-  for (var n = 0; n <= 36; n++) h += '<button type="button" class="n-' + jgoColor(n) + '" data-ap="' + n + '" aria-pressed="false" aria-label="Número ' + n + '">' + n + "</button>";
-  $("jgoNums").innerHTML = h;
-}
-function jgoApTxt(ap) { return { rojo: "Rojo", negro: "Negro", par: "Par", impar: "Impar" }[ap] || "el " + ap; }
-function jgoApostar(ap) {
-  if (JGO.ocupado) return;
-  JGO.apuesta = ap;
-  document.querySelectorAll("#jgoRul [data-ap]").forEach(function (b) { var on = b.dataset.ap === ap; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); });
-  $("jgoTuAp").textContent = "Tu apuesta: " + jgoApTxt(ap);
-  jgoBotones();
-}
-function jgoHist() {
-  $("jgoHist").innerHTML = JGO.historial.length ? "<span>Últimos:</span>" + JGO.historial.map(function (x) { return '<i class="h-' + x.c + '">' + x.n + "</i>"; }).join("") : "";
+function jgoRulPinta() { $("jgoRueda").setAttribute("transform", "rotate(" + jgoMod(JGO_RUL.w).toFixed(2) + ")"); }
+// El centro de la rueda: «?» mientras gira; después lo que salió (x1, x2, x3 o la cara de Shibu)
+function jgoHub(m) {
+  var el = $("jgoHubN");
+  el.textContent = m == null ? "?" : m ? "x" + m : "🐶";
+  el.setAttribute("class", "r-hubn" + (m ? " gana" : ""));
+  document.querySelectorAll("#jgoRueda .r-cas").forEach(function (x) { x.classList.remove("sale"); });
 }
 function jgoRulJugar() {
-  if (JGO.ocupado || JGO.apuesta == null || !JGO.st.activo) return;
+  if (JGO.ocupado || !JGO.st.activo) return;
   jgoAcabarYa();
-  var jug = { ap: JGO.apuesta, res: null, n: null, girando: false, cortado: false, visto: false, plan: null };
+  var jug = { res: null, k: null, girando: false, cortado: false, visto: false, plan: null, t0: 0, w0: 0 };
   JGO_RJ = jug; jgoOcupado("rul");
   jgoRes("jgoRulRes", ""); jgoHub(null);
-  document.querySelectorAll("#jgoNums .salio").forEach(function (b) { b.classList.remove("salio"); });
   jgoDice(jgoFrase("juego_suerte", "Girando…"));
   jgoALaVista($("jgoRuedaBox"));
   if (jgoAnima("rul") && jgoGiraYa()) jgoRulGira(jug);
-  rpc("jgo_ruleta", { p_apuesta: jug.ap }).then(function (r) {
-    var n = r ? parseInt(r.numero, 10) : NaN;
-    if (!(n >= 0 && n <= 36)) throw new Error("El servidor no devolvió el número. Avisa al encargado.");
-    jug.res = r; jug.n = n; jgoTomar(r, false);
+  rpc("jgo_ruleta").then(function (r) {
+    var k = r ? parseInt(r.casilla, 10) : NaN;
+    if (!(k >= 0 && k < JGO_CASILLAS.length)) throw new Error("El servidor no devolvió la casilla. Avisa al encargado.");
+    jug.res = r; jug.k = k; jgoTomar(r, false);
     if (!jug.girando && !jug.cortado && jgoAnima("rul")) jgoRulGira(jug);
-    if (jug.girando) jgoRulFrena(jug, n);
-    else { jgoRulPon(n); jgoRulFin(jug); }
+    if (jug.girando) jgoRulFrena(jug, k);
+    else { jgoRulPon(k); jgoRulFin(jug); }
   }).catch(function (e) {
-    if (jug.girando && !jug.plan) jgoRulFrena(jug, null);   // la bola frena en la pista, sin casilla
+    if (jug.girando && !jug.plan) jgoRulFrena(jug, null);   // frena donde caiga, sin premio
     jgoRulListo(jug); jgoError(e);
   });
 }
-// En el teléfono la apuesta queda debajo de la rueda: al girar, la ventana sube hasta la rueda si no se ve entera
+// En el teléfono la rueda puede quedar fuera de la vista: al girar, la ventana sube hasta ella
 function jgoALaVista(el) {
   var d = $("jgoDlg").getBoundingClientRect(), r = el.getBoundingClientRect(), pie = $("jgoRul").querySelector(".jgo-jugar").offsetHeight;
   if (r.top >= d.top && r.bottom <= d.bottom - pie) return;
   try { el.scrollIntoView({ block: "center", behavior: jgoAnima() ? "smooth" : "auto" }); } catch (e) { el.scrollIntoView(); }
 }
 function jgoRulGira(jug) {
-  jug.girando = true; jug.t0 = jgoAhora(); jug.w0 = JGO_RUL.w; jug.b0 = JGO_RUL.b; jug.r0 = JGO_RUL.r; jug.plan = null;
-  $("jgoBola").setAttribute("visibility", "visible");
+  jug.girando = true; jug.t0 = jgoAhora(); jug.w0 = JGO_RUL.w; jug.plan = null;
+  $("jgoRuedaBox").classList.add("gira");
   jgoAnimar(function (t) { return jgoRulPaso(jug, t); }, function () { jgoRulCorta(jug); });
 }
-function jgoRulW(jug, t) {   // ángulo de la rueda
+function jgoRulW(jug, t) {   // ángulo de la rueda: arranca, gira parejo y frena (curva de Hermite) hasta la casilla
   var P = jug.plan;
-  if (!P || t < P.s) return jgoArranque(jug.w0, JGO_WW, JGO_WA, t - jug.t0);
-  return P.ws + JGO_WW * JGO_WT / 3 * (1 - Math.pow(1 - Math.min(1, (t - P.s) / JGO_WT), 3));
+  if (!P || t < P.s) return jgoArranque(jug.w0, JGO_WV, JGO_WA, t - jug.t0);
+  return t >= P.s + JGO_WF ? P.W : jgoHermite(P.ws, JGO_WV, P.W, 0, JGO_WF, t - P.s);
 }
-function jgoRulB(jug, t) {   // ángulo de la bola
-  var P = jug.plan;
-  if (!P || t < P.s) return jgoArranque(jug.b0, -JGO_BW, JGO_BA, t - jug.t0);
-  if (P.n == null) return P.bs - JGO_BW * 0.4 * (1 - Math.pow(1 - Math.min(1, (t - P.s) / 1.2), 3));
-  if (t < P.te) return jgoHermite(P.bs, -JGO_BW, P.bt, P.vw, JGO_BT, t - P.s);
-  return jgoRulW(jug, t) + P.off;   // ya en su casilla: gira con la rueda
-}
-function jgoRulR(jug, t) {   // radio de la bola: vuelve a la pista al arrancar y cae a la casilla al final
-  var P = jug.plan;
-  if (!P || t < P.s || P.n == null) { var u = Math.max(0, Math.min(1, (t - jug.t0) / 0.4)); return jug.r0 + (JGO_RB - jug.r0) * u; }
-  var x = (t - P.s) / JGO_BT;
-  if (x < 0.6) return JGO_RB;
-  if (x < 0.9) { var v = (x - 0.6) / 0.3; return JGO_RB - (JGO_RB - JGO_RP) * v * v * (3 - 2 * v); }
-  if (x < 1) return JGO_RP + 2 * Math.sin(Math.PI * (x - 0.9) / 0.1);   // rebotito al caer
-  return JGO_RP;
-}
-function jgoRulFrena(jug, n) {
-  var t = jgoAhora(), s = Math.max(t, jug.t0 + (n == null ? JGO_BA : 1));
-  var P = { s: s, n: n, ws: jgoRulW(jug, s), bs: jgoRulB(jug, s), te: s + JGO_BT };
-  jug.plan = P;
-  if (n == null) return;
-  var wte = jgoRulW(jug, P.te), x = 1 - JGO_BT / JGO_WT;
-  P.vw = JGO_WW * x * x;   // velocidad de la rueda cuando cae la bola: la bola llega con esa misma velocidad
-  // La casilla del número estará en wte + su ángulo. La bola recorre entre 1/3 y 1/2 de lo que haría a toda velocidad
-  // (así frena sin volver atrás): se elige la vuelta que cae en ese tramo.
-  var casilla = wte + JGO_RUEDA.indexOf(n) * JGO_PASO, nominal = P.bs - JGO_BW * JGO_BT * 5 / 12, d = jgoMod(casilla - nominal);
-  if (d > 180) d -= 360;
-  P.bt = nominal + d; P.off = P.bt - wte;
+// Frena para que la casilla k quede bajo la flecha (arriba). Gira al menos 0,8 s. Con una frenada de entre un tercio y dos
+// tercios de lo que recorrería a toda velocidad, la rueda va siempre más lenta, sin saltos ni vueltas atrás.
+function jgoRulFrena(jug, k) {
+  var s = Math.max(jgoAhora(), jug.t0 + (k != null ? 0.8 : JGO_WA)), ws = jgoRulW(jug, s), d0 = JGO_WV * JGO_WF / 3 + 1;
+  jug.plan = { s: s, ws: ws, W: ws + d0 + (k != null ? jgoMod(-k * jgoPaso() - (ws + d0)) : 0) };
 }
 function jgoRulPaso(jug, t) {
-  JGO_RUL.w = jgoRulW(jug, t); JGO_RUL.b = jgoRulB(jug, t); JGO_RUL.r = jgoRulR(jug, t); jgoRulPinta();
-  var P = jug.plan; if (!P) return false;
-  if (P.n != null && t >= P.te + 0.3) jgoRulFin(jug);   // la bola ya cayó: se ve el resultado mientras la rueda frena
-  if (t < P.s + JGO_WT) return false;
-  jug.girando = false; jgoRulFin(jug);
+  JGO_RUL.w = jgoRulW(jug, t); jgoRulPinta();
+  if (!jug.plan || t < jug.plan.s + JGO_WF) return false;
+  jug.girando = false; $("jgoRuedaBox").classList.remove("gira"); jgoRulFin(jug);
   return true;
 }
+// Se cortó (cambio de juego o ventana cerrada): la rueda queda ya en lo que salió
 function jgoRulCorta(jug) {
-  jug.girando = false; jug.cortado = true;
-  var P = jug.plan;
-  if (P) {
-    JGO_RUL.w = jgoRulW(jug, P.s + JGO_WT);
-    if (P.n != null) { JGO_RUL.b = JGO_RUL.w + P.off; JGO_RUL.r = JGO_RP; } else { JGO_RUL.b = jgoRulB(jug, P.s + 1.2); JGO_RUL.r = JGO_RB; }
-    jgoRulPinta();
-  }
+  jug.girando = false; jug.cortado = true; $("jgoRuedaBox").classList.remove("gira");
+  if (jug.plan) { JGO_RUL.w = jug.plan.W; jgoRulPinta(); }
   if (jug.res) jgoRulFin(jug);
 }
-// Sin animación: la bola queda de una vez en la casilla del número
-function jgoRulPon(n) {
-  JGO_RUL.b = JGO_RUL.w + JGO_RUEDA.indexOf(n) * JGO_PASO; JGO_RUL.r = JGO_RP;
-  $("jgoBola").setAttribute("visibility", "visible"); jgoRulPinta();
-}
+// Sin animación: la rueda queda de una vez con la casilla bajo la flecha
+function jgoRulPon(k) { JGO_RUL.w = jgoMod(-k * jgoPaso()); jgoRulPinta(); }
 function jgoRulFin(jug) {
   if (jug.visto) return;
   var r = jug.res; if (!r) { jgoRulListo(jug); return; }
   jug.visto = true;
   jgoTomar(r, true);
-  var n = jug.n, col = String(r.color || "").toLowerCase(), p = num(r.premio), a = JGO_RUEDA.indexOf(n) * JGO_PASO;
-  if (!/^(rojo|negro|verde)$/.test(col)) col = jgoColor(n);
-  jgoHub(n, col);
-  $("jgoBrillo").setAttribute("d", jgoCuna(58, 86.6, a - JGO_PASO / 2, a + JGO_PASO / 2));
-  document.querySelectorAll("#jgoNums button").forEach(function (b) { b.classList.toggle("salio", b.dataset.ap === String(n)); });
-  JGO.historial.unshift({ n: n, c: col }); JGO.historial = JGO.historial.slice(0, 8); jgoHist();
-  var que = "Salió el " + n + " " + col + (n ? (n % 2 ? " · impar" : " · par") : "");
-  if (p > 0) { jgoRes("jgoRulRes", que, "gana", "+" + jgoPts(p), r.al_tope ? JGO_TOPE : ""); jgoFiesta($("jgoRul")); }
-  else jgoRes("jgoRulRes", que + ". " + (r.al_tope ? "Acertaste, pero ya " + JGO_TOPE : "Sin premio esta vez"), "casi");
+  var k = jug.k, m = r.mult != null ? num(r.mult) : (JGO_CASILLAS[k] || 0), p = num(r.premio), cas = document.querySelectorAll("#jgoRueda .r-cas")[k];
+  jgoHub(m);
+  if (cas) cas.classList.add("sale");
+  if (p > 0) { jgoRes("jgoRulRes", "¡x" + m + "!", "gana", "+" + jgoPts(p), r.al_tope ? JGO_TOPE : ""); jgoFiesta($("jgoRul")); }
+  else jgoRes("jgoRulRes", m ? "¡x" + m + "! Pero ya " + JGO_TOPE : "Salió Shibu: sin premio esta vez", "casi");
   jgoDice(jgoVozFin(r, false), p > 0 ? "gana" : "");
   jgoRulListo(jug);
 }
@@ -621,7 +575,7 @@ function jgoBjFin(r) {
 }
 
 // ---------------------------------------------------------------- Arranque: se arma todo una vez y se conectan los botones
-jgoCarCrear(); jgoRuedaCrear(); jgoNumsCrear(); jgoHist(); jgoPintaCont();
+jgoCarCrear(); jgoRuedaCrear(); jgoPremiosRul(); jgoPintaCont();
 jgoRes("jgoBjRes", "Toca «Repartir» para empezar", "pista");
 $("jgoCerrar").innerHTML = icon("x") + "<span>Cerrar</span>";
 document.querySelectorAll("#jgoDlg [data-volver]").forEach(function (b) {
@@ -639,7 +593,6 @@ $("jgoDlg").addEventListener("close", function () { jgoAcabarYa(); jgoSinEfectos
 });
 $("jgoMenu").addEventListener("click", function (e) { var b = e.target.closest("[data-jgo]"); if (b && !b.disabled) jgoVista(b.dataset.jgo); });
 $("jgoGirar").addEventListener("click", jgoSlotJugar);
-$("jgoRul").addEventListener("click", function (e) { var b = e.target.closest("[data-ap]"); if (b && !b.disabled) jgoApostar(b.dataset.ap); });
 $("jgoRulGirar").addEventListener("click", jgoRulJugar);
 $("jgoRepartir").addEventListener("click", jgoBjEmpezar);
 $("jgoOtra").addEventListener("click", jgoBjEmpezar);

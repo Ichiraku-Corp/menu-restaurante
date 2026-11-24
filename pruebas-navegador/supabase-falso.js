@@ -133,13 +133,14 @@
   };
   // ---- Juegos (fichas) ---------------------------------------------------------------------------------------------
   // Tragamonedas, ruleta y blackjack del personal (pos-juegos.js). El estado vive en S.jgo y empieza con 3 fichas.
-  // Una prueba fuerza lo que sale con window.__JGO: {carretes:['ramen','ramen','sushi']}, {numero:17} o
+  // Una prueba fuerza lo que sale con window.__JGO: {carretes:['ramen','ramen','sushi']}, {casilla:10} o
   // {mazo:['5♠','10♣','6♥','7♦','9♣']} (se reparte jugador, crupier, jugador, crupier y luego en orden); sin eso, al azar.
-  // Premios como los del servidor: tragamonedas 3 iguales = 3 y 2 iguales = 1; ruleta color o par/impar = 1 y número
-  // exacto = 3; blackjack ganar = 1, blackjack = 2 y empate devuelve la ficha. Tope: 3 puntos al día por jugar.
+  // Premios como los del servidor: tragamonedas 3 iguales = 3 y 2 iguales = 1; ruleta: rueda de 15 casillas (x3 en la 0,
+  // x1 en la 5, x2 en la 10 y Shibu en las demás); blackjack ganar = 1, blackjack = 2 y empate devuelve la ficha.
+  // Tope: 3 puntos al día por jugar.
   S.jgo={fichas:3,puntos:0,ganado_hoy:0,tope_dia:3,activo:true,manos:{}};
   (function(){
-    var SIM=['shibu','ramen','sushi','taiyaki','dango','estrella'], ROJOS=[1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36];
+    var SIM=['shibu','ramen','sushi','taiyaki','dango','estrella'], CASILLAS=[3,0,0,0,0,1,0,0,0,0,2,0,0,0,0];
     var RANGOS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'], PALOS=['♠','♥','♦','♣'];
     function forzado(k){ return window.__JGO&&window.__JGO[k]!=null?window.__JGO[k]:null; }
     function cuenta(o){ var J=S.jgo; return Object.assign(o,{fichas:J.fichas,puntos:J.puntos,ganado_hoy:J.ganado_hoy,tope_dia:J.tope_dia}); }
@@ -165,16 +166,14 @@
     function mano(m){ var fin=m.estado!=='jugando', o={id:m.id,jugador:m.j.slice(),crupier:fin?m.c.slice():[m.c[0],null],total:total(m.j),estado:m.estado,premio:m.premio||0,
       mensaje:m.mensaje||'¿Pides otra carta o te plantas?'}; if(fin){ o.total_crupier=total(m.c); o.al_tope=m.al_tope; } return cuenta(o); }
     Object.assign(R,{
-      jgo_estado:function(a){ auth(a); return cuenta({activo:S.jgo.activo,mensaje:''}); },
+      jgo_estado:function(a){ auth(a); return cuenta({activo:S.jgo.activo,mensaje:'',casillas:CASILLAS.slice()}); },
       jgo_tragamonedas:function(a){ cobra(a); var c=forzado('carretes')||[0,1,2].map(function(){ return SIM[Math.floor(Math.random()*SIM.length)]; });
         var iguales=c[0]===c[1]&&c[1]===c[2]?3:c[0]===c[1]||c[1]===c[2]||c[0]===c[2]?2:0, base=iguales===3?3:iguales===2?1:0, p=paga(base);
         return cuenta({carretes:c.slice(),premio:p,al_tope:p<base,mensaje:!base?'Sin premio esta vez':!p?'Ganaste, pero ya llegaste al tope de hoy':
           suma(iguales===3?(c[0]==='shibu'?'¡Tres Shibu!':'¡Tres iguales!'):'¡Dos iguales!',base,p)}); },
-      jgo_ruleta:function(a){ var ap=String(a.p_apuesta==null?'':a.p_apuesta); if(!/^(rojo|negro|par|impar|[0-9]|[12][0-9]|3[0-6])$/.test(ap)) throw {message:'Elige una apuesta'};
-        cobra(a); var n=forzado('numero'); n=n==null?Math.floor(Math.random()*37):+n; var color=n===0?'verde':ROJOS.indexOf(n)>=0?'rojo':'negro';
-        var gana=ap===color||ap===String(n)||(n>0&&((ap==='par'&&n%2===0)||(ap==='impar'&&n%2===1))), base=gana?(/^\d+$/.test(ap)?3:1):0, p=paga(base);
-        return cuenta({numero:n,color:color,apuesta:ap,premio:p,al_tope:p<base,mensaje:!base?'Salió el '+n+': sin premio esta vez':!p?'Acertaste, pero ya llegaste al tope de hoy':
-          suma(base===3?'¡Número exacto!':'¡Acertaste!',base,p)}); },
+      jgo_ruleta:function(a){ cobra(a); var k=forzado('casilla'); k=k==null?Math.floor(Math.random()*CASILLAS.length):+k; var base=CASILLAS[k], p=paga(base);
+        return cuenta({casilla:k,mult:base,premio:p,al_tope:p<base,mensaje:!base?'Salió Shibu: sin premio esta vez':!p?'¡x'+base+'! Pero ya llegaste al tope de hoy':
+          suma('¡x'+base+'!',base,p)}); },
       jgo_bj_empezar:function(a){ cobra(a); var f=forzado('mazo'), m={id:++id,emp:a.p_emp,mazo:f?f.slice():baraja(),j:[],c:[],estado:'jugando'};
         m.j.push(saca(m)); m.c.push(saca(m)); m.j.push(saca(m)); m.c.push(saca(m)); S.jgo.manos[m.id]=m;
         var nj=total(m.j)===21, nc=total(m.c)===21; if(nj||nc) termina(m,nj&&nc?'empate':nj?'blackjack':'perdio'); return mano(m); },

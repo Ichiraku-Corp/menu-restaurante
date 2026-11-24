@@ -58,8 +58,10 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
 .jgo-arte-slot { padding:6px 8px; background:#fff; border:2.5px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink); min-height:0; margin-top:22px; }
 .jgo-arte-slot i { font-style:normal; font-size:32px; line-height:1; width:46px; height:50px; display:grid; place-items:center; background:var(--bg); border-radius:10px; }
 .jgo-arte-rul i { width:96px; height:96px; border-radius:50%; border:3px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
-  background:radial-gradient(circle, #fff 0 15%, var(--ink) 15% 19%, var(--bg) 19% 46%, transparent 46%),
-    repeating-conic-gradient(from -4.86deg, var(--jgo-rojo) 0 9.73deg, var(--jgo-negro) 9.73deg 19.46deg); }
+  background:radial-gradient(circle, #fff 0 24%, var(--ink) 24% 28%, transparent 28%),
+    conic-gradient(from -12deg, var(--jgo-oro) 0 24deg, #FCE3EF 0 48deg, #DDF2FC 0 72deg, #FCE3EF 0 96deg, #DDF2FC 0 120deg, var(--jgo-oro) 0 144deg,
+      #FCE3EF 0 168deg, #DDF2FC 0 192deg, #FCE3EF 0 216deg, #DDF2FC 0 240deg, var(--jgo-oro) 0 264deg, #FCE3EF 0 288deg, #DDF2FC 0 312deg,
+      #FCE3EF 0 336deg, #DDF2FC 0 360deg); }
 .jgo-arte-bj { gap:0; }
 .jgo-arte-bj i { width:58px; height:82px; border:2.5px solid var(--ink); border-radius:10px; background:#fff; box-shadow:3px 3px 0 var(--ink); font-style:normal; font-weight:900; font-size:24px;
   color:var(--ink); display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1; transform:rotate(-8deg); }
@@ -116,57 +118,23 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
 .jgo-carretes::before { left:-4px; border-left:14px solid var(--jgo-oro); border-right:0; }
 .jgo-carretes::after { right:-4px; border-right:14px solid var(--jgo-oro); border-left:0; }
 
-/* ---- Ruleta: rueda a la izquierda; apuestas, número y «Girar» a la derecha */
-#jgoRul { display:grid; grid-template-columns:300px minmax(0, 1fr); grid-template-areas:"head head" "izq der" "izq res" "izq jugar"; column-gap:26px; align-items:start; }
-#jgoRul > .jgo-vhead { grid-area:head; }
-.jgo-rul-izq { grid-area:izq; }
-.jgo-rul-der { grid-area:der; min-width:0; }
-#jgoRulRes { grid-area:res; margin-top:10px; }
-#jgoRul > .jgo-jugar { grid-area:jugar; margin-top:10px; }
-.jgo-rueda { width:100%; max-width:300px; aspect-ratio:1; margin:0 auto; }
+/* ---- Ruleta: una rueda de premios grande al centro; la flecha de arriba marca la casilla que sale. Las casillas de
+   premio van en Oro; las de Shibu (sin premio), en rosa y celeste claritos con su cara */
+.jgo-rueda { width:min(340px, 100%); aspect-ratio:208 / 216; margin:0 auto; }
 .jgo-rueda svg { display:block; width:100%; height:100%; overflow:visible; filter:drop-shadow(4px 5px 0 var(--ink)); }
 .jgo-rueda .r-borde { fill:var(--ink); }
-.jgo-rueda .r-pista { fill:var(--jgo-oro); }
-.jgo-rueda .c-rojo { fill:var(--jgo-rojo); }
-.jgo-rueda .c-negro { fill:var(--jgo-negro); }
-.jgo-rueda .c-verde { fill:var(--jgo-verde); }
-.jgo-rueda path { stroke:#fff; stroke-width:.55; }
-.jgo-rueda .r-hondo { fill:none; stroke:rgba(0,0,0,.24); stroke-width:15.2; }       /* las casillas, un poco más hondas */
-.jgo-rueda .r-raya { fill:none; stroke:var(--jgo-oro); stroke-width:.9; }
-.jgo-rueda .r-num { fill:#fff; font-family:var(--font); font-size:8.6px; font-weight:800; text-anchor:middle; dominant-baseline:central; }
-.jgo-rueda .r-centro { fill:var(--bg); stroke:var(--ink); stroke-width:2; }
-.jgo-rueda .r-rayo { stroke:var(--jgo-oro); stroke-width:4.5; stroke-linecap:round; }
-.jgo-rueda .r-perilla { fill:var(--accent); stroke:var(--ink); stroke-width:1.4; }
-.jgo-rueda .r-brillo { fill:none; stroke:var(--jgo-oro); stroke-width:2.6; stroke-linejoin:round; }
-.jgo-rueda .r-hub { fill:#fff; stroke:var(--ink); stroke-width:2.5; }
-.jgo-rueda .r-hub.h-rojo { fill:var(--jgo-rojo); }
-.jgo-rueda .r-hub.h-negro { fill:var(--jgo-negro); }
-.jgo-rueda .r-hub.h-verde { fill:var(--jgo-verde); }
-.jgo-rueda .r-hubn { fill:var(--ink); font-family:var(--font); font-size:21px; font-weight:900; text-anchor:middle; dominant-baseline:central; }
-.jgo-rueda .r-hubn.blanco { fill:#fff; }
-.jgo-rueda .r-bola { fill:#fff; stroke:var(--ink); stroke-width:1.5; }
-.jgo-hist { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:5px; min-height:30px; margin-top:12px; font-size:13px; font-weight:700; color:var(--muted); }
-.jgo-hist span { margin-right:2px; }
-.jgo-hist i { min-width:28px; height:28px; padding:0 4px; border-radius:50%; display:inline-grid; place-items:center; font-style:normal; font-weight:800; color:#fff; border:2px solid var(--ink); font-variant-numeric:tabular-nums; }
-.jgo-hist i:first-of-type { box-shadow:0 0 0 2px var(--jgo-oro); }
-.h-rojo { background:var(--jgo-rojo); } .h-negro { background:var(--jgo-negro); } .h-verde { background:var(--jgo-verde); }
-.jgo-sub { margin:0 0 6px; font-size:14px; font-weight:800; color:var(--ink); }
-.jgo-sub + .jgo-apuestas { margin-bottom:14px; }
-.jgo-apuestas { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; }
-.jgo-apuestas button { min-height:54px; padding:6px; border:2.5px solid var(--ink); border-radius:16px; background:#fff; color:var(--ink); font-size:18px; font-weight:900; box-shadow:2px 3px 0 var(--ink); }
-.jgo-apuestas .ap-rojo { background:var(--jgo-rojo); color:#fff; }
-.jgo-apuestas .ap-negro { background:var(--jgo-negro); color:#fff; }
-.jgo-nums { display:grid; grid-template-columns:50px repeat(12, minmax(0, 1fr)); grid-auto-rows:46px; gap:4px; }
-.jgo-nums button { min-height:0; padding:0; border:2px solid var(--ink); border-radius:10px; color:#fff; font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }
-.jgo-nums .n-rojo { background:var(--jgo-rojo); }
-.jgo-nums .n-negro { background:var(--jgo-negro); }
-.jgo-nums .n-verde { background:var(--jgo-verde); grid-row:span 3; }
-/* Apuesta elegida: aro oro y un poco levantada; el número que salió, con borde oro */
-.jgo-apuestas button.on, .jgo-nums button.on { outline:4px solid var(--jgo-oro); outline-offset:1px; transform:translateY(-2px); box-shadow:2px 4px 0 var(--ink); position:relative; z-index:1; }
-.jgo-nums button.salio { box-shadow:inset 0 0 0 3px var(--jgo-oro); transition:none; }
-.jgo-apuestas button:disabled, .jgo-nums button:disabled { opacity:1; }
-.jgo-tuap { font-weight:800; color:var(--ink); font-size:15px; }
-#jgoRul .jgo-jugar { justify-content:space-between; }
+.jgo-rueda .r-cas { stroke:var(--ink); stroke-width:1.4; }
+.jgo-rueda .c-a { fill:#FCE3EF; }
+.jgo-rueda .c-b { fill:#DDF2FC; }
+.jgo-rueda .c-premio { fill:var(--jgo-oro); }
+.jgo-rueda .r-cas.sale { stroke:var(--accent); stroke-width:4; stroke-linejoin:round; }
+.jgo-rueda .r-shibu { fill:var(--shibu, #E08A3C); stroke:var(--ink); stroke-width:1.4; }
+.jgo-rueda .r-cara { font-size:14px; text-anchor:middle; dominant-baseline:central; }
+.jgo-rueda .r-mult { fill:var(--ink); font-family:var(--font); font-size:19px; font-weight:900; text-anchor:middle; dominant-baseline:central; }
+.jgo-rueda .r-centro { fill:#fff; stroke:var(--ink); stroke-width:3; }
+.jgo-rueda .r-hubn { fill:var(--ink); font-family:var(--font); font-size:22px; font-weight:900; text-anchor:middle; dominant-baseline:central; }
+.jgo-rueda .r-hubn.gana { fill:var(--accent); }
+.jgo-rueda .r-flecha { fill:var(--accent); stroke:var(--ink); stroke-width:2.5; stroke-linejoin:round; }
 
 /* ---- Blackjack: mesa Azul Noche con las cartas */
 .jgo-mesa { position:relative; overflow:hidden; display:grid; gap:6px; padding:14px 18px 16px; border:3px solid var(--ink); border-radius:28px;
@@ -207,20 +175,10 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
   animation:jgoCae var(--t, 1.4s) var(--d, 0s) cubic-bezier(.3,.6,.45,1) forwards; }
 @keyframes jgoCae { 0% { opacity:1; transform:translate(0, 0) rotate(0); } 85% { opacity:1; } 100% { opacity:0; transform:translate(var(--x, 0), 560px) rotate(var(--r, 540deg)); } }
 
-/* ---- Pantallas medianas (tablets chicas, ventanas angostas): la ruleta más compacta (el 0 a la izquierda y 4 filas de 9) */
-@media (max-width: 1059px) {
-  #jgoRul { grid-template-columns:250px minmax(0, 1fr); column-gap:18px; }
-  .jgo-nums { grid-template-columns:46px repeat(9, minmax(0, 1fr)); grid-auto-rows:44px; }
-  .jgo-nums .n-verde { grid-row:span 4; }
-}
 @media (max-width: 760px) {
   .jgo-cards { gap:12px; }
   .jgo-card { min-height:220px; }
-  #jgoRul { grid-template-columns:minmax(0, 1fr); grid-template-areas:"head" "izq" "der" "res" "jugar"; }
-  .jgo-rueda { max-width:250px; }
-  .jgo-rul-der { margin-top:6px; }
-  .jgo-nums { grid-template-columns:repeat(6, minmax(0, 1fr)); }
-  .jgo-nums .n-verde { grid-row:auto; grid-column:1 / -1; }
+  .jgo-rueda { width:min(300px, 100%); }
 }
 /* ---- Pantallas bajas (tablets chicas acostadas, ~960×600) y teléfonos: el botón de jugar queda fijo abajo de la
    ventana, siempre a la mano aunque el juego no quepa entero */
@@ -230,8 +188,8 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
   .jgo-jugar { position:sticky; bottom:0; z-index:6; margin:12px -20px 0; padding:10px 20px calc(10px + env(safe-area-inset-bottom, 0px)); background:var(--surface);
     border-top:2px solid var(--ink); }
 }
-@media (max-height: 700px) and (min-width: 761px) { #jgoRul { grid-template-areas:"head head" "izq der" "izq res" "jugar jugar"; } }
 @media (max-height: 700px) and (min-width: 561px) {
+  .jgo-rueda { width:min(280px, 100%); }
   .jgo-shibu { margin:8px 0; }
   .shibu-ava { min-width:52px; height:52px; }
   .shibu-badge { width:50px; height:50px; font-size:12.5px; }
@@ -278,9 +236,6 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
   .jgo-res.gana span { font-size:17px; }
   .jgo-jugar { margin:12px -12px 0; padding-left:12px; padding-right:12px; }
   .jgo-jugar button { flex:1 1 auto; min-width:0 !important; font-size:17px; }
-  #jgoRul .jgo-jugar { flex-wrap:nowrap; }
-  .jgo-tuap { flex:none; font-size:14px; max-width:42%; }
-  .jgo-apuestas button { min-height:48px; font-size:16px; }
   .jgo-mesa { padding:12px 12px 14px; border-radius:22px; }
   .jgo-mazo { display:none; }
   .jgo-carta { width:58px; height:82px; }

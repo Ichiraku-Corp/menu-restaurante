@@ -503,7 +503,8 @@ create or replace function public.jgo_estado(p_emp bigint, p_pin text) returns j
 language plpgsql stable security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
-  return public.jgo_contadores(p_emp) || jsonb_build_object('activo', public.mis_juega(p_emp) and coalesce((public.mis_ajustes() ->> 'juegos')::boolean, true));
+  return public.jgo_contadores(p_emp) || jsonb_build_object('activo', public.mis_juega(p_emp) and coalesce((public.mis_ajustes() ->> 'juegos')::boolean, true),
+                                                            'casillas', to_jsonb(public.jgo_ruleta_casillas()));
 end $$;
 
 -- Tragamonedas: 3 iguales = 3 puntos, 2 iguales = 1 punto
@@ -526,31 +527,28 @@ begin
   return jsonb_build_object('carretes', to_jsonb(r), 'premio', gana, 'al_tope', gana < premio, 'mensaje', msg) || public.jgo_contadores(p_emp);
 end $$;
 
--- Ruleta europea (0 a 36): color o par/impar = 1 punto; número exacto = 3 puntos. El 0 no es ni rojo, ni negro, ni par.
-create or replace function public.jgo_ruleta(p_emp bigint, p_pin text, p_apuesta text) returns jsonb
+-- Ruleta (pedido de Edgar, 24/11): una rueda de premios de 15 casillas. 12 tienen la cara de Shibu (sin premio) y 3
+-- pagan x1, x2 y x3 (1, 2 o 3 puntos): se gana 3 de cada 15 veces, el 20 %. Cada casilla sale con la misma probabilidad,
+-- así la rueda que se ve dice la verdad. La tablet la dibuja con esta misma lista (jgo_estado la manda).
+create or replace function public.jgo_ruleta_casillas() returns int[] language sql immutable as $$
+  select array[3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0] $$;
+drop function if exists public.jgo_ruleta(bigint, text, text);   -- la de casino (con apuesta) que hubo en la prueba
+create or replace function public.jgo_ruleta(p_emp bigint, p_pin text) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare ap text := lower(trim(coalesce(p_apuesta, ''))); n int; color text; premio int := 0; pid bigint; gana int; msg text;
-  rojos int[] := array[1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+declare c int[] := public.jgo_ruleta_casillas(); k int; premio int; pid bigint; gana int; msg text;
 begin
   perform public.pos_auth(p_emp, p_pin);
-  if not (ap in ('rojo', 'negro', 'par', 'impar') or (ap ~ '^[0-9]{1,2}$' and ap::int between 0 and 36)) then
-    raise exception 'Elige rojo, negro, par, impar o un número del 0 al 36';
-  end if;
   perform public.jgo_gastar_ficha(p_emp, 'ruleta');
-  n := floor(random() * 37)::int;
-  color := case when n = 0 then 'verde' when n = any (rojos) then 'rojo' else 'negro' end;
-  premio := case when ap ~ '^[0-9]+$' then case when ap::int = n then 3 else 0 end
-                 when ap in ('rojo', 'negro') then case when ap = color then 1 else 0 end
-                 when ap = 'par' then case when n > 0 and n % 2 = 0 then 1 else 0 end
-                 when ap = 'impar' then case when n % 2 = 1 then 1 else 0 end else 0 end;
-  insert into public.jgo_partidas (employee_id, juego, apuesta, resultado) values (p_emp, 'ruleta', ap, jsonb_build_object('numero', n, 'color', color)) returning id into pid;
+  k := floor(random() * array_length(c, 1))::int;   -- la casilla (0 = la de arriba), todas con la misma probabilidad
+  premio := c[k + 1];
+  insert into public.jgo_partidas (employee_id, juego, resultado) values (p_emp, 'ruleta', jsonb_build_object('casilla', k, 'mult', premio))
+  returning id into pid;
   gana := public.jgo_pagar(p_emp, 'ruleta', premio, pid);
-  msg := case when premio = 0 then 'Salió el ' || n || ': sin premio esta vez'
-              when gana = 0 then 'Acertaste, pero ya llegaste al tope de hoy'
-              else case when premio = 3 then '¡Número exacto!' else '¡Acertaste!' end
-                   || ' +' || gana || ' punto' || case when gana > 1 then 's' else '' end
+  msg := case when premio = 0 then 'Salió Shibu: sin premio esta vez'
+              when gana = 0 then '¡x' || premio || '! Pero ya llegaste al tope de hoy'
+              else '¡x' || premio || '! +' || gana || ' punto' || case when gana > 1 then 's' else '' end
                    || case when gana < premio then ' (llegaste al tope de hoy)' else '' end end;
-  return jsonb_build_object('numero', n, 'color', color, 'apuesta', ap, 'premio', gana, 'al_tope', gana < premio, 'mensaje', msg) || public.jgo_contadores(p_emp);
+  return jsonb_build_object('casilla', k, 'mult', premio, 'premio', gana, 'al_tope', gana < premio, 'mensaje', msg) || public.jgo_contadores(p_emp);
 end $$;
 
 -- Blackjack: el crupier se planta en 17. Ganar = 1 punto, blackjack = 2, empate = devuelve la ficha.
@@ -723,7 +721,8 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.jgo_ganado_hoy(bigint), public.mis_items(bigint, date), public.mis_comandas(bigint, date), public.mis_venta_dia(bigint, date),
   public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
-  public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text) from anon, public, authenticated;
+  public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas()
+  from anon, public, authenticated;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)
 do $$
@@ -731,7 +730,7 @@ declare f text;
 begin
   foreach f in array array['mis_estado(bigint, text)', 'mis_marcar(bigint, text, boolean, bigint[])', 'tienda_canjear(bigint, text, bigint)',
                            'jgo_estado(bigint, text)',
-                           'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text, text)', 'jgo_bj_empezar(bigint, text)',
+                           'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text)', 'jgo_bj_empezar(bigint, text)',
                            'jgo_bj_accion(bigint, text, bigint, text)', 'gestion_misiones()', 'gestion_mision_guardar(bigint, boolean, text, integer, text, jsonb)',
                            'gestion_tienda_guardar(bigint, text, integer, bigint, text, boolean)', 'gestion_misiones_ajustes(jsonb)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
