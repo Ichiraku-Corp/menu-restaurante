@@ -43,6 +43,10 @@ function openCash() {
         "<h3>Tarjeta de puntos</h3><p class=\"muted\">" + (sm.sellos || 0) + (sm.sellos === 1 ? " sello entregado" : " sellos entregados") + " · " +
           ((sm.canjes && sm.canjes.cuentas) || 0) + (((sm.canjes && sm.canjes.cuentas) || 0) === 1 ? " canje" : " canjes") +
           (sm.canjes && num(sm.canjes.valor) ? " (" + ref(num(sm.canjes.valor)) + " en premios)" : "") + "</p>" +
+        // Lo que las maids compraron en la tienda de Shibu (salió a cocina en Ref 0)
+        (sm.premios ? "<h3>Premios de misiones (" + sm.premios.length + ")</h3>" + (sm.premios.length ? sm.premios.map(function (v) {
+          return '<div class="muted">' + esc(v.quien || "") + " · " + fmtQ(v.qty) + " " + esc(v.premio) + " · " + ref(num(v.valor)) + " en la carta</div>";
+        }).join("") : '<p class="muted">Ninguno</p>') : "") +
         "</div>";
       // Pestaña 2: Cerrar caja, por pasos (efectivo → bolívares en banco → divisas digitales → afuera → revisar)
       var steps = CSTEPS.filter(function (x) { return x.k !== 4 || OUTS.length; });

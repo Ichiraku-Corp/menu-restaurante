@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------- Misiones de Shibu (pedido de Edgar, 24/11)
 // Shibu, el jefe, recibe a la maid la primera vez del día con sus 3 misiones y celebra cada misión cumplida.
-// «Mi perfil» muestra sus puntos y fichas, la tienda de premios y el botón «Jugar». La caja aprueba los premios.
-// Todo lo decide la base (mis_estado, tienda_*): la tablet solo muestra. Las frases salen de data/shibu.json.
-var SHIBU = { frases: null, est: null, timer: null, pend: 0 };
+// «Mi perfil» muestra sus puntos y fichas, la tienda de premios y el botón «Jugar». En la tienda la maid compra con sus
+// puntos y el premio sale a cocina de una vez (queda en el cierre de caja).
+// Todo lo decide la base (mis_estado, tienda_canjear): la tablet solo muestra. Las frases salen de data/shibu.json.
+var SHIBU = { frases: null, est: null, timer: null };
 var NIVEL_TXT = { 1: "Fácil", 2: "Media", 3: "Difícil" };
 var MIS_PLATA = ["ventas", "promedio", "primera", "vs_ayer", "vs_semana", "top_ventas", "equipo_meta"];
 
@@ -37,11 +38,11 @@ function shibuEntrar() {
   SHIBU.timer = setInterval(function () { shibuPoll(false); }, 45000);
 }
 function shibuSalir() {
-  clearInterval(SHIBU.timer); SHIBU.timer = null; SHIBU.est = null; SHIBU.pend = 0;
+  clearInterval(SHIBU.timer); SHIBU.timer = null; SHIBU.est = null;
   show("btnShibu", false);
   ["shibuDlg", "perfilDlg"].forEach(function (id) { var d = $(id); if (d && d.open) d.close(); });
 }
-// Revisa misiones (y premios por aprobar si cobra). Al entrar, la bienvenida sale una vez al día.
+// Revisa las misiones. Al entrar, la bienvenida sale una vez al día.
 function shibuPoll(alEntrar) {
   if (!U || (typeof SR !== "undefined" && SR.on)) return Promise.resolve();
   var quien = U.id;
@@ -54,7 +55,7 @@ function shibuPoll(alEntrar) {
     else if ((e.nuevos || []).length) shibuCuandoLibre(shibuCelebra);
     if ($("perfilDlg").open) shibuPerfilDibuja();
     shibuTabRedibuja();
-  }).catch(function () {}).then(function () { if (U && U.charge && cur.area !== "Maids") shibuPendientes(); });
+  }).catch(function () {});
 }
 // Espera a que se cierren los avisos u otra ventana antes de mostrar a Shibu
 function shibuCuandoLibre(fn) {
@@ -154,7 +155,7 @@ function shibuPerfil() {
 }
 function shibuPerfilDibuja() {
   var e = SHIBU.est; if (!e) return;
-  var pts = e.puntos || 0, est = { pendiente: "Esperando a la cajera", entregado: "Entregado", rechazado: "No salió" };
+  var pts = e.puntos || 0, est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
   var juegos = e.juegos || {}, hayJuegos = typeof abrirJuegos === "function" && juegos.activo !== false;
   $("perfilBody").innerHTML =
     '<div class="perfil-top">' + shibuCara("media") + '<div class="perfil-quien"><b>' + esc(e.nombre || U.name) + '</b><div class="perfil-saldos">' +
@@ -164,7 +165,7 @@ function shibuPerfilDibuja() {
     "<h3>Tienda de premios</h3>" + ((e.tienda || []).length ? '<div class="tienda-list">' + e.tienda.map(function (t) {
       var alcanza = pts >= t.puntos;
       return '<div class="premio-card' + (alcanza ? " alcanza" : "") + '"><b>' + esc(t.nombre) + '</b><span class="premio-pts">' + t.puntos + " puntos</span>" +
-        '<button type="button" data-canje="' + t.id + '"' + (alcanza ? "" : " disabled") + ">" + (alcanza ? "Canjear" : "Te faltan " + (t.puntos - pts)) + "</button></div>";
+        '<button type="button" data-canje="' + t.id + '"' + (alcanza ? "" : " disabled") + ">" + (alcanza ? "Comprar" : "Te faltan " + (t.puntos - pts)) + "</button></div>";
     }).join("") + "</div>" : '<p class="muted">La tienda está vacía por ahora.</p>') +
     ((e.canjes || []).length ? "<h3>Mis premios</h3>" + e.canjes.map(function (c) {
       return '<div class="canje-row ' + c.estado + '"><span>' + esc(c.nombre) + " · " + c.puntos + ' pts</span><b>' + esc(est[c.estado] || c.estado) + "</b></div>";
@@ -175,83 +176,48 @@ $("perfilClose").addEventListener("click", function () { $("perfilDlg").close();
 $("perfilBody").addEventListener("click", function (ev) {
   var b = ev.target.closest("[data-canje]"); if (!b || b.disabled) return;
   var t = (SHIBU.est.tienda || []).find(function (x) { return String(x.id) === b.dataset.canje; }); if (!t) return;
+  // Comprar no tiene vuelta atrás: el premio sale a cocina de una vez
+  if (!confirm("¿Comprar " + t.nombre + " por " + t.puntos + " puntos? Sale a cocina de una vez.")) return;
   b.disabled = true;
   rpc("tienda_canjear", { p_item: t.id }).then(function () {
-    toast(t.nombre + " pedido: la cajera lo ve en la pestaña Maids");
-    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); shibuPerfilDibuja(); shibuBadge(); shibuTabRedibuja(); });
+    shibuPremio(t);
+    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); shibuPerfilDibuja(); shibuTabRedibuja(); });
   }).catch(function (err) { b.disabled = false; fail(err); });
 });
-
-// ---- Caja: premios por aprobar
-function shibuPendientes() {
-  if (!U || !U.charge) return Promise.resolve();
-  return rpc("tienda_pendientes").then(function (l) {
-    l = l || [];
-    if (l.length > SHIBU.pend) {
-      var x = l[l.length - 1];
-      toast(x.quien + " pidió " + x.nombre + ": apruébalo en la pestaña Maids");
-    }
-    SHIBU.pend = l.length;
-    shibuPremiosCaja(l);
-    shibuBadge();
-  }).catch(function () {});
+// Premio comprado: Shibu lo entrega con una frase suya (la comanda ya salió a cocina)
+function shibuPremio(t) {
+  $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuCara("grande salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div>' +
+    '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
+    '<div class="shibu-fiesta"><div class="fiesta-titulo">¡Premio comprado!</div><div class="fiesta-mis">' + esc(t.nombre) + " va a cocina</div>" +
+    '<div class="fiesta-premio"><b>−' + t.puntos + "</b> puntos</div></div>";
+  $("shibuOk").textContent = "Listo";
+  $("shibuDlg").dataset.modo = "premio";
+  $("shibuDlg").showModal();
+  shibuEscribe($("shibuTxt"), shibuFrase("canje_aprobado") || "Tu premio va a cocina.");
 }
-// La lista de premios por aprobar (pestaña «Maids»)
-function shibuPremiosCaja(lista) {
-  var box = $("premiosBox"); if (!box) return;
-  if (!lista) { shibuPendientes(); return; }
-  box.innerHTML = !lista.length ? '<div class="card premios-caja"><b>Premios de misiones por aprobar</b><p class="muted" style="margin:6px 0 0">No hay premios esperando.</p></div>'
-    : '<div class="card premios-caja"><b>Premios de misiones por aprobar</b>' + lista.map(function (x) {
-    return '<div class="premio-row"><span>' + esc(x.quien) + " · " + esc(x.nombre) + ' <small class="muted">(' + x.puntos + " pts)</small></span>" +
-      '<span><button type="button" class="ok" data-premio="' + x.id + '" data-ok="1">Aprobar</button> <button type="button" data-premio="' + x.id + '" data-ok="0">No</button></span></div>';
-  }).join("") + '<p class="muted" style="margin:6px 0 0">Al aprobar, el premio sale a cocina en Ref 0.</p></div>';
-}
-document.addEventListener("click", function (ev) {
-  var b = ev.target.closest("[data-premio]"); if (!b || !$("premiosBox") || !$("premiosBox").contains(b)) return;
-  var ok = b.dataset.ok === "1";
-  b.disabled = true;
-  rpc("tienda_resolver", { p_canje: Number(b.dataset.premio), p_aprobar: ok, p_nota: "" }).then(function () {
-    toast(ok ? "Premio aprobado: sale a cocina" : "Premio rechazado: le vuelven sus puntos");
-    SHIBU.pend = Math.max(0, SHIBU.pend - 1);
-    return shibuPendientes();
-  }).catch(function (err) { b.disabled = false; fail(err); });
-});
 
-// ---- Pestaña «Maids» (junto a Tokio y Edo): la cajera aprueba los premios ahí mismo; cada maid ve su día y sus premios
+// ---- Pestaña «Maids» (junto a Tokio y Edo): cada maid ve su día con Shibu, su perfil con la tienda y «Jugar»
 // Si la pestaña «Maids» está a la vista, se redibuja con lo último
 function shibuTabRedibuja() {
   if (U && cur.area === "Maids" && !$("tablesView").classList.contains("hidden")) shibuTabMaids($("areaBody"));
 }
-function shibuTabVisible() { return !!(U && (U.charge || (SHIBU.est && SHIBU.est.juega))); }
-function shibuTabCount() {
-  if (!U) return 0;
-  if (U.charge) return SHIBU.pend;
-  return ((SHIBU.est && SHIBU.est.canjes) || []).filter(function (c) { return c.estado === "pendiente"; }).length;
-}
-// Pone al día el número de la pestaña (y la muestra si todavía no estaba)
+function shibuTabVisible() { return !!(U && SHIBU.est && SHIBU.est.juega); }
+function shibuTabCount() { return 0; }
+// Cuando llega su estado, la pestaña aparece (si todavía no estaba)
 function shibuBadge() {
   if (!U || $("tablesView").classList.contains("hidden")) return;
-  var b = document.querySelector('#areas [data-area="Maids"]');
-  if (!b) { if (shibuTabVisible() && typeof drawTables === "function") drawTables(); return; }
-  var n = shibuTabCount(), c = b.querySelector(".cnt");
-  if (!n) { if (c) c.remove(); return; }
-  if (!c) { c = document.createElement("span"); c.className = "cnt"; b.appendChild(document.createTextNode(" ")); b.appendChild(c); }
-  c.textContent = n;
+  if (!document.querySelector('#areas [data-area="Maids"]') && shibuTabVisible() && typeof drawTables === "function") drawTables();
 }
 function shibuTabMaids(box) {
   var e = SHIBU.est, juega = !!(e && e.juega), html = "";
-  if (U.charge) html += '<div id="premiosBox"><div class="card premios-caja"><b>Premios de misiones por aprobar</b><p class="muted" style="margin:6px 0 0">Buscando…</p></div></div>';
   if (juega) {
     var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
-    var mios = (e.canjes || []).filter(function (c) { return c.estado === "pendiente"; });
     html += '<div class="card maids-dia"><div class="perfil-top">' + shibuCara("media") + '<div class="perfil-quien"><b>Tu día con Shibu</b><div class="perfil-saldos">' +
       "<span>★ " + hechas + " de " + m.length + ' misiones</span><span class="pts"><b>' + (e.puntos || 0) + "</b> puntos</span><span><b>" + (e.fichas || 0) + "</b> fichas</span></div></div></div>" +
-      (mios.length ? '<div class="maids-mios">' + mios.map(function (c) { return '<div class="canje-row pendiente"><span>' + esc(c.nombre) + " · " + c.puntos + " pts</span><b>Esperando a la cajera</b></div>"; }).join("") + "</div>" : "") +
       '<div class="row" style="margin-top:10px"><button type="button" class="primary" id="maidsPerfil">Mi perfil y tienda</button>' +
       (typeof abrirJuegos === "function" && (e.juegos || {}).activo !== false ? '<button type="button" id="maidsJugar">Jugar</button>' : "") + "</div></div>";
   }
   box.innerHTML = '<div class="maids-tab">' + (html || '<p class="muted">Aquí salen las misiones de Shibu.</p>') + "</div>";
-  if (U.charge) shibuPendientes();
 }
 document.addEventListener("click", function (ev) {
   if (ev.target.closest("#maidsPerfil")) shibuPerfil();

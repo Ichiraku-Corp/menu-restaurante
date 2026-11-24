@@ -1,4 +1,4 @@
-/* Misiones de Shibu: chapita de arriba, bienvenida, celebración, Mi perfil y premios por aprobar en caja */
+/* Misiones de Shibu: chapita de arriba, bienvenida, celebración, Mi perfil con la tienda y la pestaña «Maids» */
 :root { --shibu:#E08A3C; --shibu-t:#FBE3CC; }
 #btnShibu { display:inline-flex; align-items:center; gap:6px; background:var(--shibu-t); border-color:var(--shibu); color:var(--ink); }
 #btnShibu.hidden { display:none; }
@@ -70,8 +70,6 @@
 .canje-row.entregado b { color:var(--ok); }
 .canje-row.rechazado b { color:var(--muted); }
 
-.premios-caja { border-color:var(--shibu); background:var(--shibu-t); }
-.premio-row { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; flex-wrap:wrap; }
 @media (prefers-reduced-motion: reduce) {
   .entra, .salta, .mis-card, .premio-card.alcanza, .shibu-confeti i { animation:none !important; }
 }

@@ -250,8 +250,11 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click("#back"); await page.waitForTimeout(300);
 
     // Cierre: arqueo con diferencia pide nota
+    await S(() => { window.__S.premios = [{ quien: "Mesera", premio: "Taiyaki", qty: 1, valor: 2.5 }]; });
     await page.click("#btnCaja"); await page.waitForTimeout(300);
     ok(await page.isVisible('#cashBody [data-ctab="res"].on') && await page.isVisible("#cashBody [data-ctab=cierre]"), "la caja se abre en «Resumen», con pestañas para cerrar y herramientas");
+    ok(/Premios de misiones \(1\)[\s\S]*Mesera · 1 Taiyaki · Ref 2,50 en la carta/.test(await page.textContent("#cashBody")),
+      "el resumen muestra los premios de misiones del turno (quién, qué y lo que vale en la carta)");
     await S(() => notice("Prueba de aviso con la caja abierta", "err")); await page.waitForTimeout(300);
     ok(await S(() => { const r = document.getElementById("notice").getBoundingClientRect(), el = document.elementFromPoint(r.left + 20, r.top + r.height / 2); return !!(el && el.closest("#notice")); }),
       "un aviso se ve por encima de la ventana de caja abierta (no queda detrás)");

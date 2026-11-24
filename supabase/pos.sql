@@ -92,6 +92,9 @@ alter table public.pos_orders add column if not exists split        jsonb;
 alter table public.pos_orders add column if not exists channel      text not null default 'propio' check (channel in ('propio', 'yummy'));
 -- Tarjeta de puntos: «Tarjeta entregada» al cobrar = un sello por esta compra (uno por compra de Ref 20 o más)
 alter table public.pos_orders add column if not exists sello        boolean not null default false;
+-- Premio de las misiones de Shibu (sale a cocina en Ref 0): queda en el cierre aparte y no cuenta como pedido en los
+-- totales ni en el ticket promedio
+alter table public.pos_orders add column if not exists premio       boolean not null default false;
 update public.pos_orders set channel = 'yummy' where kind = 'delivery' and channel = 'propio' and label ilike '%yummy%';
 create unique index if not exists pos_orders_one_open_per_table on public.pos_orders (table_id)
   where status = 'abierta' and table_id is not null;
@@ -1366,7 +1369,7 @@ begin
     'methods', (select coalesce(jsonb_object_agg(m.method, jsonb_build_object('currency', m.currency, 'amount', m.amount, 'amount_ref', m.amount_ref)), '{}'::jsonb)
                 from (select method, min(currency) currency, sum(amount) amount, sum(amount_ref) amount_ref
                       from public.pos_payments where session_id = s.id group by method) m),
-    'orders', (select count(*) from public.pos_orders where session_id = s.id and status = 'cobrada'),
+    'orders', (select count(*) from public.pos_orders where session_id = s.id and status = 'cobrada' and not premio),
     'sales', (select coalesce(sum(t.subtotal - t.discount), 0) from public.pos_orders o, public.pos_totals(o.id) t where o.session_id = s.id and o.status = 'cobrada'),
     'service', (select coalesce(sum(t.service), 0) from public.pos_orders o, public.pos_totals(o.id) t where o.session_id = s.id and o.status = 'cobrada'),
     'delivery', (select coalesce(sum(t.delivery), 0) from public.pos_orders o, public.pos_totals(o.id) t where o.session_id = s.id and o.status = 'cobrada'),
@@ -1389,6 +1392,12 @@ begin
     'canjes', (select jsonb_build_object('cuentas', count(distinct i.order_id), 'valor', coalesce(round(sum(i.qty * (i.canje ->> 'precio')::numeric), 2), 0))
                from public.pos_items i join public.pos_orders o on o.id = i.order_id
                where o.session_id = s.id and o.status = 'cobrada' and i.canje is not null and i.status <> 'anulado'),
+    -- Premios de las misiones que salieron en este turno (quién, qué y lo que vale en la carta)
+    'premios', (select coalesce(jsonb_agg(jsonb_build_object('quien', public.pos_emp_name(i.created_by),
+                  'premio', i.name || case when i.variant <> '' then ' ' || i.variant else '' end, 'qty', i.qty,
+                  'valor', round(i.qty * coalesce(i.list_price, 0), 2), 'at', o.closed_at) order by o.closed_at, i.id), '[]'::jsonb)
+                from public.pos_items i join public.pos_orders o on o.id = i.order_id
+                where o.session_id = s.id and o.status = 'cobrada' and o.premio and i.status <> 'anulado'),
     'expected', s.expected, 'counted', s.counted, 'notes', s.notes
   ) into r;
   return r;
@@ -1406,7 +1415,7 @@ begin
                            when 'efectivo_usd' then 'efectivo' when 'efectivo_bs' then 'efectivo' when 'yummy' then 'yummy' else 'otros' end k, round(sum(p.amount_ref), 2) v
       from public.pos_payments p join public.pos_orders o2 on o2.id = p.order_id
       where o2.status = 'cobrada' and (o2.closed_at at time zone 'America/Caracas')::date = p_date group by 1) m), '{}'::jsonb),
-    count(*), 'pos', 'Sistema de ventas propio', now()
+    count(*) filter (where not o.premio), 'pos', 'Sistema de ventas propio', now()
   from public.pos_orders o, public.pos_totals(o.id) t
   where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date = p_date
   on conflict (sale_date) do update set total = excluded.total, service_amount = excluded.service_amount, by_method = excluded.by_method,
@@ -1443,13 +1452,13 @@ language sql stable security definer set search_path = public as $$
   with s as (select * from public.pos_sessions where id = p_session),
   o as (select o.*, t.subtotal, t.discount as disc, t.service, t.delivery, t.total from public.pos_orders o, public.pos_totals(o.id) t
         where o.session_id = p_session),
-  it as (select i.*, o.status as ostatus from public.pos_items i join o on o.id = i.order_id)
+  it as (select i.*, o.status as ostatus, o.premio as opremio from public.pos_items i join o on o.id = i.order_id)
   select jsonb_build_object(
     'session', (select jsonb_build_object('id', s.id, 'opened_at', s.opened_at, 'closed_at', s.closed_at, 'opened_by', public.pos_emp_name(s.opened_by),
                  'closed_by', public.pos_emp_name(s.closed_by), 'opening_usd', s.opening_usd, 'opening_bs', s.opening_bs,
                  'expected', s.expected, 'counted', s.counted, 'notes', s.notes) from s),
     'rate', public.pos_rate(),
-    'totals', (select jsonb_build_object('orders', count(*) filter (where status = 'cobrada'), 'cancelled', count(*) filter (where status = 'anulada'),
+    'totals', (select jsonb_build_object('orders', count(*) filter (where status = 'cobrada' and not premio), 'cancelled', count(*) filter (where status = 'anulada'),
                  'sales', coalesce(sum(subtotal - disc) filter (where status = 'cobrada'), 0), 'discounts', coalesce(sum(disc) filter (where status = 'cobrada'), 0),
                  'service', coalesce(sum(service) filter (where status = 'cobrada'), 0), 'delivery', coalesce(sum(delivery) filter (where status = 'cobrada'), 0),
                  'total', coalesce(sum(total) filter (where status = 'cobrada'), 0)) from o),
@@ -1457,13 +1466,13 @@ language sql stable security definer set search_path = public as $$
                 from (select method, min(currency) currency, sum(amount) amount, sum(amount_ref) amount_ref, count(*) n from public.pos_payments where session_id = p_session group by method) m),
     'by_kind', (select coalesce(jsonb_agg(jsonb_build_object('kind', k, 'orders', n, 'total', tt) order by tt desc), '[]'::jsonb)
                 from (select case when o.kind = 'mesa' then coalesce(t.area, 'Mesa') when o.kind = 'delivery' then case when o.channel = 'yummy' then 'Yummy' else 'Delivery' end else 'Para llevar' end k, count(*) n, sum(o.total) tt
-                      from o left join public.pos_tables t on t.id = o.table_id where o.status = 'cobrada' group by 1) x),
+                      from o left join public.pos_tables t on t.id = o.table_id where o.status = 'cobrada' and not o.premio group by 1) x),
     'dishes', (select coalesce(jsonb_agg(jsonb_build_object('name', name, 'variant', variant, 'qty', q, 'amount', a) order by a desc), '[]'::jsonb)
-               from (select name, variant, sum(qty) q, sum(qty * unit_price) a from it where status <> 'anulado' and ostatus = 'cobrada' group by name, variant) x),
+               from (select name, variant, sum(qty) q, sum(qty * unit_price) a from it where status <> 'anulado' and ostatus = 'cobrada' and not opremio group by name, variant) x),
     'staff', (select coalesce(jsonb_agg(jsonb_build_object('name', n, 'orders', c, 'total', tt) order by tt desc), '[]'::jsonb)
-              from (select public.pos_emp_name(opened_by) n, count(*) c, sum(total) tt from o where status = 'cobrada' group by opened_by) x),
+              from (select public.pos_emp_name(opened_by) n, count(*) c, sum(total) tt from o where status = 'cobrada' and not premio group by opened_by) x),
     'hours', (select coalesce(jsonb_agg(jsonb_build_object('hour', h, 'orders', c, 'total', tt) order by h), '[]'::jsonb)
-              from (select extract(hour from closed_at at time zone 'America/Caracas')::int h, count(*) c, sum(total) tt from o where status = 'cobrada' group by 1) x),
+              from (select extract(hour from closed_at at time zone 'America/Caracas')::int h, count(*) c, sum(total) tt from o where status = 'cobrada' and not premio group by 1) x),
     'orders', (select coalesce(jsonb_agg(jsonb_build_object('label', public.pos_order_label(o.id), 'status', o.status, 'opened_at', o.opened_at, 'closed_at', o.closed_at,
                  'waiter', public.pos_emp_name(o.opened_by), 'cashier', public.pos_emp_name(o.closed_by), 'total', o.total, 'service', o.service,
                  'client', (select c.name || coalesce(' (' || c.doc_id || ')', '') from public.customers c where c.id = o.customer_id),
@@ -1474,7 +1483,11 @@ language sql stable security definer set search_path = public as $$
                                case when p.tab_employee_id is not null then ' (' || public.pos_emp_name(p.tab_employee_id) || ')' else '' end ||
                                case when p.reference not in ('', 'vuelto') then ' #' || p.reference
                                when p.reference = 'vuelto' then ' (vuelto)' else '' end, ', ' order by p.id) from public.pos_payments p where p.order_id = o.id)
-               ) order by o.closed_at), '[]'::jsonb) from o),
+               ) order by o.closed_at), '[]'::jsonb) from o where not o.premio),
+    'premios', (select coalesce(jsonb_agg(jsonb_build_object('quien', public.pos_emp_name(i.created_by),
+                  'premio', i.name || case when i.variant <> '' then ' ' || i.variant else '' end, 'qty', i.qty,
+                  'valor', round(i.qty * coalesce(i.list_price, 0), 2), 'at', o.closed_at) order by o.closed_at, i.id), '[]'::jsonb)
+                from it i join o on o.id = i.order_id where o.premio and o.status = 'cobrada' and i.status <> 'anulado'),
     'voids', (select coalesce(jsonb_agg(jsonb_build_object('order', public.pos_order_label(i.order_id), 'item', i.name || case when i.variant <> '' then ' ' || i.variant else '' end,
                 'qty', i.qty, 'amount', i.qty * i.unit_price, 'reason', i.void_reason, 'by', public.pos_emp_name(i.voided_by), 'at', i.voided_at) order by i.voided_at), '[]'::jsonb)
               from public.pos_items i, s where i.status = 'anulado' and i.voided_at between s.opened_at and coalesce(s.closed_at, now())),
@@ -1597,6 +1610,9 @@ begin
     coalesce((select string_agg(public.pos_line(v ->> 'order', 'Ref ' || public.pos_money((v ->> 'amount')::numeric)) ||
               E'\n  ' || coalesce(v ->> 'by', '') || ' - Motivo: ' || (v ->> 'reason'), E'\n')
               from jsonb_array_elements(sm -> 'discounts') v), 'Ninguno') ||
+    case when jsonb_array_length(coalesce(sm -> 'premios', '[]'::jsonb)) > 0 then E'\n=\n^PREMIOS DE MISIONES\n' ||
+      (select string_agg(public.pos_line(trim_scale((v ->> 'qty')::numeric)::text || ' ' || (v ->> 'premio'), 'Ref ' || public.pos_money((v ->> 'valor')::numeric)) ||
+              E'\n  ' || coalesce(v ->> 'quien', ''), E'\n') from jsonb_array_elements(sm -> 'premios') v) else '' end ||
     case when coalesce(p_notes, '') <> '' then E'\n=\nNotas: ' || p_notes else '' end || E'\n=';
   -- Mejores vendedores (día, semana y mes)
   body := body || E'\n^MEJORES VENDEDORES\n' ||

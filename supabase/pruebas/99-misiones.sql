@@ -91,39 +91,49 @@ select public.pos_pay(:caja, '6666', :o2, jsonb_build_array(jsonb_build_object('
 reset role;
 select prueba.ok(public.mis_venta_dia(:mesera, :'hoy') = round(:t1::numeric, 2), 'lo cobrado con Yummy no suma a sus misiones');
 
--- 5) Tienda: canjea con sus puntos, la cajera aprueba y sale a cocina en Ref 0
+-- 5) Tienda: compra directa con sus puntos; el premio sale a cocina en Ref 0 y queda en el cierre de la caja
 insert into public.tienda_items (nombre, puntos, dish_id) values ('Taiyaki de prueba', 2, :taiyaki) returning id as premio \gset
+select id as sesion from public.pos_sessions where status = 'abierta' \gset
+select count(*) as pedidos_antes from public.pos_orders where session_id = :sesion and status = 'cobrada' and not premio \gset
 set role authenticated;
-select public.tienda_canjear(:mesera, '5555', :premio) ->> 'id' as canje \gset
+select public.tienda_canjear(:mesera, '5555', :premio) as cj \gset
 reset role;
-select prueba.ok(public.mis_saldo(:mesera) = 1 and (select estado from public.tienda_canjes where id = :canje) = 'pendiente',
-  'al canjear, sus puntos quedan apartados y el premio espera a la cajera');
-set role authenticated;
-select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mesera, '5555', :premio), 'Te faltan 1 puntos', 'sin puntos suficientes no deja canjear');
-select prueba.ok(jsonb_array_length(public.tienda_pendientes(:caja, '6666')) = 1, 'la caja ve el premio por aprobar');
-select prueba.falla(format('select public.tienda_pendientes(%s, %L)', :mesera, '5555'), 'permiso', 'una mesera sin permiso de cobro no aprueba premios');
-select public.tienda_resolver(:caja, '6666', :canje, true) ->> 'order_id' as premio_pedido \gset
-reset role;
-select prueba.ok((select estado from public.tienda_canjes where id = :canje) = 'entregado'
-  and (select status from public.pos_orders where id = :premio_pedido) = 'cobrada'
-  and (select bool_and(unit_price = 0 and status = 'enviado') from public.pos_items where order_id = :premio_pedido)
+select (:'cj'::jsonb ->> 'order_id')::bigint as premio_pedido \gset
+select prueba.ok(public.mis_saldo(:mesera) = 1 and (select estado from public.tienda_canjes where id = (:'cj'::jsonb ->> 'id')::bigint) = 'entregado',
+  'al comprar se descuentan sus puntos y el premio queda entregado, sin esperar a nadie');
+select prueba.ok((select status = 'cobrada' and premio and session_id = :sesion from public.pos_orders where id = :premio_pedido)
+  and (select bool_and(unit_price = 0 and status = 'enviado' and list_price > 0 and promo = 'Premio de misiones') from public.pos_items where order_id = :premio_pedido)
   and (select count(*) from public.pos_print_jobs where body like '%Premio de misiones%') >= 1,
-  'aprobado: sale la comanda a cocina, el pedido queda en Ref 0 y no cuenta como venta');
-select prueba.ok(public.mis_saldo(:mesera) = 1, 'el premio aprobado no devuelve puntos');
--- Rechazado: vuelven los puntos
+  'sale la comanda a cocina y el pedido queda en Ref 0 en la caja abierta, con lo que vale en la carta');
+set role authenticated;
+select public.pos_cash_summary() as smp \gset
+select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mesera, '5555', :premio), 'Te faltan 1 puntos', 'sin puntos suficientes no deja comprar');
+reset role;
+select prueba.ok((:'smp'::jsonb ->> 'orders')::int = :pedidos_antes
+  and exists (select 1 from jsonb_array_elements(:'smp'::jsonb -> 'premios') v
+              where v ->> 'quien' = 'Maid' and v ->> 'premio' like 'Taiyaki%' and (v ->> 'valor')::numeric > 0),
+  'el resumen de caja lo muestra en «Premios de misiones» con lo que vale y no lo cuenta como pedido');
+select prueba.ok(exists (select 1 from jsonb_array_elements(public.pos_session_report(:sesion) -> 'premios') v where v ->> 'quien' = 'Maid')
+  and not exists (select 1 from jsonb_array_elements(public.pos_session_report(:sesion) -> 'orders') v where v ->> 'label' like 'Premio:%')
+  and (public.pos_session_report(:sesion) -> 'totals' ->> 'orders')::int = :pedidos_antes,
+  'el reporte del cierre (correo) trae los premios aparte y no los cuenta como pedidos');
+select public.pos_sync_day(:'hoy');
+select prueba.ok((select tickets from public.daily_sales where sale_date = :'hoy') = (select count(*) from public.pos_orders where status = 'cobrada' and not premio
+                  and (closed_at at time zone 'America/Caracas')::date = :'hoy'),
+  'en las ventas del día el premio no cuenta como ticket (no baja el ticket promedio)');
+-- Con la caja cerrada no se compra (el premio tiene que quedar en el registro de una caja)
+-- (la caja se marca cerrada sin disparar los triggers: las misiones del cierre se prueban en el punto 7)
 insert into public.mis_puntos (employee_id, delta, motivo) values (:mesera, 5, 'prueba');
+set session_replication_role = replica;
+update public.pos_sessions set status = 'cerrada' where id = :sesion;
+set session_replication_role = default;
 set role authenticated;
-select public.tienda_canjear(:mesera, '5555', :premio) ->> 'id' as canje2 \gset
-select public.tienda_resolver(:caja, '6666', :canje2, false, 'hoy no hay taiyaki');
+select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mesera, '5555', :premio), 'La caja está cerrada', 'con la caja cerrada no se compran premios');
 reset role;
-select prueba.ok(public.mis_saldo(:mesera) = 6 and (select estado from public.tienda_canjes where id = :canje2) = 'rechazado',
-  'rechazado: le vuelven sus puntos');
--- Nadie se aprueba su propio premio
-insert into public.mis_puntos (employee_id, delta, motivo) values (:caja, 5, 'prueba');
-set role authenticated;
-select public.tienda_canjear(:caja, '6666', :premio) ->> 'id' as canje3 \gset
-select prueba.falla(format('select public.tienda_resolver(%s, %L, %s, true)', :caja, '6666', :canje3), 'otra persona de caja', 'nadie se aprueba su propio premio');
-reset role;
+set session_replication_role = replica;
+update public.pos_sessions set status = 'abierta' where id = :sesion;
+set session_replication_role = default;
+select prueba.ok(public.mis_saldo(:mesera) = 6, 'si no pudo comprar, no pierde sus puntos');
 
 -- 6) Juegos: gastan 1 ficha, el resultado lo decide la base y no se pasa del tope de 3 puntos al día
 set role authenticated;

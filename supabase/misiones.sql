@@ -2,7 +2,8 @@
 -- Misiones de Shibu (pedido de Edgar, 24/11/2026)
 -- Cada día Shibu da 3 misiones a las meseras y cajeras: fácil (1 punto), media (2) y difícil (3).
 -- El sistema las mide solo con lo que cada una anota y cobra. Cada misión cumplida da sus puntos (para la
--- tienda de premios, que aprueba la cajera) y 1 ficha para los juegos. Jugando se ganan como máximo 3 puntos al día.
+-- tienda de premios: la maid compra y el premio sale a cocina) y 1 ficha para los juegos. Jugando se ganan como máximo
+-- 3 puntos al día.
 -- Las tablets solo llegan aquí por funciones con PIN (pos_auth); Gestión, con can_manage.
 -- ============================================================================
 
@@ -428,10 +429,11 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- Tienda de premios
--- La mesera pide el premio: sus puntos quedan apartados hasta que la cajera lo aprueba o lo rechaza.
+-- Compra directa (pedido de Edgar, 24/11): si le alcanzan los puntos, el premio sale a cocina en Ref 0 como un pedido
+-- para llevar marcado como premio (se imprime su comanda y descuenta el inventario) y queda en el cierre de esta caja.
 create or replace function public.tienda_canjear(p_emp bigint, p_pin text, p_item bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare it record; cid bigint;
+declare it record; cid bigint; oid bigint; sess bigint; quien text;
 begin
   perform public.pos_auth(p_emp, p_pin);
   if not public.mis_juega(p_emp) then raise exception 'La tienda es para las meseras y cajeras'; end if;
@@ -441,56 +443,30 @@ begin
   if public.mis_saldo(p_emp) < it.puntos then
     raise exception 'Te faltan % puntos para %', it.puntos - public.mis_saldo(p_emp), it.nombre;
   end if;
-  if (select count(*) from public.tienda_canjes where employee_id = p_emp and estado = 'pendiente') >= 3 then
-    raise exception 'Ya tienes 3 premios esperando a la cajera';
-  end if;
-  insert into public.tienda_canjes (employee_id, item_id, nombre, puntos) values (p_emp, it.id, it.nombre, it.puntos) returning id into cid;
+  select id into sess from public.pos_sessions where status = 'abierta' order by id desc limit 1;
+  if sess is null then raise exception 'La caja está cerrada: los premios se piden con la caja abierta'; end if;
+  select name into quien from public.employees where id = p_emp;
+  insert into public.tienda_canjes (employee_id, item_id, nombre, puntos, estado, resuelto_at, resuelto_por)
+  values (p_emp, it.id, it.nombre, it.puntos, 'entregado', now(), p_emp) returning id into cid;
   insert into public.mis_puntos (employee_id, delta, motivo, ref_id) values (p_emp, -it.puntos, 'canje', cid);
-  insert into public.pos_log (employee_id, action, detail) values (p_emp, 'canje_pedido', jsonb_build_object('canje', cid, 'premio', it.nombre, 'puntos', it.puntos));
-  return jsonb_build_object('id', cid, 'nombre', it.nombre, 'puntos', public.mis_saldo(p_emp));
-end $$;
-
--- La caja ve los premios por aprobar
-create or replace function public.tienda_pendientes(p_emp bigint, p_pin text) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
-begin
-  perform public.pos_auth_charge(p_emp, p_pin);
-  return coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'quien', e.name, 'nombre', c.nombre, 'puntos', c.puntos, 'at', c.at) order by c.at)
-                   from public.tienda_canjes c join public.employees e on e.id = c.employee_id where c.estado = 'pendiente'), '[]'::jsonb);
-end $$;
-
--- La cajera aprueba (sale a cocina en Ref 0 como consumo de personal) o rechaza (vuelven los puntos)
-create or replace function public.tienda_resolver(p_emp bigint, p_pin text, p_canje bigint, p_aprobar boolean, p_nota text default '')
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare c record; it record; oid bigint; quien text; sess bigint;
-begin
-  perform public.pos_auth_charge(p_emp, p_pin);
-  select * into c from public.tienda_canjes where id = p_canje for update;
-  if c.id is null then raise exception 'Premio no encontrado'; end if;
-  if c.estado <> 'pendiente' then raise exception 'Ese premio ya fue %', c.estado; end if;
-  if c.employee_id = p_emp then raise exception 'Tu propio premio lo aprueba otra persona de caja'; end if;
-  select name into quien from public.employees where id = c.employee_id;
-  if not coalesce(p_aprobar, false) then
-    update public.tienda_canjes set estado = 'rechazado', resuelto_at = now(), resuelto_por = p_emp, nota = left(coalesce(p_nota, ''), 120) where id = c.id;
-    insert into public.mis_puntos (employee_id, delta, motivo, ref_id) values (c.employee_id, c.puntos, 'devolucion', c.id);
-    insert into public.pos_log (employee_id, action, detail) values (p_emp, 'canje_rechazado', jsonb_build_object('canje', c.id, 'de', quien));
-    return jsonb_build_object('estado', 'rechazado');
-  end if;
-  select * into it from public.tienda_items where id = c.item_id;
   if it.dish_id is not null then
-    -- Pedido para llevar con el premio en Ref 0: sale la comanda a cocina y queda cerrado (sin recibo)
     oid := public.pos_open(p_emp, p_pin, null, left('Premio: ' || coalesce(quien, ''), 40));
     perform public.pos_add(p_emp, p_pin, oid, jsonb_build_array(jsonb_build_object('dish_id', it.dish_id, 'variant', it.variant, 'qty', 1,
                                                                                    'notes', 'Premio de misiones de ' || coalesce(quien, ''))));
-    update public.pos_items set unit_price = 0, promo = 'Premio de misiones' where order_id = oid;
+    -- Ref 0, pero con lo que vale en la carta (list_price) para el cierre
+    update public.pos_items set list_price = coalesce(list_price, unit_price), unit_price = 0, promo = 'Premio de misiones' where order_id = oid;
     perform public.pos_send(p_emp, p_pin, oid);
-    select id into sess from public.pos_sessions where status = 'abierta';
-    update public.pos_orders set status = 'cobrada', closed_by = p_emp, closed_at = now(), session_id = sess, rate = public.pos_rate() where id = oid;
+    update public.pos_orders set status = 'cobrada', premio = true, closed_by = p_emp, closed_at = now(), session_id = sess, rate = public.pos_rate()
+    where id = oid;
+    update public.tienda_canjes set order_id = oid where id = cid;
   end if;
-  update public.tienda_canjes set estado = 'entregado', resuelto_at = now(), resuelto_por = p_emp, order_id = oid, nota = left(coalesce(p_nota, ''), 120) where id = c.id;
-  insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, 'canje_entregado', oid, jsonb_build_object('canje', c.id, 'de', quien, 'premio', c.nombre));
-  return jsonb_build_object('estado', 'entregado', 'order_id', oid);
+  insert into public.pos_log (employee_id, action, order_id, detail)
+  values (p_emp, 'canje_entregado', oid, jsonb_build_object('canje', cid, 'premio', it.nombre, 'puntos', it.puntos));
+  return jsonb_build_object('id', cid, 'nombre', it.nombre, 'order_id', oid, 'puntos', public.mis_saldo(p_emp));
 end $$;
+-- Antes la cajera aprobaba cada premio; ya no hace falta (la compra es directa)
+drop function if exists public.tienda_pendientes(bigint, text);
+drop function if exists public.tienda_resolver(bigint, text, bigint, boolean, text);
 
 -- ---------------------------------------------------------------- Juegos (el resultado lo decide la base, nunca la tablet)
 -- Gasta 1 ficha. Frena si los juegos están apagados, si ya ganó el tope de hoy o si no tiene fichas.
@@ -754,7 +730,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['mis_estado(bigint, text)', 'mis_marcar(bigint, text, boolean, bigint[])', 'tienda_canjear(bigint, text, bigint)',
-                           'tienda_pendientes(bigint, text)', 'tienda_resolver(bigint, text, bigint, boolean, text)', 'jgo_estado(bigint, text)',
+                           'jgo_estado(bigint, text)',
                            'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text, text)', 'jgo_bj_empezar(bigint, text)',
                            'jgo_bj_accion(bigint, text, bigint, text)', 'gestion_misiones()', 'gestion_mision_guardar(bigint, boolean, text, integer, text, jsonb)',
                            'gestion_tienda_guardar(bigint, text, integer, bigint, text, boolean)', 'gestion_misiones_ajustes(jsonb)'] loop

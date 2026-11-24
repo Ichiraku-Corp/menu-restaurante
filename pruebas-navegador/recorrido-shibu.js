@@ -1,4 +1,4 @@
-// Misiones de Shibu en la tablet: bienvenida del día, celebración, Mi perfil con la tienda y premios por aprobar en caja.
+// Misiones de Shibu en la tablet: bienvenida del día, celebración, Mi perfil con la tienda (compra directa) y la pestaña «Maids».
 // Uso: node pruebas-navegador/recorrido-shibu.js   (CAPTURA_SHIBU=carpeta guarda capturas a 1280×800)
 "use strict";
 const fs=require("fs"),path=require("path"),http=require("http"),{chromium}=require("playwright");
@@ -19,11 +19,10 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
     canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0}}; };
   R.mis_marcar=function(a){ var e=quien(a); M.marcar.push({emp:e.id,saludo:a.p_saludo,logros:a.p_logros}); if(a.p_saludo) M.saludo[e.id]=true;
     if(a.p_logros) M.nuevos[e.id]=(M.nuevos[e.id]||[]).filter(function(x){return a.p_logros.indexOf(x.id)<0;}); return null; };
+  // Compra directa: el premio queda entregado (en la base sale a cocina en Ref 0 y queda en el cierre de caja)
   R.tienda_canjear=function(a){ var e=quien(a), t=M.tienda.find(function(x){return x.id===a.p_item;}); if((M.puntos[e.id]||0)<t.puntos) throw {message:'Te faltan puntos'};
-    M.puntos[e.id]-=t.puntos; var c={id:++M.seq,emp:e.id,quien:e.name,nombre:t.nombre,puntos:t.puntos,estado:'pendiente',at:new Date().toISOString()}; M.canjes.push(c); return {id:c.id}; };
-  R.tienda_pendientes=function(a){ var e=quien(a); if(!e.cc) throw {message:'Sin permiso de caja'}; return M.canjes.filter(function(c){return c.estado==='pendiente';}); };
-  R.tienda_resolver=function(a){ var e=quien(a); if(!e.cc) throw {message:'Sin permiso de caja'}; var c=M.canjes.find(function(x){return x.id===a.p_canje;});
-    c.estado=a.p_aprobar?'entregado':'rechazado'; if(!a.p_aprobar) M.puntos[c.emp]+=c.puntos; return {estado:c.estado}; };
+    M.puntos[e.id]-=t.puntos; var c={id:++M.seq,emp:e.id,quien:e.name,nombre:t.nombre,puntos:t.puntos,estado:'entregado',at:new Date().toISOString()}; M.canjes.push(c);
+    return {id:c.id,nombre:t.nombre,order_id:900+c.id,puntos:M.puntos[e.id]}; };
 })();`;
 (async()=>{await new Promise(r=>srv.listen(8797,r));const b=await chromium.launch();const p=await (await b.newContext({viewport:{width:1280,height:800}})).newPage();
 const err=[];p.on("pageerror",e=>err.push(e.message));p.on("dialog",d=>d.accept());
@@ -64,30 +63,32 @@ const cards=p.locator("#perfilBody .premio-card");
 ok(await cards.count()===3&&await p.isEnabled('#perfilBody [data-canje="2"]')&&await p.isDisabled('#perfilBody [data-canje="3"]')&&/Te faltan 1/.test(await p.textContent('#perfilBody [data-canje="3"]')),
   "en la tienda se canjea lo que le alcanza (9 puntos: Taiyaki sí, Amaterasu le faltan 1)");
 await foto("perfil.png");
-await p.click('#perfilBody [data-canje="2"]');await p.waitForTimeout(500);
-ok((await M()).canjes.length===1&&/Esperando a la cajera/.test(await p.textContent("#perfilBody"))&&/2 puntos/.test(await p.textContent("#perfilBody .perfil-saldos")),"al canjear, el premio espera a la cajera y sus puntos bajan");
+// Comprar pregunta antes (no tiene vuelta atrás) y Shibu entrega el premio con una frase suya: sale a cocina sin esperar a nadie
+let pregunta="";p.once("dialog",d=>{pregunta=d.message();});
+await p.click('#perfilBody [data-canje="2"]');
+await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1800);
+ok(/¿Comprar Taiyaki por 7 puntos\? Sale a cocina de una vez\./.test(pregunta),"antes de comprar pregunta: «"+pregunta+"»");
+ok((await M()).canjes.length===1&&(await M()).canjes[0].estado==="entregado"&&/¡Premio comprado!/.test(await p.textContent("#shibuBody"))&&/Taiyaki va a cocina/.test(await p.textContent("#shibuBody")),
+  "al comprar, el premio sale a cocina de una vez (sin esperar a la cajera)");
+ok(fr.canje_aprobado.indexOf(await p.textContent("#shibuTxt"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#shibuTxt"))+"»");
+await foto("premio.png");
+await p.click("#shibuOk");await p.waitForTimeout(400);
+ok(await p.isVisible("#perfilDlg")&&/2 puntos/.test(await p.textContent("#perfilBody .perfil-saldos"))&&/Taiyaki · 7 pts\s*A cocina/.test(await p.textContent("#perfilBody")),
+  "vuelve a su perfil: sus puntos bajan y en «Mis premios» sale «A cocina»");
 await p.click("#perfilClose");await p.waitForTimeout(200);
-// La pestaña «Maids» va junto a Edo; la maid ve su día y su premio esperando
+// La pestaña «Maids» va junto a Edo; la maid ve su día con Shibu
 const tabs=await p.$$eval("#areas [data-area]",l=>l.map(x=>x.dataset.area));
 ok(tabs.indexOf("Maids")===tabs.indexOf("Edo")+1,"la pestaña «Maids» está junto a Edo ("+tabs.join(", ")+")");
 await p.click('#areas [data-area="Maids"]');await p.waitForTimeout(300);
-ok(/Tu día con Shibu/.test(await p.textContent("#areaBody"))&&/Taiyaki · 7 pts/.test(await p.textContent("#areaBody"))&&/1/.test(await p.textContent('#areas [data-area="Maids"] .cnt')),
-  "en «Maids» la maid ve su día y su premio esperando (con el número en la pestaña)");
+ok(/Tu día con Shibu/.test(await p.textContent("#areaBody"))&&await p.isVisible("#maidsPerfil")&&await p.isVisible("#maidsJugar")&&!(await p.isVisible('#areas [data-area="Maids"] .cnt')),
+  "en «Maids» la maid ve su día con Shibu, su perfil con la tienda y «Jugar» (sin nada que esperar)");
 await foto("maids-mesera.png");
 await p.click('#areas [data-area="Tokio"]');
-// 4) La cajera entra (también juega) y aprueba el premio en Caja
-await p.click("#btnUser");await p.waitForSelector("#pin:not(.hidden)");
-await pin("2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
-if(await p.isVisible("#annDlg")) await p.keyboard.press("Escape");
-await p.waitForSelector("#shibuDlg[open]",{timeout:6000});await p.click("#shibuOk");await p.waitForTimeout(300);
-await p.waitForSelector('#areas [data-area="Maids"] .cnt',{timeout:5000});
-ok((await p.textContent('#areas [data-area="Maids"] .cnt')).trim()==="1","a la cajera le sale el número de premios por aprobar en la pestaña «Maids»");
-await p.click('#areas [data-area="Maids"]');await p.waitForSelector("#premiosBox .premio-row",{timeout:5000});
-ok(/Mesera · Taiyaki/.test(await p.textContent("#premiosBox")),"en la pestaña «Maids» la cajera ve el premio por aprobar");
-await foto("maids-cajera.png");
-await p.click('#premiosBox [data-ok="1"]');await p.waitForTimeout(500);
-ok((await M()).canjes[0].estado==="entregado"&&!(await p.isVisible("#premiosBox .premio-row"))&&/No hay premios esperando/.test(await p.textContent("#premiosBox"))
-  &&!(await p.isVisible('#areas [data-area="Maids"] .cnt')),"al aprobarlo queda entregado, sale de la lista y se apaga el número");
+// 4) Quien no juega (Gestión le apagó las misiones) no ve la pestaña ni la chapita
+await p.evaluate(()=>{const o=window.__R.mis_estado;window.__R.mis_estado=function(a){const r=o(a);r.juega=false;return r;};});
+await p.evaluate(()=>shibuPoll(false));await p.waitForTimeout(400);
+await p.evaluate(()=>drawTables());await p.waitForTimeout(200);
+ok(!(await p.isVisible("#btnShibu"))&&(await p.$$eval("#areas [data-area]",l=>l.map(x=>x.dataset.area))).indexOf("Maids")<0,"quien no juega no ve la chapita ni la pestaña «Maids»");
 }catch(e){fallos++;console.log("FALLÓ: "+e.message);}
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));
 await b.close();srv.close();if(fallos){console.log(fallos+" prueba(s) fallaron");process.exit(1);}console.log("TODAS LAS PRUEBAS DE SHIBU PASARON");})();
