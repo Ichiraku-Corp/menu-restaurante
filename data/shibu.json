@@ -45,10 +45,24 @@
   "canje_rechazado": [
     "Tu premio no salió hoy. Tus puntos volvieron. Grrr."
   ],
+  "juego_hola": [
+    "Hmph. ¿Vienes a jugar? Rápido, que hay mesas.",
+    "Mmm. Tienes fichas. No las pierdas todas.",
+    "Esto no es un casino. Bueno... un poco.",
+    "Juega. Pero las mesas primero, novata.",
+    "Grrr... ¿otra vez por aquí?"
+  ],
+  "juego_suerte": [
+    "Mmm... a ver.",
+    "Hmph. Que sea rápido.",
+    "Grrr. No me mires a mí. Mira el juego.",
+    "Shhh. Estoy contando mis monedas.",
+    "Una ficha menos. A ver si vale la pena."
+  ],
   "juego_gana": [
     "Ganaste. La casa está triste. Yo también.",
     "Hmph. Suerte de novata.",
-    "Grrr... la máquina te quiere. Yo todavía no.",
+    "Grrr... la suerte te quiere. Yo todavía no.",
     "Lero lero... ganaste. Ahora vuelve a trabajar."
   ],
   "juego_mayor": [
@@ -57,9 +71,14 @@
   ],
   "juego_pierde": [
     "Perdiste. La casa siempre gana. Yo soy la casa.",
-    "Mmm. Hoy no. Las mesas pagan mejor que esta máquina.",
+    "Mmm. Hoy no. Las mesas pagan mejor que este juego.",
     "Se fue la ficha. Cumple otra misión. Grrr.",
     "Ni un hueso. Otra vez será, novata."
+  ],
+  "juego_empate": [
+    "Empate. Hmph. Ni tú ni yo.",
+    "Empate. Toma tu ficha. No te acostumbres.",
+    "Mmm. Empate. Nadie gana. Como los lunes."
   ],
   "sin_fichas": [
     "¿Sin fichas? Las fichas se ganan con misiones.",

@@ -22,11 +22,11 @@
 .jgo-pips i.on { background:var(--accent); }
 .jgo-cerrar { margin-left:auto; border-radius:999px; border-color:var(--ink); background:#fff; }
 
-/* ---- Shibu: imagen (assets/shibu/shibu.png) o, mientras no exista, un círculo con su nombre; y su globito */
+/* ---- Shibu: su imagen (data/shibu.json → «imagen») o, mientras no esté, un círculo naranja con su nombre; y su globito */
 .jgo-shibu { display:flex; align-items:center; gap:16px; margin:14px 0 12px; }
 .shibu-ava { flex:none; min-width:62px; height:62px; display:grid; place-items:center; }
-.shibu-badge { width:58px; height:58px; border-radius:50%; display:grid; place-items:center; background:var(--jgo-oro); border:2.5px solid var(--ink);
-  box-shadow:2px 3px 0 var(--ink); color:var(--ink); font-weight:900; font-size:14px; letter-spacing:.01em; transform:rotate(-7deg); }
+.shibu-badge { width:58px; height:58px; border-radius:50%; display:grid; place-items:center; background:var(--shibu, #E08A3C); border:2.5px solid var(--ink);
+  box-shadow:2px 3px 0 var(--ink); color:#fff; font-weight:900; font-size:14px; letter-spacing:.01em; transform:rotate(-7deg); }
 .shibu-img { height:62px; width:auto; max-width:96px; object-fit:contain; }
 .shibu-bub { position:relative; flex:1 1 auto; min-width:0; min-height:48px; margin:0; display:flex; align-items:center; padding:9px 16px; background:#fff; color:var(--ink);
   border:2.5px solid var(--ink); border-radius:18px; box-shadow:3px 3px 0 var(--ink); font-weight:700; font-size:15.5px; line-height:1.3; }
@@ -78,11 +78,13 @@ button.jgo-card:disabled { opacity:.5; box-shadow:none; }
 .jgo-res { min-height:50px; margin:14px 0 0; display:flex; align-items:center; justify-content:center; text-align:center; font-weight:800; font-size:18px; color:var(--ink); }
 .jgo-res span { display:inline-block; padding:7px 18px; border-radius:999px; border:2.5px solid var(--ink); background:#fff; box-shadow:3px 3px 0 var(--ink); }
 .jgo-res b { font-weight:900; }
+.jgo-res small { font-size:13px; font-weight:700; }
 .jgo-res.gana span { background:var(--jgo-oro); font-size:20px; }
 .jgo-res.gana span.nuevo { animation:jgoBrinco .6s ease-out; }
 .jgo-res.gana b { color:var(--ink); }
 .jgo-res.empate span { background:#DDF2FC; }
 .jgo-res.pista span { border-style:dashed; box-shadow:none; background:transparent; font-weight:700; }
+.jgo-res.aviso span { background:#DDF2FC; font-size:16px; }   /* sin fichas o con el tope lleno: lo dice el servidor */
 .jgo-jugar { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; margin-top:14px; }
 .jgo-jugar button { min-width:230px; font-size:19px; }
 @keyframes jgoBrinco { 0% { transform:scale(.6); } 55% { transform:scale(1.12); } 80% { transform:scale(.96); } 100% { transform:none; } }

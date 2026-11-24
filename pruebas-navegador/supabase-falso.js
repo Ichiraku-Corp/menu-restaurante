@@ -150,6 +150,8 @@
       J.fichas--; }
     function paga(n){ var J=S.jgo; n=Math.max(0,Math.min(n,J.tope_dia-J.ganado_hoy)); J.puntos+=n; J.ganado_hoy+=n; return n; }
     function pts(n){ return n+(n===1?' punto':' puntos'); }
+    // Los mensajes, iguales a los de misiones.sql: «base» es lo que salió y «p» lo que suma de verdad (con el tope)
+    function suma(nombre,base,p){ return nombre+' +'+pts(p)+(p<base?' (llegaste al tope de hoy)':''); }
     function valor(c){ var r=c.slice(0,-1); return r==='A'?11:(r==='J'||r==='Q'||r==='K')?10:+r; }
     function total(m){ var t=0,ases=0; m.forEach(function(c){ var v=valor(c); t+=v; if(v===11) ases++; }); while(t>21&&ases){ t-=10; ases--; } return t; }
     function baraja(){ var d=[]; PALOS.forEach(function(p){ RANGOS.forEach(function(r){ d.push(r+p); }); });
@@ -157,20 +159,22 @@
     function saca(m){ if(!m.mazo.length) m.mazo=baraja(); return m.mazo.shift(); }
     function termina(m,estado){ var p=0; m.estado=estado;
       if(estado==='blackjack') p=paga(2); else if(estado==='gano') p=paga(1); else if(estado==='empate') S.jgo.fichas++;
-      m.premio=p; m.mensaje=estado==='blackjack'?'¡Blackjack! Ganaste '+pts(p)+'.':estado==='gano'?'¡Le ganaste al crupier! Ganaste '+pts(p)+'.':
-        estado==='empate'?'Empate: te devolvemos la ficha.':total(m.j)>21?'Te pasaste de 21. ¡Otra vez será!':'Ganó el crupier. ¡Otra vez será!'; }
+      m.premio=p; m.al_tope=p<(estado==='blackjack'?2:estado==='gano'?1:0); m.mensaje=estado==='blackjack'?(p?suma('¡Blackjack!',2,p):'¡Blackjack! (ya llegaste al tope de hoy)'):
+        estado==='gano'?(p?'¡Le ganaste al crupier! +1 punto':'Ganaste (ya llegaste al tope de hoy)'):estado==='empate'?'Empate: vuelve tu ficha':'Ganó la casa: sin premio esta vez'; }
     function crupierJuega(m){ var tj=total(m.j); while(total(m.c)<17) m.c.push(saca(m)); var tc=total(m.c); termina(m,tc>21||tj>tc?'gano':tj===tc?'empate':'perdio'); }
     function mano(m){ var fin=m.estado!=='jugando', o={id:m.id,jugador:m.j.slice(),crupier:fin?m.c.slice():[m.c[0],null],total:total(m.j),estado:m.estado,premio:m.premio||0,
-      mensaje:m.mensaje||'Tienes '+total(m.j)+'. ¿Pides otra carta o te plantas?'}; if(fin) o.total_crupier=total(m.c); return cuenta(o); }
+      mensaje:m.mensaje||'¿Pides otra carta o te plantas?'}; if(fin){ o.total_crupier=total(m.c); o.al_tope=m.al_tope; } return cuenta(o); }
     Object.assign(R,{
       jgo_estado:function(a){ auth(a); return cuenta({activo:S.jgo.activo,mensaje:''}); },
       jgo_tragamonedas:function(a){ cobra(a); var c=forzado('carretes')||[0,1,2].map(function(){ return SIM[Math.floor(Math.random()*SIM.length)]; });
-        var iguales=c[0]===c[1]&&c[1]===c[2]?3:c[0]===c[1]||c[1]===c[2]||c[0]===c[2]?2:0, p=paga(iguales===3?3:iguales===2?1:0);
-        return cuenta({carretes:c.slice(),premio:p,mensaje:p?(iguales===3?'¡Tres iguales! ':'¡Dos iguales! ')+'Ganaste '+pts(p)+'.':'¡Casi! Esta vez no hubo premio.'}); },
+        var iguales=c[0]===c[1]&&c[1]===c[2]?3:c[0]===c[1]||c[1]===c[2]||c[0]===c[2]?2:0, base=iguales===3?3:iguales===2?1:0, p=paga(base);
+        return cuenta({carretes:c.slice(),premio:p,al_tope:p<base,mensaje:!base?'Sin premio esta vez':!p?'Ganaste, pero ya llegaste al tope de hoy':
+          suma(iguales===3?(c[0]==='shibu'?'¡Tres Shibu!':'¡Tres iguales!'):'¡Dos iguales!',base,p)}); },
       jgo_ruleta:function(a){ var ap=String(a.p_apuesta==null?'':a.p_apuesta); if(!/^(rojo|negro|par|impar|[0-9]|[12][0-9]|3[0-6])$/.test(ap)) throw {message:'Elige una apuesta'};
         cobra(a); var n=forzado('numero'); n=n==null?Math.floor(Math.random()*37):+n; var color=n===0?'verde':ROJOS.indexOf(n)>=0?'rojo':'negro';
-        var gana=ap===color||ap===String(n)||(n>0&&((ap==='par'&&n%2===0)||(ap==='impar'&&n%2===1))), p=gana?paga(/^\d+$/.test(ap)?3:1):0;
-        return cuenta({numero:n,color:color,apuesta:ap,premio:p,mensaje:'Salió el '+n+' '+color+'. '+(p?'¡Ganaste '+pts(p)+'!':'¡Otra vez será!')}); },
+        var gana=ap===color||ap===String(n)||(n>0&&((ap==='par'&&n%2===0)||(ap==='impar'&&n%2===1))), base=gana?(/^\d+$/.test(ap)?3:1):0, p=paga(base);
+        return cuenta({numero:n,color:color,apuesta:ap,premio:p,al_tope:p<base,mensaje:!base?'Salió el '+n+': sin premio esta vez':!p?'Acertaste, pero ya llegaste al tope de hoy':
+          suma(base===3?'¡Número exacto!':'¡Acertaste!',base,p)}); },
       jgo_bj_empezar:function(a){ cobra(a); var f=forzado('mazo'), m={id:++id,emp:a.p_emp,mazo:f?f.slice():baraja(),j:[],c:[],estado:'jugando'};
         m.j.push(saca(m)); m.c.push(saca(m)); m.j.push(saca(m)); m.c.push(saca(m)); S.jgo.manos[m.id]=m;
         var nj=total(m.j)===21, nc=total(m.c)===21; if(nj||nc) termina(m,nj&&nc?'empate':nj?'blackjack':'perdio'); return mano(m); },

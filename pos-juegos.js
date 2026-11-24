@@ -1,7 +1,8 @@
 // Juegos del personal con fichas: tragamonedas, ruleta y blackjack (ventana #jgoDlg de pos.html; estilos en juegos.css).
 // Las fichas se ganan con las misiones del día y cada jugada cuesta una. Lo que sale lo decide SIEMPRE el servidor
 // (jgo_tragamonedas, jgo_ruleta, jgo_bj_empezar y jgo_bj_accion): aquí solo se anima lo que devolvió y se muestra el
-// premio. Cada respuesta trae los contadores al día (fichas, puntos, ganado_hoy, tope_dia) y un mensaje para Shibu.
+// premio. Cada respuesta trae los contadores al día (fichas, puntos, ganado_hoy, tope_dia) y el resultado en palabras
+// (mensaje), que va debajo del juego. Lo que dice Shibu en su globito sale de data/shibu.json (shibuFrase, pos-shibu.js).
 // Se abre con abrirJuegos(). Con «reducir movimiento» en el equipo no hay giros ni confeti: el resultado sale de una vez.
 "use strict";
 var JGO = {
@@ -24,8 +25,6 @@ var JGO_ORDEN = [
 // Ruleta europea: orden de las casillas en la rueda (en el sentido de las agujas del reloj) y números rojos
 var JGO_RUEDA = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 var JGO_ROJOS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
-var JGO_SUERTE = ["¡Suerte!", "¡Vamos, vamos!", "Shibu cruza las patitas…"];
-var JGO_CASI = ["¡Casi! La próxima es tuya", "¡Uy, por poquito!", "Esta vez no hubo suerte"];
 var JGO_QUIETO = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
 
 function jgoColor(n) { return n === 0 ? "verde" : JGO_ROJOS.indexOf(n) >= 0 ? "rojo" : "negro"; }
@@ -33,7 +32,8 @@ function jgoPts(n) { return n + (n === 1 ? " punto" : " puntos"); }
 // ¿Girar ya, mientras responde el servidor? Solo si según los últimos contadores la jugada va a pasar; si no (sin
 // fichas o con el tope del día lleno) se espera su respuesta para no girar en vano. Igual decide el servidor.
 function jgoGiraYa() { var s = JGO.st; return s.fichas !== 0 && !(s.ganado_hoy >= s.tope_dia); }
-function jgoAlAzar(l) { return l[Math.floor(Math.random() * l.length)]; }   // solo frases de Shibu, nunca un resultado
+// Una frase de Shibu (data/shibu.json); si el archivo no cargó, el texto de respaldo. Nunca decide un resultado.
+function jgoFrase(tipo, resp) { return (typeof shibuFrase === "function" && shibuFrase(tipo)) || resp || ""; }
 function jgoAhora() { return performance.now() / 1000; }
 function jgoMod(a) { return ((a % 360) + 360) % 360; }
 // ¿Se anima? No con «reducir movimiento», ni con la ventana cerrada, ni si ese juego no está a la vista, ni mientras
@@ -83,12 +83,17 @@ function abrirJuegos() {
   if (!U) return;
   if (JGO.emp !== U.id) jgoReiniciar();
   JGO.emp = U.id;
-  jgoShibuImg();
   var d = $("jgoDlg");
   if (!d.open) d.showModal();
   jgoVista("menu", true);
-  jgoDice("¡Guau! Un momento…");
-  rpc("jgo_estado").then(function (r) { jgoTomar(r, true); if (JGO.vista === "menu") jgoSaludo(r && r.mensaje); }).catch(function (e) { jgoError(e, true); });
+  jgoDice("Un momento…");
+  // Las frases y la cara de Shibu (data/shibu.json) ya suelen estar cargadas desde que entró; si no, se esperan aquí
+  var frases = typeof shibuFrases === "function" ? shibuFrases() : Promise.resolve();
+  jgoShibuImg();
+  rpc("jgo_estado").then(function (r) { return frases.then(function () { return r; }); }).then(function (r) {
+    jgoTomar(r, true); jgoShibuImg();
+    if (JGO.vista === "menu") jgoSaludo(r && r.mensaje);
+  }).catch(function (e) { jgoError(e, true); });
 }
 // Toma los contadores de una respuesta. Con todo=false solo las fichas: la ficha se gasta al jugar, pero los puntos se
 // ven cuando termina la animación (si no, se sabría el resultado antes de que paren los carretes).
@@ -142,47 +147,65 @@ function jgoVista(v, abriendo) {
   var f = v === "menu" ? document.querySelector('#jgoMenu [data-jgo="' + antes + '"]') : document.querySelector("#" + JGO_VISTAS[v] + " [data-volver]");
   if (f) try { f.focus({ preventScroll: true }); } catch (e) { /* sin foco */ }
 }
-// Lo que dice Shibu al entrar a cada parte
+// Al entrar a cada parte. En el menú habla Shibu (sus frases); dentro de cada juego, el globito da la instrucción.
 function jgoSaludo(msg) {
   var s = JGO.st;
   if (!s.activo) return jgoDice("Los juegos están apagados por hoy", "info");
-  if (JGO.vista === "slot") return jgoDice("¡Toca «Girar» y que salgan tres iguales!");
-  if (JGO.vista === "rul") return jgoDice(JGO.apuesta == null ? "Elige tu apuesta y gira la ruleta." : "Tu apuesta: " + jgoApTxt(JGO.apuesta) + ". ¡A girar!");
-  if (JGO.vista === "bj") return jgoDice(JGO.bjMostrado && JGO.bjMostrado.estado === "jugando" ? "Tienes una mano en juego: ¿pides otra carta o te plantas?" : "Pide cartas hasta acercarte a 21, ¡sin pasarte!");
+  if (JGO.vista === "slot") return jgoDice("Toca «Girar»: tres iguales pagan 3 puntos.");
+  if (JGO.vista === "rul") return jgoDice(JGO.apuesta == null ? "Elige tu apuesta y gira la ruleta." : "Tu apuesta: " + jgoApTxt(JGO.apuesta) + ". Toca «Girar».");
+  if (JGO.vista === "bj") return jgoDice(JGO.bjMostrado && JGO.bjMostrado.estado === "jugando" ? "Tienes una mano en juego: ¿pides otra carta o te plantas?" : "Pide cartas hasta acercarte a 21, sin pasarte.");
   if (msg) return jgoDice(msg);
-  if (s.fichas === 0) return jgoDice("Sin fichas por ahora: las misiones del día te dan más.");
-  jgoDice(s.fichas == null ? "¡Guau! ¿A qué jugamos?" : "¡Guau! Tienes " + s.fichas + (s.fichas === 1 ? " ficha" : " fichas") + ". ¿A qué jugamos?");
+  if (s.fichas === 0) return jgoDice(jgoFrase("sin_fichas", "Sin fichas por ahora: las misiones del día te dan más."));
+  if (s.ganado_hoy >= s.tope_dia) return jgoDice(jgoFrase("tope", "Ya ganaste el tope de hoy. Vuelve mañana."));
+  jgoDice(jgoFrase("juego_hola", "¿A qué jugamos?"));
 }
+// Lo que dice Shibu cuando termina una jugada: si el tope del día recortó el premio (al_tope, lo dice el servidor), lo
+// del tope; si no, premio mayor, premio, empate o sin premio
+function jgoVozFin(r, mayor) {
+  var p = num(r.premio);
+  if (r.al_tope) return jgoFrase("tope", r.mensaje);
+  if (p > 0) return jgoFrase(mayor ? "juego_mayor" : "juego_gana", r.mensaje);
+  if (r.estado === "empate") return jgoFrase("juego_empate", r.mensaje);
+  return jgoFrase("juego_pierde", r.mensaje);
+}
+var JGO_TOPE = "llegaste al tope de hoy";
 function jgoDice(txt, tipo) {
   var b = $("jgoBub");
   b.textContent = txt;
   b.className = "shibu-bub" + (tipo ? " " + tipo : "");
   if (jgoAnima()) { void b.offsetWidth; b.classList.add("pop"); }
 }
-// Errores del servidor («No tienes fichas…», «Ya ganaste el tope de hoy…»): los dice Shibu y todo sigue usable
+// Cuando el servidor no deja jugar. «No tienes fichas…» y «Ya ganaste el tope de hoy…» van debajo del juego tal como
+// los dice el servidor, y Shibu lo comenta con su frase; los demás errores los dice el globito. Todo sigue usable.
 function jgoSinRed(e) { return /Failed to fetch|NetworkError|Load failed|network|ERR_/i.test(errMsg(e)); }
+var JGO_RES = { slot: "jgoSlotRes", rul: "jgoRulRes", bj: "jgoBjRes" };
 function jgoError(e, delEstado) {
   var m = errMsg(e);
   if (/PIN incorrecto/.test(m)) { fail(e); return; }   // vuelve a la pantalla del PIN
-  jgoDice(jgoSinRed(e) ? "No hay conexión con el sistema. Revisa el internet y vuelve a intentarlo." : m, "error");
+  var tipo = jgoSinRed(e) ? "" : /No tienes fichas/.test(m) ? "sin_fichas" : /tope de hoy/.test(m) ? "tope" : "";
+  if (tipo && JGO_RES[JGO.vista]) { jgoRes(JGO_RES[JGO.vista], m, "aviso"); jgoDice(jgoFrase(tipo, m), "info"); }
+  else jgoDice(jgoSinRed(e) ? "No hay conexión con el sistema. Revisa el internet y vuelve a intentarlo." : m, "error");
   // Los contadores, al día con el servidor (por si cambiaron en otro equipo)
   if (U && !delEstado && !jgoSinRed(e)) rpc("jgo_estado").then(function (r) { jgoTomar(r, true); }).catch(function () { /* se queda lo que había */ });
 }
-// Imagen de Shibu (assets/shibu/shibu.png). Se pide la primera vez que se abre la ventana; si no existe, queda el
-// círculo con su nombre.
+// La cara de Shibu: la misma imagen de la bienvenida (data/shibu.json → "imagen"). Mientras no esté, o si no carga,
+// queda el círculo naranja con su nombre.
 function jgoShibuImg() {
-  var img = document.querySelector("#jgoDlg .shibu-img");
-  if (!img || img.dataset.pedida) return;
-  img.dataset.pedida = "1";
-  img.addEventListener("load", function () { img.hidden = false; document.querySelector("#jgoDlg .shibu-badge").hidden = true; });
-  img.addEventListener("error", function () { img.hidden = true; document.querySelector("#jgoDlg .shibu-badge").hidden = false; });
-  img.src = img.dataset.src;
+  var img = document.querySelector("#jgoDlg .shibu-img"), badge = document.querySelector("#jgoDlg .shibu-badge");
+  var src = typeof SHIBU !== "undefined" && SHIBU.frases && SHIBU.frases.imagen;
+  if (!img || !badge) return;
+  if (!src) { img.hidden = true; img.removeAttribute("src"); badge.hidden = false; return; }
+  if (img.getAttribute("src") === src) return;
+  img.onload = function () { img.hidden = false; badge.hidden = true; };
+  img.onerror = function () { img.hidden = true; badge.hidden = false; };
+  img.src = src;
 }
-// Resultado debajo del juego: texto y, si hay, el premio resaltado
-function jgoRes(id, txt, cls, premio) {
+// Resultado debajo del juego: texto, el premio resaltado (si hay) y una nota chica (si el tope del día lo recortó)
+function jgoRes(id, txt, cls, premio, nota) {
   var el = $(id);
   el.className = "jgo-res" + (cls ? " " + cls : "");
-  el.innerHTML = txt ? '<span' + (cls === "gana" && jgoAnima() ? ' class="nuevo"' : "") + ">" + esc(txt) + (premio ? " <b>" + esc(premio) + "</b>" : "") + "</span>" : "";
+  el.innerHTML = txt ? '<span' + (cls === "gana" && jgoAnima() ? ' class="nuevo"' : "") + ">" + esc(txt) + (premio ? " <b>" + esc(premio) + "</b>" : "") +
+    (nota ? " <small>(" + esc(nota) + ")</small>" : "") + "</span>" : "";
 }
 // Confeti con los colores de la marca cuando hay premio (nunca con «reducir movimiento»)
 function jgoFiesta(vista) {
@@ -275,7 +298,7 @@ function jgoSlotJugar() {
   JGO_SLOT = jug; jgoOcupado("slot");
   jgoRes("jgoSlotRes", "");
   JGO_CAR.forEach(function (c) { c.el.classList.remove("gana", "late"); });
-  jgoDice(jgoAlAzar(JGO_SUERTE));
+  jgoDice(jgoFrase("juego_suerte", "Girando…"));
   if (jgoAnima("slot") && jgoGiraYa()) jgoSlotGira(jug);
   rpc("jgo_tragamonedas").then(function (r) {
     var sims = (r && Array.isArray(r.carretes) ? r.carretes : []).map(function (s) { return String(s).toLowerCase(); });
@@ -337,10 +360,11 @@ function jgoSlotFin(jug) {
   if (p > 0) {
     var n = {}; jug.sims.forEach(function (s) { n[s] = (n[s] || 0) + 1; });
     JGO_CAR.forEach(function (c, i) { var g = n[jug.sims[i]] > 1; c.el.classList.toggle("gana", g); c.el.classList.toggle("late", g && jgoAnima()); });
-    jgoRes("jgoSlotRes", "¡Ganaste!", "gana", "+" + jgoPts(p));
+    jgoRes("jgoSlotRes", "¡Ganaste!", "gana", "+" + jgoPts(p), r.al_tope ? JGO_TOPE : "");
     jgoFiesta($("jgoSlot"));
-  } else jgoRes("jgoSlotRes", jgoAlAzar(JGO_CASI), "casi");
-  jgoDice(r.mensaje || (p > 0 ? "¡Guau! ¡Ganaste " + jgoPts(p) + "!" : "¡Casi! La próxima es tuya."), p > 0 ? "gana" : "");
+  } else jgoRes("jgoSlotRes", r.mensaje || "Sin premio esta vez", "casi");
+  // Tres iguales es el premio mayor: Shibu tiene frases propias para eso
+  jgoDice(jgoVozFin(r, jug.sims[0] === jug.sims[1] && jug.sims[1] === jug.sims[2]), p > 0 ? "gana" : "");
   jgoSlotListo(jug);
 }
 function jgoSlotListo(jug) { if (JGO_SLOT !== jug) return; JGO_SLOT = null; jgoOcupado(null); }
@@ -405,7 +429,7 @@ function jgoRulJugar() {
   JGO_RJ = jug; jgoOcupado("rul");
   jgoRes("jgoRulRes", ""); jgoHub(null);
   document.querySelectorAll("#jgoNums .salio").forEach(function (b) { b.classList.remove("salio"); });
-  jgoDice(jgoAlAzar(JGO_SUERTE));
+  jgoDice(jgoFrase("juego_suerte", "Girando…"));
   jgoALaVista($("jgoRuedaBox"));
   if (jgoAnima("rul") && jgoGiraYa()) jgoRulGira(jug);
   rpc("jgo_ruleta", { p_apuesta: jug.ap }).then(function (r) {
@@ -500,9 +524,9 @@ function jgoRulFin(jug) {
   document.querySelectorAll("#jgoNums button").forEach(function (b) { b.classList.toggle("salio", b.dataset.ap === String(n)); });
   JGO.historial.unshift({ n: n, c: col }); JGO.historial = JGO.historial.slice(0, 8); jgoHist();
   var que = "Salió el " + n + " " + col + (n ? (n % 2 ? " · impar" : " · par") : "");
-  if (p > 0) { jgoRes("jgoRulRes", que, "gana", "+" + jgoPts(p)); jgoFiesta($("jgoRul")); }
-  else jgoRes("jgoRulRes", que + ". Esta vez no", "casi");
-  jgoDice(r.mensaje || (p > 0 ? "¡Guau! ¡Ganaste " + jgoPts(p) + "!" : "Esta vez no. Tu apuesta era " + jgoApTxt(jug.ap) + "."), p > 0 ? "gana" : "");
+  if (p > 0) { jgoRes("jgoRulRes", que, "gana", "+" + jgoPts(p), r.al_tope ? JGO_TOPE : ""); jgoFiesta($("jgoRul")); }
+  else jgoRes("jgoRulRes", que + ". " + (r.al_tope ? "Acertaste, pero ya " + JGO_TOPE : "Sin premio esta vez"), "casi");
+  jgoDice(jgoVozFin(r, false), p > 0 ? "gana" : "");
   jgoRulListo(jug);
 }
 function jgoRulListo(jug) { if (JGO_RJ !== jug) return; JGO_RJ = null; jgoOcupado(null); }
@@ -515,7 +539,7 @@ var JGO_PALO = { "♠": "picas", "♥": "corazones", "♦": "diamantes", "♣": 
 function jgoBjEmpezar() {
   if (JGO.ocupado || !JGO.st.activo) return;
   jgoAcabarYa(); jgoOcupado("bj");
-  jgoDice("Barajando…");
+  jgoDice(jgoFrase("juego_suerte", "Barajando…"));
   rpc("jgo_bj_empezar").then(function (r) {
     jgoBjValida(r); jgoBjMostrar(r, true);   // los contadores, al terminar de repartir (jgoBjFin)
   }).catch(function (e) { jgoOcupado(null); jgoError(e); });
@@ -585,8 +609,9 @@ function jgoBjFin(r) {
   if (fin) {
     var p = num(r.premio), e = r.estado;
     var t = e === "blackjack" ? "¡Blackjack!" : e === "gano" ? "¡Ganaste la mano!" : e === "empate" ? "Empate: te devolvemos la ficha" : num(r.total) > 21 ? "Te pasaste de 21" : "Gana el crupier";
-    jgoRes("jgoBjRes", t, p > 0 ? "gana" : e === "empate" ? "empate" : "casi", p > 0 ? "+" + jgoPts(p) : "");
-    jgoDice(r.mensaje || (p > 0 ? "¡Guau! ¡Ganaste " + jgoPts(p) + "!" : e === "empate" ? "Empate: recuperas tu ficha." : "¡Casi! La próxima mano es tuya."), p > 0 ? "gana" : "");
+    // al_tope: la mano terminó con el día ya lleno (otros juegos lo llenaron mientras seguía abierta) y suma menos o nada
+    jgoRes("jgoBjRes", t, p > 0 ? "gana" : e === "empate" ? "empate" : "casi", p > 0 ? "+" + jgoPts(p) : "", r.al_tope ? JGO_TOPE : "");
+    jgoDice(jgoVozFin(r, false), p > 0 ? "gana" : "");
     if (p > 0) jgoFiesta($("jgoBj"));
   } else {
     jgoRes("jgoBjRes", "");

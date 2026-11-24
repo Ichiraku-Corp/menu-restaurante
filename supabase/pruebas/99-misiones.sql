@@ -160,6 +160,22 @@ select prueba.ok(:'bj2'::jsonb ->> 'estado' in ('gano', 'perdio', 'empate', 'bla
   and (:'bj2'::jsonb ->> 'premio')::int = case :'bj2'::jsonb ->> 'estado' when 'gano' then 1 when 'blackjack' then 2 else 0 end,
   'al plantarse se ve la mano del crupier y el premio va con el resultado');
 select prueba.ok(not exists (select 1 from public.jgo_partidas where mazo is not null and estado = 'terminada'), 'al terminar la mano el mazo se borra');
+-- Una mano ganadora que termina cuando el tope ya se llenó con otros juegos: no suma y lo avisa (al_tope)
+delete from public.mis_puntos where employee_id = :mesera and motivo like 'juego:%';
+set role authenticated;
+select public.jgo_bj_empezar(:mesera, '5555') as bj3 \gset
+reset role;
+update public.jgo_partidas set estado = 'jugando', premio = 0, mazo = '["2♣", "3♣"]'::jsonb,
+  resultado = '{"jugador": ["10♠", "10♥"], "crupier": ["10♦", "7♣"]}'::jsonb where id = (:'bj3'::jsonb ->> 'id')::bigint;
+delete from public.mis_puntos where employee_id = :mesera and motivo like 'juego:%';   -- por si el reparto ya pagó algo
+insert into public.mis_puntos (employee_id, delta, motivo) values (:mesera, 3, 'juego:prueba');
+set role authenticated;
+select public.jgo_bj_accion(:mesera, '5555', (:'bj3'::jsonb ->> 'id')::bigint, 'plantarse') as bj4 \gset
+reset role;
+select prueba.ok(:'bj4'::jsonb ->> 'estado' = 'gano' and (:'bj4'::jsonb ->> 'premio')::int = 0 and (:'bj4'::jsonb ->> 'al_tope')::boolean
+  and :'bj4'::jsonb ->> 'mensaje' = 'Ganaste (ya llegaste al tope de hoy)' and public.jgo_ganado_hoy(:mesera) = 3,
+  'si el tope se llenó mientras la mano seguía abierta, ganar no suma y se avisa');
+delete from public.mis_puntos where employee_id = :mesera and motivo like 'juego:%';
 
 -- 7) Al cerrar la caja se dan las misiones del final del día (aquí: sin anulaciones)
 -- (las anulaciones de otras pruebas de hoy se mueven a otro día, para medir solo esta)

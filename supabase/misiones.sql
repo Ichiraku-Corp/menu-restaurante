@@ -536,10 +536,13 @@ begin
   premio := case when r[1] = r[2] and r[2] = r[3] then 3 when r[1] = r[2] or r[2] = r[3] or r[1] = r[3] then 1 else 0 end;
   insert into public.jgo_partidas (employee_id, juego, resultado) values (p_emp, 'tragamonedas', jsonb_build_object('carretes', to_jsonb(r))) returning id into pid;
   gana := public.jgo_pagar(p_emp, 'tragamonedas', premio, pid);
-  msg := case when gana = 3 and r[1] = 'shibu' then '¡Tres Shibu! +3 puntos' when gana = 3 then '¡Tres iguales! +3 puntos'
-              when gana > 0 then '¡Dos iguales! +' || gana || ' punto' || case when gana > 1 then 's' else '' end
-              when premio > 0 then 'Ganaste, pero ya llegaste al tope de hoy' else 'Sin premio esta vez' end;
-  return jsonb_build_object('carretes', to_jsonb(r), 'premio', gana, 'mensaje', msg) || public.jgo_contadores(p_emp);
+  -- Lo que salió (premio) y lo que de verdad suma (gana): con el tope casi lleno, tres iguales pueden sumar menos de 3
+  msg := case when premio = 0 then 'Sin premio esta vez'
+              when gana = 0 then 'Ganaste, pero ya llegaste al tope de hoy'
+              else case when premio = 3 and r[1] = 'shibu' then '¡Tres Shibu!' when premio = 3 then '¡Tres iguales!' else '¡Dos iguales!' end
+                   || ' +' || gana || ' punto' || case when gana > 1 then 's' else '' end
+                   || case when gana < premio then ' (llegaste al tope de hoy)' else '' end end;
+  return jsonb_build_object('carretes', to_jsonb(r), 'premio', gana, 'al_tope', gana < premio, 'mensaje', msg) || public.jgo_contadores(p_emp);
 end $$;
 
 -- Ruleta europea (0 a 36): color o par/impar = 1 punto; número exacto = 3 puntos. El 0 no es ni rojo, ni negro, ni par.
@@ -561,9 +564,12 @@ begin
                  when ap = 'impar' then case when n % 2 = 1 then 1 else 0 end else 0 end;
   insert into public.jgo_partidas (employee_id, juego, apuesta, resultado) values (p_emp, 'ruleta', ap, jsonb_build_object('numero', n, 'color', color)) returning id into pid;
   gana := public.jgo_pagar(p_emp, 'ruleta', premio, pid);
-  msg := case when gana >= 3 then '¡Número exacto! +3 puntos' when gana > 0 then '¡Acertaste! +' || gana || ' punto' || case when gana > 1 then 's' else '' end
-              when premio > 0 then 'Acertaste, pero ya llegaste al tope de hoy' else 'Salió el ' || n || ': sin premio esta vez' end;
-  return jsonb_build_object('numero', n, 'color', color, 'apuesta', ap, 'premio', gana, 'mensaje', msg) || public.jgo_contadores(p_emp);
+  msg := case when premio = 0 then 'Salió el ' || n || ': sin premio esta vez'
+              when gana = 0 then 'Acertaste, pero ya llegaste al tope de hoy'
+              else case when premio = 3 then '¡Número exacto!' else '¡Acertaste!' end
+                   || ' +' || gana || ' punto' || case when gana > 1 then 's' else '' end
+                   || case when gana < premio then ' (llegaste al tope de hoy)' else '' end end;
+  return jsonb_build_object('numero', n, 'color', color, 'apuesta', ap, 'premio', gana, 'al_tope', gana < premio, 'mensaje', msg) || public.jgo_contadores(p_emp);
 end $$;
 
 -- Blackjack: el crupier se planta en 17. Ganar = 1 punto, blackjack = 2, empate = devuelve la ficha.
@@ -587,7 +593,9 @@ begin
   return jsonb_build_object('id', p.id, 'jugador', j, 'total', public.jgo_bj_total(j),
       'crupier', case when fin then c else jsonb_build_array(c -> 0, null) end,
       'estado', coalesce(p.resultado ->> 'final', 'jugando'), 'premio', p.premio)
-    || case when fin then jsonb_build_object('total_crupier', public.jgo_bj_total(c)) else '{}'::jsonb end;
+    || case when fin then jsonb_build_object('total_crupier', public.jgo_bj_total(c),
+         -- ganó, pero el tope del día recortó el premio (otros juegos lo llenaron mientras la mano seguía abierta)
+         'al_tope', p.premio < case p.resultado ->> 'final' when 'blackjack' then 2 when 'gano' then 1 else 0 end) else '{}'::jsonb end;
 end $$;
 
 -- Termina la mano: juega el crupier (si hace falta), decide y paga
@@ -613,7 +621,9 @@ begin
 end $$;
 
 create or replace function public.jgo_bj_mensaje(p_estado text, p_premio int) returns text language sql immutable as $$
-  select case p_estado when 'blackjack' then case when p_premio > 0 then '¡Blackjack! +' || p_premio || ' puntos' else '¡Blackjack! (ya llegaste al tope de hoy)' end
+  select case p_estado when 'blackjack' then case when p_premio > 1 then '¡Blackjack! +' || p_premio || ' puntos'
+                                                  when p_premio = 1 then '¡Blackjack! +1 punto (llegaste al tope de hoy)'
+                                                  else '¡Blackjack! (ya llegaste al tope de hoy)' end
                        when 'gano' then case when p_premio > 0 then '¡Le ganaste al crupier! +1 punto' else 'Ganaste (ya llegaste al tope de hoy)' end
                        when 'empate' then 'Empate: vuelve tu ficha' when 'perdio' then 'Ganó la casa: sin premio esta vez'
                        else '¿Pides otra carta o te plantas?' end
