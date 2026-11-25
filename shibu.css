@@ -440,3 +440,5 @@
 .carnet-regalo { position:relative; z-index:1; margin:0 12px 12px; padding:6px 10px; border-radius:12px; background:#FFF6D8; border:2px dashed #B8860B;
   font-size:12px; font-weight:700; color:#5A4300; }
 .shibu-aviso.com { border-left-color:#EA5BA6; }
+/* Los avisos de avance no se tocan (revisión del 25/11): salen arriba a la derecha y nunca tapan un botón del pedido */
+.shibu-avisos, .shibu-avisos * { pointer-events:none !important; }

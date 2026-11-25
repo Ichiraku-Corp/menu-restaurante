@@ -19,7 +19,7 @@ begin
   select avg(s.total), count(*) into prom, n from public.daily_sales s
    where s.sale_date between d - 56 and d - 1 and extract(isodow from s.sale_date) = extract(isodow from d) and s.total > 0;
   select coalesce(max(meta_pct), 0) into pct from public.gestion_settings;
-  select coalesce(sum(t.subtotal - t.discount + t.delivery), 0), count(*) into v, k
+  select coalesce(sum(t.subtotal - t.discount + t.delivery), 0), count(*) filter (where not o.premio) into v, k
     from public.pos_orders o cross join lateral public.pos_totals(o.id) t
    where o.status = 'cobrada' and o.closed_at >= (d::timestamp at time zone 'America/Caracas') and o.closed_at < ((d + 1)::timestamp at time zone 'America/Caracas');
   return jsonb_build_object('dia', d, 'vendido', round(v, 2), 'pedidos', k, 'promedio', round(prom, 2), 'dias', n, 'pct', pct,
@@ -39,7 +39,7 @@ grant execute on function public.gestion_meta() to authenticated;
 
 -- La caja: solo quien tiene permiso de cobrar
 create or replace function public.pos_meta(p_emp bigint, p_pin text) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public as $$   -- volatile: el freno de PIN cuenta los intentos
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
   return public.meta_dia(null);

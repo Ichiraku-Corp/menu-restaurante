@@ -8,7 +8,9 @@
 // un aviso chico cuando avanza una misión, el carnet de Mi perfil y el «Top maid» del mes en un podio olímpico griego.
 // La expendedora es una máquina de premios dentro de Mi perfil (pos-tienda.js).
 var SHIBU = { frases: null, est: null, timer: null, vistos: {}, desde: {}, chipPts: null, retener: false, avisos: [], avisosT: 0,
-  pronto: 0, rectFiesta: null, topVisto: {}, comVistos: {} };
+  pronto: 0, rectFiesta: null, topVisto: {}, comVistos: {}, sesion: 0, seq: 0, celebrados: {}, saludado: false };
+// Lo que contesta la base tarde (de una maid que ya salió, o una revisión vieja) no se pinta (revisión del 25/11)
+function shibuVigente(ses) { return !!U && ses === SHIBU.sesion; }
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
 // Comodines (Edgar, 25/11): de dónde salió una misión propia de la maid
 var ORIGEN_TXT = { extra_facil: "📜 Pergamino", extra_dificil: "📜 Pergamino", doble_media: "📜 Pergamino", sorpresa: "🎲 Sorpresa",
@@ -73,7 +75,14 @@ function shibuSalir() {
   clearInterval(SHIBU.timer); clearTimeout(SHIBU.pronto); clearTimeout(SHIBU.avisosT);
   SHIBU.timer = null; SHIBU.est = null; SHIBU.vistos = {}; SHIBU.desde = {}; SHIBU.chipPts = null; SHIBU.retener = false;
   SHIBU.avisos = []; SHIBU.rectFiesta = null; SHIBU.topVisto = {}; SHIBU.comVistos = {};
-  if (typeof VM !== "undefined") VM.modo = "premios";
+  SHIBU.sesion++; SHIBU.celebrados = {}; SHIBU.saludado = false;
+  // La pestaña «Maids» de la anterior no se ve ni un momento
+  if (typeof cur !== "undefined" && cur.area === "Maids" && $("areaBody")) $("areaBody").innerHTML = "";
+  // La máquina queda libre para la que entra (una compra a medias de la anterior ya no se pinta)
+  if (typeof VM !== "undefined") {
+    if (typeof vmSuelta === "function") { try { vmSuelta(false); } catch (e) { /* sin máquina dibujada */ } }
+    VM.modo = "premios"; VM.ocupada = false; VM.revisando = false; VM.sel = null; VM.selId = null; VM.datos = null;
+  }
   show("btnShibu", false);
   var box = $("shibuAvisos"); if (box) box.innerHTML = "";
   // Lo de una maid no lo ve la siguiente que entra
@@ -90,9 +99,11 @@ function shibuPronto() {
 // Revisa las misiones. Al entrar, la bienvenida sale una vez al día.
 function shibuPoll(alEntrar) {
   if (!U || (typeof SR !== "undefined" && SR.on)) return Promise.resolve();
-  var quien = U.id;
+  var quien = U.id, ses = SHIBU.sesion, n = ++SHIBU.seq;
   return rpc("mis_estado").then(function (e) {
-    if (!U || U.id !== quien) return;
+    if (!U || U.id !== quien || !shibuVigente(ses) || n !== SHIBU.seq) return;   // ya hay otra más nueva
+    // Una celebración que ya salió en esta sesión no se repite (la base todavía no había anotado que se vio)
+    if (e && e.nuevos) e.nuevos = e.nuevos.filter(function (x) { return !SHIBU.celebrados[x.id]; });
     SHIBU.est = e;
     if (e && e.juega) {
       var nuevos = e.nuevos || [], top = shibuTopPendiente(e);
@@ -111,7 +122,7 @@ function shibuPoll(alEntrar) {
     }
     shibuChip(); shibuBadge();
     if (!e || !e.juega) return;
-    if (alEntrar && !e.saludo_hoy) shibuCuandoLibre(shibuBienvenida);
+    if (alEntrar && !e.saludo_hoy && !SHIBU.saludado) shibuCuandoLibre(shibuBienvenida);
     else if ((e.nuevos || []).length || shibuTopPendiente(e)) shibuCuandoLibre(shibuSiguiente);
     shibuHubAlDia();
     shibuTabRedibuja();
@@ -124,18 +135,25 @@ function shibuSiguiente() {
   if (shibuTopPendiente(e)) shibuTopPremio(); else if ((e.nuevos || []).length) shibuCelebra();
 }
 // Espera a que se cierren los avisos u otra ventana antes de mostrar a Shibu
+// Libre: sin ventanas abiertas, en el mapa de mesas (no tomando un pedido) y sin tocar la pantalla hace 2 s
+function shibuLibre() {
+  if (shibuDialogoAbierto()) return false;
+  var ov = $("orderView"); if (ov && !ov.classList.contains("hidden")) return false;
+  if (typeof ACT !== "undefined" && ACT.toque && Date.now() - ACT.toque < 2000) return false;
+  return true;
+}
 function shibuCuandoLibre(fn) {
-  var n = 0;
+  var n = 0, ses = SHIBU.sesion;
   (function intenta() {
-    if (!U) return;
-    if (!shibuDialogoAbierto()) { fn(); return; }
-    if (++n < 80) setTimeout(intenta, 1500);
+    if (!shibuVigente(ses)) return;
+    if (shibuLibre()) { fn(); return; }
+    if (++n < 180) setTimeout(intenta, 1000);
   })();
 }
 
 // ---- Botón «Mi perfil» de la barra de arriba: «★ 1/3 · 12 pts»; al tocarlo abre Mi perfil
 function shibuChip() {
-  var e = SHIBU.est, ok = !!(e && e.juega);
+  var e = SHIBU.est, ok = !!(U && e && e.juega);
   show("btnShibu", ok);
   if (!ok) return;
   var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
@@ -159,11 +177,11 @@ function shibuCuentaEn(el, desde, hasta, ms) {
 }
 // Los puntos y la ficha de la celebración vuelan hasta la chapita y el número sube contando
 function shibuVuela(r0, pts, fichas) {
-  var chip = $("btnShibu"), e = SHIBU.est || {};
+  var chip = $("btnShibu"), e = SHIBU.est || {}, ses = SHIBU.sesion;
   var desde = SHIBU.chipPts == null ? (e.puntos || 0) : SHIBU.chipPts;
   // Si todavía queda otra celebración, la chapita sube solo lo de esta; si no, llega al saldo de la base
   var sigue = (e.nuevos || []).length > 0 || !!shibuTopPendiente(e), hasta = sigue ? desde + pts : (e.puntos || 0);
-  function suma() { SHIBU.retener = sigue; SHIBU.chipPts = hasta; shibuChip(); shibuCuentaEn(chip.querySelector(".chip-pts"), desde, hasta); }
+  function suma() { if (!shibuVigente(ses)) return; SHIBU.retener = sigue; SHIBU.chipPts = hasta; shibuChip(); shibuCuentaEn(chip.querySelector(".chip-pts"), desde, hasta); }
   var r1 = chip && !chip.classList.contains("hidden") ? chip.getBoundingClientRect() : null;
   if (shibuQuieto() || !r1 || !r1.width || !r0 || !document.body.animate) { suma(); return; }
   var n = Math.max(2, Math.min(7, pts + fichas)), x0 = r0.left + r0.width / 2, y0 = r0.top + r0.height / 2;
@@ -318,11 +336,13 @@ document.addEventListener("click", function (ev) {
   var b = ev.target.closest && ev.target.closest("[data-mapa]"); if (!b) return;
   var box = b.closest(".mapa-box"); if (!box || box.classList.contains("ocupado")) return;
   box.classList.add("ocupado");
-  var cat = Number(b.dataset.mapa) || null;
+  var cat = Number(b.dataset.mapa) || null, ses = SHIBU.sesion;
   rpc("com_elegir_mapa", { p_compra: Number(box.dataset.compra), p_catalogo: cat }).then(function (r) {
+    if (!shibuVigente(ses)) return;
     toast(cat ? "Tu misión media de hoy: " + ((r && r.texto) || "la nueva") : "Te quedas con tu misión media de hoy");
-    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); }, function () {});
+    return rpc("mis_estado").then(function (e) { if (shibuVigente(ses)) { SHIBU.est = e; shibuChip(); } }, function () {});
   }).then(function () {
+    if (!shibuVigente(ses)) return;
     var e = SHIBU.est, mis = $("shibuMis");
     if (mis && $("shibuDlg").open) { mis.innerHTML = shibuTarjetas((e && e.misiones) || []) + shibuMapaHtml(e); shibuLlena(mis); }
     if ($("perfilDlg").open && HUB.tab === "hoy") shibuHubPanel(false);
@@ -363,7 +383,8 @@ function shibuLlena(box) {
 
 // ---- Bienvenida (primera vez del día)
 function shibuBienvenida() {
-  var e = SHIBU.est; if (!e) return;
+  var e = SHIBU.est; if (!e || SHIBU.saludado) return;
+  SHIBU.saludado = true;
   var fuerte = e.tipo_dia === "fuertes" && Math.random() < 0.5;
   var fp = shibuFraseConPose(fuerte ? "manana_fuerte" : "manana"); if (!fp.t) fp = shibuFraseConPose("manana");
   var frase = fp.t;
@@ -385,6 +406,7 @@ function shibuBienvenida() {
 // ---- Celebración (una o varias misiones recién cumplidas): la barra se llena, cae el sello y aparece el premio
 function shibuCelebra() {
   var e = SHIBU.est; if (!e || !(e.nuevos || []).length) return;
+  e.nuevos.forEach(function (x) { SHIBU.celebrados[x.id] = true; });
   var nuevos = e.nuevos, pts = nuevos.reduce(function (s, x) { return s + (x.puntos || 0) + (x.comodin || 0); }, 0);
   var com = nuevos.reduce(function (s, x) { return s + (x.comodin || 0); }, 0);
   // Los avisos de avance que quedaban ya no hacen falta: ahora celebra
@@ -472,12 +494,12 @@ function shibuMaquinaOcupada() { return typeof VM !== "undefined" && VM.ocupada;
 function shibuS(n, uno, varios) { return n + " " + (n === 1 ? uno : varios); }
 
 function shibuPerfil(tab) {
-  if (!SHIBU.est || !SHIBU.est.juega || shibuMaquinaOcupada()) return;
-  var d = $("perfilDlg");
+  if (!U || !SHIBU.est || !SHIBU.est.juega || shibuMaquinaOcupada()) return;
+  var d = $("perfilDlg"), ses = SHIBU.sesion;
   HUB.tab = tab || "hoy"; HUB.firma = "";
   shibuPerfilDibuja();
   if (!d.open) d.showModal();
-  rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); if (d.open) shibuHubAlDia(); }).catch(function () {});
+  rpc("mis_estado").then(function (e) { if (!shibuVigente(ses)) return; SHIBU.est = e; shibuChip(); if (d.open) shibuHubAlDia(); }).catch(function () {});
   shibuVentasPide(true);
 }
 function shibuPerfilDibuja() { shibuHubLado(); shibuHubPanel(false); }

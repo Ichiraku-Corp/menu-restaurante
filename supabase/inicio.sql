@@ -15,7 +15,7 @@ begin
   with dia as (
     select d, (select coalesce(sum(t.subtotal - t.discount + t.delivery), 0) from public.pos_orders o cross join lateral public.pos_totals(o.id) t
                where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date = d) as ventas,
-              (select count(*) from public.pos_orders o where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date = d) as pedidos
+              (select count(*) from public.pos_orders o where o.status = 'cobrada' and not o.premio and (o.closed_at at time zone 'America/Caracas')::date = d) as pedidos
     from (values (hoy), (hoy - 7)) v(d)
   ), ult as (
     select s.*, (select status from public.pos_reports pr where pr.session_id = s.id order by pr.id desc limit 1) as correo

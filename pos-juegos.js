@@ -100,7 +100,7 @@ function abrirJuegos() {
 // Toma los contadores de una respuesta. Con todo=false solo las fichas: la ficha se gasta al jugar, pero los puntos se
 // ven cuando termina la animación (si no, se sabría el resultado antes de que paren los carretes).
 function jgoTomar(r, todo) {
-  if (!r) return;
+  if (!r || !U || JGO.emp !== U.id) return;   // lo que conteste tarde de otra maid no se pinta
   var s = JGO.st;
   if (r.fichas != null) s.fichas = num(r.fichas);
   if (todo) {

@@ -266,8 +266,10 @@ exception when others then null;  -- en una consulta de solo lectura no se puede
 end $$;
 revoke execute on function public.pos_pin_frenado(), public.pos_pin_fallo() from anon, public, authenticated;
 
+-- «volatile» (revisión del 25/11): llamada sola, una función «stable» corre en modo de solo lectura y el freno de PIN no
+-- podía anotar los intentos fallidos
 create or replace function public.pos_auth(p_emp bigint, p_pin text) returns bigint
-language plpgsql stable security definer set search_path = public, extensions as $$
+language plpgsql volatile security definer set search_path = public, extensions as $$
 begin
   if not public.pos_is_device() then raise exception 'Este dispositivo no está autorizado'; end if;
   if public.pos_pin_frenado() then raise exception 'Demasiados PIN equivocados en las tablets: espera un minuto y vuelve a entrar.'; end if;
@@ -285,7 +287,7 @@ end $$;
 
 -- Solo quien tenga «puede cobrar» (Gestión → Personal) cobra, descuenta, anula pedidos y abre/cierra caja.
 create or replace function public.pos_auth_charge(p_emp bigint, p_pin text) returns bigint
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
   if not exists (select 1 from public.employees where id = p_emp and pos_can_charge) then
@@ -435,7 +437,7 @@ language sql stable security definer set search_path = public as $$
                   order by x.sales desc, x.items desc), '[]'::jsonb)
   from (select i.created_by, round(sum(i.qty * i.unit_price), 2) sales, sum(i.qty) items, count(distinct i.order_id) orders
         from public.pos_items i join public.pos_orders o on o.id = i.order_id
-        where o.status = 'cobrada' and i.status <> 'anulado' and i.created_by is not null
+        where o.status = 'cobrada' and not o.premio and i.status <> 'anulado' and i.created_by is not null
           and (o.closed_at at time zone 'America/Caracas')::date between p_from and p_to
         group by i.created_by) x
 $$;
@@ -1757,7 +1759,7 @@ end $$;
 
 -- Vista previa del reporte de cierre (lo mismo que llegará al correo) con lo que la cajera contó.
 create or replace function public.pos_cash_preview(p_emp bigint, p_pin text, p_counted jsonb, p_notes text default '')
-returns jsonb language plpgsql stable security definer set search_path = public as $$
+returns jsonb language plpgsql volatile security definer set search_path = public as $$   -- volatile: el freno de PIN cuenta los intentos
 declare s record; sm jsonb; exp jsonb; r jsonb;
 begin
   perform public.pos_auth_charge(p_emp, p_pin);
@@ -2361,7 +2363,7 @@ language sql stable security definer set search_path = public as $$
   with w as (select p_from d1, p_from + 6 d2),
   o as (select o.*, t.total, t.service, t.discount disc, (o.closed_at at time zone 'America/Caracas')::date dia
         from public.pos_orders o cross join lateral public.pos_totals(o.id) t, w
-        where o.status = 'cobrada' and (o.closed_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
+        where o.status = 'cobrada' and not o.premio and (o.closed_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
   pay as (select p.* from public.pos_payments p, w
           where (p.created_at at time zone 'America/Caracas')::date between w.d1 and w.d2),
   ses as (select s.*, coalesce((select eur from public.pos_rates r where r.rate_date <= (s.closed_at at time zone 'America/Caracas')::date

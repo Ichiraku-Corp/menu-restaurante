@@ -6,7 +6,44 @@
 // comodines, que se compran igual (se elige y se mantiene el botón); los que piden algo (a quién, qué misión, qué
 // insignia) lo preguntan antes en el panel.
 var VM = { sel: null, tecla: "", ocupada: false, t: 0, modo: "premios", datos: null };
-var VM_COLS = 4, VM_MIN = 8, VM_MANTENER_MS = 1200;
+var VM_COLS = 4, VM_MIN = 8, VM_MANTENER_MS = 1200, VM_ESPERA_MS = 20000;
+// Si la base no contesta a tiempo (internet colgado), la máquina se libera: la maid puede cerrar Mi perfil y seguir
+// trabajando. Lo que conteste después ya no se pinta; los puntos se ven bien en la próxima revisión.
+function vmEspera(p) {
+  var t;
+  return Promise.race([p, new Promise(function (_, no) { t = setTimeout(function () { no({ sinRespuesta: true }); }, VM_ESPERA_MS); })])
+    .then(function (r) { clearTimeout(t); return r; }, function (e) { clearTimeout(t); throw e; });
+}
+// La compra sigue siendo de la maid que la empezó: si entró otra, no se le pinta nada
+function vmDeQuien(quien) { if (!U || U.id !== quien) throw { otraMaid: true }; }
+function vmRed(err) { return !!(err && (err.sinRespuesta || /Failed to fetch|NetworkError|Load failed|network|ERR_|timeout/i.test(errMsg(err)))); }
+// Lo que dice si una compra llegó: el último premio pedido o cuántos comodines lleva esta semana
+function vmHuella() {
+  var e = SHIBU.est || {};
+  return JSON.stringify([((e.canjes || [])[0] || {}).id || null, (e.comodines || {}).semana || 0]);
+}
+// Sin respuesta o sin internet no se sabe si la compra llegó: Mi perfil se puede cerrar, pero la máquina no vende otra
+// vez hasta ver en la base si se compró (así no se paga dos veces)
+function vmFalla(err, huella) {
+  if (err && err.otraMaid) return;
+  VM.ocupada = false;
+  if (!vmRed(err)) { vmBoton(); vmMensaje(String(errMsg(err) || "No se pudo comprar").toUpperCase(), "falta"); return; }
+  VM.revisando = true; vmBoton();
+  vmMensaje("SIN RESPUESTA · REVISANDO SI SE COMPRÓ…", "falta");
+  var quien = U && U.id;
+  vmEspera(Promise.resolve().then(function () { return rpc("mis_estado"); })).then(function (e) {
+    if (!U || U.id !== quien) return;
+    SHIBU.est = e; shibuChip();
+    var paso = huella != null && vmHuella() !== huella;
+    VM.revisando = false; VM.sel = null; VM.selId = null; VM.datos = null; VM.firma = vmFirma(); vmPintaSlots(); vmSaldo(); vmRecibo(); vmEligeMuestra(null);
+    vmMensaje(paso ? "SÍ SE COMPRÓ · MIRA EL RECIBO" : "NO SE COMPRÓ · PUEDES INTENTAR DE NUEVO", paso ? "ok" : "falta");
+    if (typeof shibuHubLado === "function" && $("perfilDlg").open) shibuHubLado();
+  }, function () {
+    if (!U || U.id !== quien) return;
+    VM.revisando = false; vmBoton();
+    vmMensaje("SIN CONEXIÓN · REVISA TUS PUNTOS ANTES DE VOLVER A COMPRAR", "falta");
+  });
+}
 
 function vmCodigo(i) { return String.fromCharCode(65 + Math.floor(i / VM_COLS)) + (i % VM_COLS + 1); }   // A1, A2… B1
 function vmCom() { return VM.modo === "comodines" && !!vmComInfo().catalogo; }
@@ -93,8 +130,11 @@ function vmAlDia() {
   VM.firma = firma;
   var datos = VM.datos;
   vmPintaSlots(); vmSaldo(); vmRecibo(); vmModos();
-  if (VM.sel != null && vmItems()[VM.sel]) { vmElige(VM.sel); VM.datos = datos; vmEligePinta(); vmBoton(); }
-  else { VM.sel = null; vmEligeMuestra(null); vmMensajeInicial(); }
+  // Lo elegido se vuelve a buscar por su número (si la máquina cambió de orden, no queda elegido otro)
+  var ya = -1, l = vmItems();
+  if (VM.sel != null) for (var k = 0; k < l.length; k++) if (l[k].id === VM.selId) { ya = k; break; }
+  if (ya >= 0) { vmElige(ya); VM.datos = datos; vmEligePinta(); vmBoton(); }
+  else { VM.sel = null; VM.selId = null; vmEligeMuestra(null); vmMensajeInicial(); }
 }
 
 // ---- Dibujo de la máquina
@@ -224,7 +264,7 @@ function vmGlobo(txt) {
 function vmBoton() {
   var b = $("vmComprar"); if (!b) return;
   var t = VM.sel == null ? null : vmItems()[VM.sel];
-  b.disabled = VM.ocupada || !t || !!t.bloqueo || (vmCom() ? vmPuntos() < t.puntos || (!!t.elige && !VM.datos) : !vmRegalo() && vmPuntos() < vmPrecio(t));
+  b.disabled = VM.ocupada || VM.revisando || !t || !!t.bloqueo || (vmCom() ? vmPuntos() < t.puntos || (!!t.elige && !VM.datos) : !vmRegalo() && vmPuntos() < vmPrecio(t));
 }
 
 // ---- Elegir (tocando el vidrio o con el teclado)
@@ -232,6 +272,8 @@ function vmElige(i) {
   if (VM.ocupada) return;
   var t = vmItems()[i]; if (!t) return;
   VM.sel = i; VM.tecla = "";
+  // Se compra lo que se eligió, al precio que se vio (si la máquina se refresca, se busca por su número)
+  VM.selId = t.id; VM.selPrecio = vmCom() ? t.puntos : vmRegalo() ? 0 : vmPrecio(t);
   Array.prototype.forEach.call(document.querySelectorAll("#vmSlots .vm-slot"), function (s) { s.classList.toggle("sel", Number(s.dataset.i) === i); });
   if (vmCom()) {
     var fc = t.puntos - vmPuntos();
@@ -304,13 +346,20 @@ function vmSuelta(avisar) {
   if (avisar) vmMensaje("MANTÉN HASTA QUE SE LLENE", "falta");
 }
 function vmComprar() {
-  var i = VM.sel, t = vmItems()[i]; if (!t) return;
+  if (!U || VM.ocupada || VM.revisando) return;
+  var items = vmItems(), i = -1;
+  for (var k = 0; k < items.length; k++) if (items[k].id === VM.selId) { i = k; break; }
+  var t = items[i];
+  if (!t) { VM.sel = null; vmPintaSlots(); vmMensaje("ESE YA NO ESTÁ EN LA MÁQUINA · ELIGE OTRO", "falta"); return; }
+  var precio = vmCom() ? t.puntos : vmRegalo() ? 0 : vmPrecio(t);
+  if (precio !== VM.selPrecio) { vmElige(i); vmMensaje("EL PRECIO CAMBIÓ: AHORA " + precio + " PTS · MANTÉN DE NUEVO SI LO QUIERES", "falta"); return; }
   if (vmCom()) { vmComprarCom(i, t); return; }
-  var antes = vmPuntos();
+  var antes = vmPuntos(), quien = U.id, huella = vmHuella();
   VM.ocupada = true; vmBoton();
   vmMensaje("PREPARANDO TU PREMIO…");
-  rpc("tienda_canjear", { p_item: t.id }).then(function () {
-    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); }, function () {});
+  vmEspera(Promise.resolve().then(function () { return rpc("tienda_canjear", { p_item: t.id }); })).then(function () {
+    vmDeQuien(quien);
+    return vmEspera(rpc("mis_estado")).then(function (e) { vmDeQuien(quien); SHIBU.est = e; shibuChip(); }, function (e) { if (e && e.otraMaid) throw e; });
   }).then(function () {
     vmCae(i, t, function () {
       vmSaldo(antes); vmRecibo();
@@ -320,17 +369,16 @@ function vmComprar() {
       if (typeof shibuHubLado === "function" && $("perfilDlg").open) shibuHubLado();
       if (typeof shibuTabRedibuja === "function") shibuTabRedibuja();
     });
-  }).catch(function (err) {
-    VM.ocupada = false; vmBoton();
-    vmMensaje(String(errMsg(err) || "No se pudo comprar").toUpperCase(), "falta");
-  });
+  }).catch(function (err) { vmFalla(err, huella); });
 }
 function vmComprarCom(i, t) {
-  var antes = vmPuntos(), datos = VM.datos || {};
+  var antes = vmPuntos(), datos = VM.datos || {}, quien = U.id, huella = vmHuella();
   VM.ocupada = true; vmBoton();
   vmMensaje("SACANDO TU COMODÍN…");
-  rpc("com_comprar", { p_comodin: t.id, p_datos: datos }).then(function (r) {
-    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); }, function () {}).then(function () { return r || {}; });
+  vmEspera(Promise.resolve().then(function () { return rpc("com_comprar", { p_comodin: t.id, p_datos: datos }); })).then(function (r) {
+    vmDeQuien(quien);
+    return vmEspera(rpc("mis_estado")).then(function (e) { vmDeQuien(quien); SHIBU.est = e; shibuChip(); }, function (e) { if (e && e.otraMaid) throw e; })
+      .then(function () { return r || {}; });
   }).then(function (r) {
     var premio = r.premio && r.premio.dish_id ? shibuFoto({ dish_id: r.premio.dish_id, nombre: r.premio.nombre }) : null;
     vmCae(i, t, function () {
@@ -341,10 +389,7 @@ function vmComprarCom(i, t) {
       if (typeof shibuHubLado === "function" && $("perfilDlg").open) shibuHubLado();
       if (typeof shibuTabRedibuja === "function") shibuTabRedibuja();
     }, premio);
-  }).catch(function (err) {
-    VM.ocupada = false; vmBoton();
-    vmMensaje(String(errMsg(err) || "No se pudo comprar").toUpperCase(), "falta");
-  });
+  }).catch(function (err) { vmFalla(err, huella); });
 }
 // La espiral gira, el premio (o la cápsula del comodín) sale hacia adelante, cae a la bandeja y rebota; la tapa se mueve.
 // «bandeja»: lo que queda en la bandeja si no es lo mismo que cayó (el premio del Premio sorpresa)

@@ -18,7 +18,7 @@ begin
   with o as (
     select (o.opened_at at time zone 'America/Caracas') t, tt.subtotal - tt.discount + tt.delivery as venta   -- sin el servicio, como Ventas, Inicio y la meta
     from public.pos_orders o cross join lateral public.pos_totals(o.id) tt
-    where o.status = 'cobrada' and (o.opened_at at time zone 'America/Caracas')::date between desde and hasta
+    where o.status = 'cobrada' and not o.premio and (o.opened_at at time zone 'America/Caracas')::date between desde and hasta
   ), dias as (
     select extract(isodow from t)::int dow, count(distinct t::date) n from o group by 1
   ), celdas as (

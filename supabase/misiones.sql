@@ -28,6 +28,9 @@ language sql stable security definer set search_path = public as $$
 
 -- Juegan las meseras (Maid…) y las cajeras; se puede forzar por persona con employees.juega_misiones
 alter table public.employees add column if not exists juega_misiones boolean;
+-- Para medir rápido lo de cada maid (sin estos, la racha y varias misiones leían toda la tabla de platos)
+create index if not exists pos_items_creado_por on public.pos_items (created_by, created_at);
+create index if not exists pos_orders_cobrado_por on public.pos_orders (closed_by, closed_at) where status = 'cobrada';
 create or replace function public.mis_juega(p_emp bigint) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((select e.active and coalesce(e.juega_misiones, coalesce(e.job_title, '') ~* '^\s*(maid|meser|cajer)')
@@ -559,11 +562,40 @@ end $$;
 -- Revisa las misiones de una persona y anota las que cumplió (cada una una sola vez): puntos + 1 ficha. Con comodines:
 -- también sus misiones propias, lo que suman (×2, ×3, +1), la Hora feliz y la Bandera del equipo.
 -- p_cierre = true al cerrar la caja (ahí se miden las que solo se saben al final del día).
+-- Candados de las misiones. Dentro de un cobro o de un cierre de caja nunca se espera (revisión del 25/11): si otra
+-- tablet está revisando lo mismo en ese momento, se salta y la revisión siguiente lo hace. Afuera se espera como siempre.
+create or replace function public.mis_candado(p_clave text, p_id bigint) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('ichiraku.mis_sin_espera', true) = '1' then return pg_try_advisory_xact_lock(hashtext(p_clave), p_id::int); end if;
+  perform pg_advisory_xact_lock(hashtext(p_clave), p_id::int);
+  return true;
+end $$;
+
+-- Las misiones del final del día que el cierre de caja no alcanzó a revisar (tiene un tope de tiempo): las revisa la
+-- tablet de cada maid la próxima vez que pregunta por su estado
+create table if not exists public.mis_pendientes (
+  employee_id bigint not null references public.employees(id) on delete cascade,
+  fecha       date not null,
+  creada      timestamptz not null default now(),
+  primary key (employee_id, fecha)
+);
+create or replace function public.mis_pendientes_revisar(p_emp bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare pf date;
+begin
+  for pf in select fecha from public.mis_pendientes where employee_id = p_emp order by fecha limit 3 loop
+    if public.mis_revisar(p_emp, pf, true) >= 0 then delete from public.mis_pendientes where employee_id = p_emp and fecha = pf; end if;
+  end loop;
+end $$;
+
+-- Devuelve las misiones nuevas cumplidas, o -1 si no pudo revisar (otra tablet estaba revisando a esta maid)
 create or replace function public.mis_revisar(p_emp bigint, p_fecha date, p_cierre boolean default false) returns int
 language plpgsql security definer set search_path = public as $$
 declare d record; r jsonb; lid bigint; nuevos int := 0;
 begin
   if not public.mis_juega(p_emp) or not coalesce((public.mis_ajustes() ->> 'activo')::boolean, true) then return 0; end if;
+  if not public.mis_candado('mis_revisar', p_emp) then return -1; end if;
   perform public.com_asignar(p_emp, p_fecha);   -- las misiones extra de los pergaminos de ese día
   for d in select * from public.com_misiones(p_emp, p_fecha) order by slot loop
     if exists (select 1 from public.mis_logros where employee_id = p_emp and fecha = p_fecha and nivel = d.slot) then continue; end if;
@@ -586,47 +618,54 @@ begin
   return nuevos;
 end $$;
 
--- Al cobrar un pedido: se revisan las misiones de quienes anotaron, abrieron o cobraron (y de todas si hoy hay una de equipo).
--- Nunca frena un cobro: cualquier problema aquí se ignora.
+-- Al cobrar un pedido: se revisan las misiones de quienes anotaron, abrieron o cobraron ese pedido.
+-- Nunca frena un cobro (revisión del 25/11): cualquier problema se ignora, no espera candados de otras tablets y tiene
+-- un tope de 1 segundo. Las demás maids (equipo, bandera) se revisan solas en su tablet cada 30 s y al cerrar la caja.
 create or replace function public.mis_tras_cobro() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare f date; e bigint;
+declare f date; e bigint; t0 timestamptz := clock_timestamp();
 begin
   begin
+    perform set_config('ichiraku.mis_sin_espera', '1', true);
     f := (new.closed_at at time zone 'America/Caracas')::date;
     perform public.mis_asignar(f);
     for e in
       select distinct x from (
         select i.created_by x from public.pos_items i where i.order_id = new.id
-        union select new.opened_by union select new.closed_by
-        union select emp.id from public.employees emp
-         where (exists (select 1 from public.mis_dia d where d.fecha = f and d.tipo like 'equipo_%')
-                or exists (select 1 from public.com_compras c where c.efecto = 'bandera' and c.desde = f)) and public.mis_juega(emp.id)) z
+        union select new.opened_by union select new.closed_by) z
       where x is not null
     loop
+      exit when clock_timestamp() - t0 > interval '1 second';
       perform public.mis_revisar(e, f, false);
     end loop;
   exception when others then null;
   end;
+  perform set_config('ichiraku.mis_sin_espera', '', true);
   return null;
 end $$;
 drop trigger if exists mis_tras_cobro on public.pos_orders;
 create trigger mis_tras_cobro after update of status on public.pos_orders
   for each row when (new.status = 'cobrada' and old.status is distinct from 'cobrada') execute function public.mis_tras_cobro();
 
--- Al cerrar la caja: se miden las misiones del final del día para todas las que trabajaron
+-- Al cerrar la caja: se miden las misiones del final del día para todas las que trabajaron. Nunca frena el cierre:
+-- no espera candados y tiene un tope de 2 segundos; las que no alcance quedan pendientes y las revisa su tablet.
 create or replace function public.mis_tras_cierre() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare f date; e bigint;
+declare f date; e bigint; t0 timestamptz := clock_timestamp();
 begin
   begin
+    perform set_config('ichiraku.mis_sin_espera', '1', true);
     f := (new.opened_at at time zone 'America/Caracas')::date;
-    for e in select id from public.employees where public.mis_juega(id) loop
-      perform public.mis_revisar(e, f, true);
+    delete from public.mis_pendientes where fecha < f - 7;
+    insert into public.mis_pendientes (employee_id, fecha) select id, f from public.employees where public.mis_juega(id) on conflict do nothing;
+    for e in select employee_id from public.mis_pendientes where fecha = f order by employee_id loop
+      exit when clock_timestamp() - t0 > interval '2 seconds';
+      if public.mis_revisar(e, f, true) >= 0 then delete from public.mis_pendientes where employee_id = e and fecha = f; end if;
     end loop;
-    perform public.com_resolver_duelos(f);   -- Duelo amistoso: quién vendió más hoy
+    if clock_timestamp() - t0 < interval '2 seconds' then perform public.com_resolver_duelos(f); end if;   -- Duelo amistoso: quién vendió más hoy
   exception when others then null;
   end;
+  perform set_config('ichiraku.mis_sin_espera', '', true);
   return null;
 end $$;
 drop trigger if exists mis_tras_cierre on public.pos_sessions;
@@ -996,11 +1035,12 @@ create or replace function public.com_premiar(p_emp bigint, p_fecha date, p_nive
 language plpgsql security definer set search_path = public as $$
 declare e jsonb := public.com_efecto(p_emp, p_fecha, p_nivel, true); v_extra int; camp bigint;
 begin
-  v_extra := (round(p_base * (e ->> 'mult')::numeric) - p_base)::int + (e ->> 'mas')::int;
   select c.id into camp from public.com_activas(p_emp, p_fecha) c where c.efecto = 'x3_proxima' order by c.id limit 1;
   if camp is not null then
-    update public.com_compras set usado = true, usado_at = now(), datos = datos || jsonb_build_object('logro', p_logro) where id = camp;
+    update public.com_compras set usado = true, usado_at = now(), datos = datos || jsonb_build_object('logro', p_logro) where id = camp and not usado;
+    if not found then e := public.com_efecto(p_emp, p_fecha, p_nivel, false); end if;   -- otra revisión la gastó: sin el ×3
   end if;
+  v_extra := (round(p_base * (e ->> 'mult')::numeric) - p_base)::int + (e ->> 'mas')::int;
   if v_extra > 0 then
     update public.mis_logros set extra = v_extra where id = p_logro;
     insert into public.mis_puntos (employee_id, delta, motivo, ref_id) values (p_emp, v_extra, 'comodin', p_logro);
@@ -1015,7 +1055,7 @@ declare c record; n int; ya int;
 begin
   select * into c from public.com_activas(p_emp, p_fecha) x where x.efecto = 'hora_feliz' order by x.id limit 1;
   if c.id is null then return; end if;
-  perform pg_advisory_xact_lock(hashtext('hora_feliz'), p_emp::int);
+  if not public.mis_candado('hora_feliz', p_emp) then return; end if;
   select least(3, count(*))::int into n from public.mis_comandas(p_emp, p_fecha) m
   where m.monto >= 25 and extract(hour from m.cerrada at time zone 'America/Caracas') between 15 and 16;
   select coalesce(sum(delta), 0)::int into ya from public.mis_puntos where employee_id = p_emp and motivo = 'hora_feliz:' || p_fecha::text;
@@ -1029,7 +1069,7 @@ declare c record; m jsonb;
 begin
   select * into c from public.com_compras x where x.efecto = 'bandera' and x.desde = p_fecha order by x.id limit 1;
   if c.id is null or not public.mis_juega(p_emp) or not public.mis_trabajo(p_emp, p_fecha) then return; end if;
-  perform pg_advisory_xact_lock(hashtext('bandera'), p_emp::int);
+  if not public.mis_candado('bandera', p_emp) then return; end if;
   if exists (select 1 from public.mis_puntos where employee_id = p_emp and motivo = 'bandera' and ref_id = c.id) then return; end if;
   m := public.meta_dia(p_fecha);
   if (m ->> 'meta') is null or coalesce((m ->> 'vendido')::numeric, 0) < (m ->> 'meta')::numeric then return; end if;
@@ -1147,7 +1187,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare it record; cid bigint; oid bigint; sess bigint; quien text; nota text;
 begin
   select * into it from public.tienda_items where id = p_item;
-  select id into sess from public.pos_sessions where status = 'abierta' order by id desc limit 1;
+  select id into sess from public.pos_sessions where status = 'abierta' order by id desc limit 1 for key share;
   if sess is null then raise exception 'La caja está cerrada: los premios se piden con la caja abierta'; end if;
   select name into quien from public.employees where id = p_emp;
   insert into public.tienda_canjes (employee_id, item_id, nombre, puntos, estado, resuelto_at, resuelto_por, costo, regalo, nota)
@@ -1198,10 +1238,12 @@ begin
   if not juega or not coalesce((aj ->> 'activo')::boolean, true) then
     return jsonb_build_object('juega', false, 'activo', coalesce((aj ->> 'activo')::boolean, true));
   end if;
-  perform public.mis_asignar(f);
-  perform public.com_resolver_duelos(f - 1);   -- los duelos de días anteriores que no se cerraron con la caja
-  perform public.mis_revisar(p_emp, f, false);
-  perform public.mis_top_revisar(f);
+  -- Cada paso por su cuenta: si uno falla (una misión mal configurada, por ejemplo), la tablet igual muestra lo demás
+  begin perform public.mis_asignar(f); exception when others then null; end;
+  begin perform public.mis_pendientes_revisar(p_emp); exception when others then null; end;   -- lo que el cierre no alcanzó
+  begin perform public.com_resolver_duelos(f - 1); exception when others then null; end;   -- duelos de días anteriores
+  begin perform public.mis_revisar(p_emp, f, false); exception when others then null; end;
+  begin perform public.mis_top_revisar(f); exception when others then null; end;
   est := public.mis_estrellas(p_emp, f); niv := coalesce((est ->> 'nivel')::int, 0);
   lim := public.tienda_limites(p_emp, f);
   extra_id := case when public.mis_mejora('ventana') is not null then public.tienda_vitrina_extra(f) end;
@@ -1285,7 +1327,9 @@ begin
   if not exists (select 1 from public.tienda_vitrina(f) v where v.item_id = it.id)
      and not (public.mis_mejora('ventana') is not null and it.id = public.tienda_vitrina_extra(f)) then
     raise exception 'Ese premio no está en la máquina esta semana'; end if;
-  -- Un candado para todas: las unidades de la semana y el tope del mes son de todas
+  -- Primero el de sus puntos (la tienda y los comodines los gastan de a uno), después uno para todas: las unidades de la
+  -- semana y el tope del mes son de todas
+  perform pg_advisory_xact_lock(hashtext('puntos'), p_emp::int);
   perform pg_advisory_xact_lock(hashtext('tienda'), 0);
   est := public.mis_estrellas(p_emp, f);
   lim := public.tienda_limites(p_emp, f);
@@ -1330,6 +1374,7 @@ begin
   if not public.mis_juega(p_emp) then raise exception 'Los comodines son para las meseras y cajeras'; end if;
   select * into k from public.com_catalogo where id = p_comodin;
   if k.id is null then raise exception 'Ese comodín no está en la máquina'; end if;
+  perform pg_advisory_xact_lock(hashtext('puntos'), p_emp::int);   -- sus puntos se gastan de a uno (tienda y comodines)
   perform pg_advisory_xact_lock(hashtext('comodines'), p_emp::int);
   if k.efecto = 'bandera' then perform pg_advisory_xact_lock(hashtext('comodines'), 0); end if;
   est := public.mis_estrellas(p_emp, f); niv := coalesce((est ->> 'nivel')::int, 0);
@@ -1453,7 +1498,8 @@ declare cid bigint;
 begin
   select x.id into cid from public.com_activas(p_emp, public.mis_hoy()) x where x.efecto = 'ficha_dorada' order by x.id limit 1;
   if cid is null then return false; end if;
-  update public.com_compras set usado = true, usado_at = now(), datos = datos || jsonb_build_object('perdio', p_perdio) where id = cid;
+  update public.com_compras set usado = true, usado_at = now(), datos = datos || jsonb_build_object('perdio', p_perdio) where id = cid and not usado;
+  if not found then return false; end if;   -- otra jugada la gastó al mismo tiempo
   if p_perdio then insert into public.mis_fichas (employee_id, delta, motivo, ref_id) values (p_emp, 1, 'ficha_dorada', cid); end if;
   return p_perdio;
 end $$;
@@ -1488,7 +1534,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 create or replace function public.jgo_estado(p_emp bigint, p_pin text) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public as $$
 begin
   perform public.pos_auth(p_emp, p_pin);
   return public.jgo_contadores(p_emp) || jsonb_build_object('activo', public.mis_juega(p_emp) and coalesce((public.mis_ajustes() ->> 'juegos')::boolean, true),
@@ -1646,6 +1692,7 @@ language plpgsql security definer set search_path = public as $$
 declare p record; j jsonb; v jsonb;
 begin
   perform public.pos_auth(p_emp, p_pin);
+  perform pg_advisory_xact_lock(hashtext('juegos'), p_emp::int);   -- el mismo de las otras jugadas: el tope del día no se pasa
   select * into p from public.jgo_partidas where id = p_id and employee_id = p_emp and juego = 'blackjack' for update;
   if p.id is null then raise exception 'Mano no encontrada'; end if;
   if p.estado = 'jugando' then
@@ -1701,6 +1748,9 @@ begin
   select * into k from public.mis_catalogo where id = p_id;
   if k.id is null then raise exception 'Misión no encontrada'; end if;
   if coalesce(p_activa, false) and not public.mis_tipo_medible(k.tipo) then raise exception 'Esa misión todavía no se puede medir sola'; end if;
+  if (p_params is not null and case when jsonb_typeof(p_params) = 'object' then exists (select 1 from jsonb_each(p_params) x
+       where x.key in ('n', 'monto', 'dias', 'nivel', 'pct', 'minimo', 'min') and jsonb_typeof(x.value) <> 'number') else true end) then
+    raise exception 'Revisa los datos de la misión: los números van como números'; end if;
   update public.mis_catalogo set activa = coalesce(p_activa, activa), texto = coalesce(nullif(trim(p_texto), ''), texto),
     nivel = coalesce(p_nivel, nivel), dias = coalesce(p_dias, dias), params = coalesce(p_params, params), updated_at = now() where id = p_id;
 end $$;
@@ -1749,7 +1799,15 @@ begin
   if jsonb_typeof(v -> 'comodines') <> 'object' or coalesce((v #>> '{comodines,activos}')::int, 0) not between 1 and 5
      or coalesce((v #>> '{comodines,semana}')::int, 0) not between 1 and 14 or coalesce((v #>> '{comodines,vitrina}')::int, 3) not between 0 and 30 then
     raise exception 'Revisa los comodines: de 1 a 5 activos, de 1 a 14 por semana y de 0 a 30 en la vitrina (0 = todos)'; end if;
-  if jsonb_typeof(v -> 'mejoras') <> 'object' then raise exception 'Revisa los niveles de las mejoras'; end if;
+  if (case when jsonb_typeof(v -> 'mejoras') = 'object' then exists (select 1 from jsonb_each(v -> 'mejoras') m
+       where case jsonb_typeof(m.value) when 'null' then false when 'number' then (m.value #>> '{}')::numeric not in (0, 1, 2, 3, 4, 5) else true end)
+     else true end) then
+    raise exception 'Revisa los niveles de las mejoras: cada una va del nivel 0 al 5 (o apagada)'; end if;
+  if (coalesce(jsonb_typeof(v #> '{comodines,suman}'), 'boolean') <> 'boolean'
+     or case coalesce(jsonb_typeof(v #> '{comodines,uno_semana}'), 'array') when 'array' then
+          exists (select 1 from jsonb_array_elements(coalesce(v #> '{comodines,uno_semana}', '[]'::jsonb)) u where jsonb_typeof(u) <> 'number')
+        else true end) then
+    raise exception 'Revisa los comodines: «uno por semana» es una lista de números y «se suman» es sí o no'; end if;
   insert into public.pos_kv (key, value) values ('misiones', v) on conflict (key) do update set value = excluded.value, updated_at = now();
   return v;
 end $$;
@@ -1758,7 +1816,7 @@ end $$;
 -- Lo que la maid vendió hoy, en la semana (desde el lunes) y en el mes; sus últimos 14 días; sus comandas de los
 -- últimos 7 días con lo que llevaba cada una, y sus platos más vendidos del mes. Cuenta igual que las misiones.
 create or replace function public.mis_ventas(p_emp bigint, p_pin text) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql volatile security definer set search_path = public as $$
 declare
   f date := public.mis_hoy();
   lunes date := f - (extract(isodow from f)::int - 1);
@@ -1809,6 +1867,7 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.tienda_quincena(date), public.tienda_vitrina(date), public.tienda_quedan(bigint, date), public.tienda_gasto_mes(date),
   public.tienda_limites(bigint, date), public.tienda_bloqueo(bigint, date, jsonb, jsonb),
   public.mis_mejora(text), public.mis_nivel(bigint, date), public.com_listo(text), public.com_instantaneo(text), public.com_reglas(), public.com_sorteo(bigint, date),
+  public.mis_candado(text, bigint), public.mis_pendientes_revisar(bigint),
   public.com_activas(bigint, date), public.com_ocupados(bigint, date), public.com_misiones(bigint, date), public.com_candidatas(bigint, date, int, text),
   public.com_poner_mision(bigint, date, int, int, text, bigint, boolean, bigint), public.com_asignar(bigint, date),
   public.com_efecto(bigint, date, int, boolean), public.com_premiar(bigint, date, int, int, bigint), public.com_hora_feliz(bigint, date),
@@ -1816,6 +1875,17 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.tienda_vitrina_extra(date), public.tienda_entregar(bigint, text, bigint, int, boolean, text, boolean), public.tienda_sorpresa(bigint, text, int),
   public.jgo_tope(bigint), public.jgo_casillas(bigint), public.jgo_dorada(bigint, boolean)
   from anon, public, authenticated;
+
+-- Las tablas de Shibu solo se tocan por las funciones (RLS sin políticas y sin permisos directos, como las de la caja)
+do $$
+declare t text;
+begin
+  foreach t in array array['mis_catalogo', 'mis_dia', 'mis_logros', 'mis_saludos', 'mis_puntos', 'mis_fichas', 'tienda_items', 'tienda_canjes',
+                           'jgo_partidas', 'com_catalogo', 'com_compras', 'mis_personal', 'com_avisos', 'mis_top_premios', 'mis_pendientes'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+  end loop;
+end $$;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)
 do $$

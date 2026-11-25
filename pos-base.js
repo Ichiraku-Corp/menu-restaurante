@@ -145,7 +145,7 @@ try { cur.area = localStorage.getItem("pos-area") || "Tokio"; } catch (e) { cur.
 // servidor. Si hay una nueva, avisa y se recarga sola en un momento libre: en la pantalla del PIN tras 10 s sin tocarla,
 // o en el mapa de mesas sin platos por enviar y 2 minutos sin tocarla. Nunca con una ventana abierta ni escribiendo.
 var ACT = { nueva: false, toque: Date.now(), actual: "" };
-function actFirma(html) { return (String(html).match(/(?:pos(?:-[a-z]+)?|reporte-cierre|monitoreo|juegos|shibu)\.(?:js|css)\?v=[0-9a-f]+/g) || []).sort().join(","); }
+function actFirma(html) { return (String(html).match(/(?:pos(?:-[a-z]+)?|reporte-cierre|monitoreo|juegos|shibu|tienda)\.(?:js|css)\?v=[0-9a-f]+/g) || []).sort().join(","); }
 ACT.actual = actFirma(document.documentElement.innerHTML);
 function actRevisar() {
   if (ACT.nueva || !ACT.actual) return Promise.resolve();

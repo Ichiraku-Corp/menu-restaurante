@@ -405,7 +405,7 @@ $("send").addEventListener("click", function () {
     .then(function (n) {
       if (n) campanita();
       toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar");
-      if (n && typeof shibuPronto === "function") shibuPronto();   // las misiones avanzan: Shibu avisa enseguida
+      try { if (n && typeof shibuPronto === "function") shibuPronto(); } catch (e) { console.error(e); }   // las misiones avanzan: Shibu avisa enseguida
       return loadOrder();
     })
     .catch(fail).then(function () { sending = false; drawTicket(); });

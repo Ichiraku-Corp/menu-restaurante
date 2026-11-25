@@ -42,7 +42,7 @@ function startDevice() {
   loadMenu();
 }
 function lock() {
-  if (typeof shibuSalir === "function") shibuSalir();
+  try { if (typeof shibuSalir === "function") shibuSalir(); } catch (e) { console.error(e); }   // Shibu nunca frena el salir
   U = null; pinBuf = ""; selected = null; if (typeof READY !== "undefined") READY = null; if (typeof META !== "undefined") META = null; syncFull(); show("bottomNav", false); show("orderBar", false); document.body.classList.remove("has-bar");
   ["tablesView", "orderView", "btnCaja", "btnUser"].forEach(function (id) { show(id, false); }); show("pin", true); show("padBox", true); show("pinSide", false);
   drawDots(); $("pinErr").textContent = ""; pinWhoTxt();
@@ -128,7 +128,7 @@ function entrar(emp, pin, r) {
   document.body.classList.toggle("nocharge", !U.charge);
   show("pin", false); show("btnCaja", true); show("btnUser", true); $("btnUser").innerHTML = avatar(U.name, U.id) + '<span class="quien">' + esc(U.name) + '</span><span class="salir muted">· Salir</span>';
   touch(); keepAwake(); syncFull(); goTables(); showAnnouncements({ id: U.id, pin: U.pin }); loadTopDishes(); loadNotas(); loadPromos(); loadMeta(); waStart();
-  if (typeof shibuEntrar === "function") shibuEntrar();
+  try { if (typeof shibuEntrar === "function") shibuEntrar(); } catch (e) { console.error(e); }
 }
 $("btnUser").addEventListener("click", lock);
 // Bloqueo automático tras 10 minutos sin uso.
