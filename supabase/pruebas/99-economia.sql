@@ -52,12 +52,13 @@ select prueba.ok((select count(distinct x.ids) > 1 from (
 set role authenticated;
 select public.mis_estado(:mei, '7101') as e0 \gset
 reset role;
-select prueba.ok(jsonb_array_length(:'e0'::jsonb -> 'tienda') = 6
+select prueba.ok(jsonb_array_length(:'e0'::jsonb -> 'tienda') = 7
   and (select bool_and((t ->> 'quedan')::int = 5) from jsonb_array_elements(:'e0'::jsonb -> 'tienda') t where t ->> 'ventana' = 'rota')
   and (select t ->> 'bloqueo' from jsonb_array_elements(:'e0'::jsonb -> 'tienda') t where t ->> 'ventana' = 'premium') = 'nivel'
+  and (select string_agg((t ->> 'bloqueo') || '/' || (t ->> 'abre'), ',') from jsonb_array_elements(:'e0'::jsonb -> 'tienda') t where (t ->> 'extra')::boolean) = 'nivel/2'
   and (select (t ->> 'puntos')::int from jsonb_array_elements(:'e0'::jsonb -> 'tienda') t where (t ->> 'id')::bigint = :refresco) = 5
   and (:'e0'::jsonb -> 'estrellas' ->> 'total')::int = 0 and (:'e0'::jsonb ->> 'canjes_dia')::int = 2,
-  'la tablet ve las 6 ventanas con su precio, 5 unidades en las que rotan, la premium cerrada por nivel y sus estrellas en 0');
+  'la tablet ve las 7 ventanas con su precio, 5 unidades en las que rotan, la 4.ª que rota y la premium cerradas hasta el nivel 2 y sus estrellas en 0');
 
 -- 4) Comprar: se descuentan los puntos de la carta × 2; 2 premios al día como máximo
 select item_id as rota1 from public.tienda_vitrina(:'hoy') where ventana = 'rota' order by item_id limit 1 \gset
