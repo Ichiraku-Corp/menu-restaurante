@@ -1,4 +1,5 @@
-// Misiones de Shibu en la tablet: bienvenida del día, celebración, Mi perfil con la tienda (compra directa) y la pestaña «Maids».
+// Misiones de Shibu en la tablet: bienvenida del día, celebración con el sello y las monedas que vuelan a la chapita,
+// avisos de avance, Mi perfil con la tienda (foto del plato y «mantén presionado para comprar») y la pestaña «Maids».
 // Uso: node pruebas-navegador/recorrido-shibu.js   (CAPTURA_SHIBU=carpeta guarda capturas a 1280×800)
 "use strict";
 const fs=require("fs"),path=require("path"),http=require("http"),{chromium}=require("playwright");
@@ -13,7 +14,7 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
               {nivel:2,texto:'Comanda promedio de $18 o más (mínimo 8 comandas)',puntos:2,tipo:'promedio',actual:14.5,meta:18,hecha:false},
               {nivel:3,texto:'Equipo: el local pasa la meta del día por 20 %',puntos:3,tipo:'equipo_meta',actual:310,meta:540,hecha:false,equipo:true},
               {nivel:0,extra:true,texto:'Vende 3 artículos de la tienda del menú',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false}],
-    tienda:[{id:1,nombre:'Refresco',puntos:6},{id:2,nombre:'Taiyaki',puntos:7},{id:3,nombre:'Amaterasu',puntos:10}]};
+    tienda:[{id:1,nombre:'Refresco',puntos:6,dish_id:29},{id:2,nombre:'Taiyaki',puntos:7,dish_id:24},{id:3,nombre:'Amaterasu',puntos:10,dish_id:7}]};
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
@@ -46,6 +47,7 @@ const fr=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8"));
 ok(frase.length>5&&fr.manana.concat(fr.manana_fuerte).indexOf(frase)>=0,"la frase sale de data/shibu.json, letra por letra («"+frase+"»)");
 ok(/Ref 14,50 de Ref 18,00/.test(await p.textContent("#shibuBody"))&&/1 de 3/.test(await p.textContent("#shibuBody"))&&/Equipo/.test(await p.textContent("#shibuBody")),
   "cada misión muestra su avance (en Ref cuando es plata) y cuáles son de equipo");
+ok(await p.evaluate(()=>document.querySelector("#shibuBody .mis-card .mis-barra i").style.width)==="33%","las barras de la bienvenida se llenan hasta su avance (1 de 3 = 33 %)");
 await foto("bienvenida.png");
 await p.click("#shibuOk");await p.waitForTimeout(300);
 ok((await M()).marcar.some(x=>x.emp===1&&x.saludo===true),"al cerrar, la base anota que ya la saludó hoy");
@@ -55,27 +57,48 @@ await p.evaluate(()=>{window.__MIS.misiones[0].hecha=true;window.__MIS.misiones[
 await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1600);
 ok(/¡Misión cumplida!/.test(await p.textContent("#shibuBody"))&&/\+1\s*punto · \+1\s*ficha/.test(await p.textContent(".fiesta-premio")),"al cumplir una misión sale Shibu celebrando con sus puntos y su ficha");
 ok(fr.mision.indexOf(await p.textContent("#shibuTxt"))>=0,"la frase de la celebración también sale del archivo de frases");
+ok(await p.locator("#shibuBody .mis-card.fiesta .mis-sello.cae").count()===1&&/シブ\s*CUMPLIDA/.test(await p.textContent("#shibuBody .mis-sello"))&&/Vende 3 postres/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
+  "en la celebración cae el sello de Shibu («シブ CUMPLIDA») sobre la tarjeta de la misión");
+ok(/8 pts/.test(await p.textContent("#btnShibu")),"mientras celebra, la chapita sigue en 8 puntos (los nuevos llegan volando)");
 await foto("celebracion.png");
-await p.click("#shibuOk");await p.waitForTimeout(300);
+await p.click("#shibuOk");await p.waitForTimeout(250);
+ok(await p.locator(".shibu-moneda").count()>=2,"al seguir, las monedas salen volando hacia la chapita ("+(await p.locator(".shibu-moneda").count())+")");
+await p.waitForTimeout(2200);
+ok(/9 pts/.test(await p.textContent("#btnShibu"))&&await p.locator(".shibu-moneda").count()===0,"cuando llegan, la chapita sube contando hasta 9 puntos");
 ok((await M()).marcar.some(x=>x.emp===1&&x.logros&&x.logros[0]===9)&&/★ 1\/4/.test(await p.textContent("#btnShibu")),"la celebración se marca como vista y la chapita sube a 1/4");
 await p.evaluate(()=>shibuPoll(false));await p.waitForTimeout(400);
 ok(!(await p.isVisible("#shibuDlg")),"no vuelve a celebrar la misma misión");
+await p.evaluate(()=>{window.__MIS.misiones[3].actual=2;window.__MIS.misiones[2].actual=320;});
+await p.evaluate(()=>shibuPoll(false));await p.waitForSelector(".shibu-aviso",{timeout:4000});await p.waitForTimeout(1400);
+ok(await p.locator(".shibu-aviso").count()===1&&/Vende 3 artículos de la tienda del menú/.test(await p.textContent(".shibu-aviso"))&&/2 de 3/.test(await p.textContent(".shibu-aviso"))
+  &&await p.evaluate(()=>document.querySelector(".shibu-aviso .sa-barra i").style.width)==="67%","al avanzar una misión sale un aviso chico («2 de 3») sin abrir ventanas; la de equipo, que subió poco, no avisa");
+await foto("aviso.png");
+await p.waitForTimeout(5000);
+ok(await p.locator(".shibu-aviso").count()===0,"el aviso se va solo");
 // 3) Mi perfil: puntos, fichas, misiones y tienda; canjea lo que le alcanza
 await p.click("#btnShibu");await p.waitForSelector("#perfilDlg[open]");await p.waitForTimeout(1000);
 const cards=p.locator("#perfilBody .premio-card");
 ok(await cards.count()===3&&await p.isEnabled('#perfilBody [data-canje="2"]')&&await p.isDisabled('#perfilBody [data-canje="3"]')&&/Te faltan 1/.test(await p.textContent('#perfilBody [data-canje="3"]')),
   "en la tienda se canjea lo que le alcanza (9 puntos: Taiyaki sí, Amaterasu le faltan 1)");
+ok(await p.locator('#perfilBody .premio-card img[src="assets/dishes/taiyaki.webp"]').count()===1&&await p.locator("#perfilBody .premio-foto img").count()===3,
+  "cada premio sale con la foto de su plato del menú");
 await foto("perfil.png");
-// Comprar pregunta antes (no tiene vuelta atrás) y Shibu entrega el premio con una frase suya: sale a cocina sin esperar a nadie
-let pregunta="";p.once("dialog",d=>{pregunta=d.message();});
-await p.click('#perfilBody [data-canje="2"]');
+// Comprar no tiene vuelta atrás: un toque no compra; hay que mantener presionado hasta que el botón se llene
+let dialogos=0;p.on("dialog",()=>{dialogos++;});
+const taiyaki=p.locator('#perfilBody [data-canje="2"]');
+await taiyaki.click();await p.waitForTimeout(300);
+ok((await M()).canjes.length===0&&/Mantén hasta que se llene/.test(await taiyaki.textContent()),"un toque no compra: el botón dice «Mantén hasta que se llene»");
+await taiyaki.hover();await p.mouse.down();await p.waitForTimeout(600);
+ok(await p.evaluate(()=>document.querySelector('#perfilBody [data-canje="2"]').classList.contains("cargando")),"al mantenerlo presionado el botón se va llenando");
+await p.waitForTimeout(900);await p.mouse.up();
 await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1800);
-ok(/¿Comprar Taiyaki por 7 puntos\? Sale a cocina de una vez\./.test(pregunta),"antes de comprar pregunta: «"+pregunta+"»");
+ok(dialogos===0,"ya no sale la pregunta del navegador: la compra se confirma manteniendo presionado");
+ok(await p.locator('#shibuBody .premio-entrega img[src="assets/dishes/taiyaki.webp"]').count()===1,"Shibu entrega el premio con la foto del plato");
 ok((await M()).canjes.length===1&&(await M()).canjes[0].estado==="entregado"&&/¡Premio comprado!/.test(await p.textContent("#shibuBody"))&&/Taiyaki va a cocina/.test(await p.textContent("#shibuBody")),
   "al comprar, el premio sale a cocina de una vez (sin esperar a la cajera)");
 ok(fr.canje_aprobado.indexOf(await p.textContent("#shibuTxt"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#shibuTxt"))+"»");
 await foto("premio.png");
-await p.click("#shibuOk");await p.waitForTimeout(400);
+await p.click("#shibuOk");await p.waitForTimeout(1200);
 ok(await p.isVisible("#perfilDlg")&&/2 puntos/.test(await p.textContent("#perfilBody .perfil-saldos"))&&/Taiyaki · 7 pts\s*A cocina/.test(await p.textContent("#perfilBody")),
   "vuelve a su perfil: sus puntos bajan y en «Mis premios» sale «A cocina»");
 await p.click("#perfilClose");await p.waitForTimeout(200);

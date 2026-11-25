@@ -71,6 +71,77 @@
 .canje-row.entregado b { color:var(--ok); }
 .canje-row.rechazado b { color:var(--muted); }
 
+/* ---- Sello de Shibu sobre la misión cumplida (su nombre en katakana, como el hanko de un jefe japonés) */
+@font-face { font-family:"Noto Sans JP"; font-weight:900; font-display:swap; src:url(assets/fuentes/noto-sans-jp-900.woff2) format("woff2"); }
+.mis-card { position:relative; }
+.mis-card.hecha { padding-right:96px; }
+.mis-sello { position:absolute; right:14px; top:50%; width:72px; height:72px; margin-top:-36px; border-radius:50%; pointer-events:none;
+  display:grid; place-items:center; align-content:center; gap:1px; color:var(--accent); background:rgba(255,255,255,.45);
+  border:3px solid var(--accent); box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 4.5px var(--accent); transform:rotate(-12deg); opacity:.93; }
+.mis-sello b { font-family:"Noto Sans JP", "Poppins", sans-serif; font-weight:900; font-size:20px; line-height:1; letter-spacing:.06em; }
+.mis-sello i { font-style:normal; font-weight:800; font-size:9px; letter-spacing:.08em; line-height:1.5; background:var(--accent); color:#fff; padding:0 5px; border-radius:3px; }
+.mis-sello em { font-style:normal; font-size:10px; line-height:1; }
+.mis-sello.cae { animation:selloCae .5s cubic-bezier(.2,.9,.3,1.25) both; animation-delay:var(--d, 0s); }
+.mis-sello.cae::after { content:""; position:absolute; inset:-5px; border-radius:50%; border:3px solid var(--accent); opacity:0;
+  animation:selloTinta .55s ease-out both; animation-delay:calc(var(--d, 0s) + .28s); }
+.mis-card.fiesta { animation:selloGolpe .28s ease both; }
+@keyframes selloCae { 0% { transform:scale(2.7) rotate(-36deg); opacity:0; } 55% { transform:scale(.9) rotate(-9deg); opacity:1; }
+  78% { transform:scale(1.06) rotate(-13deg); } 100% { transform:scale(1) rotate(-12deg); opacity:.93; } }
+@keyframes selloTinta { 0% { transform:scale(.8); opacity:.6; } 100% { transform:scale(1.5); opacity:0; } }
+@keyframes selloGolpe { 0%, 100% { transform:none; } 35% { transform:translateY(3px) scale(.985); } }
+.shibu-fiesta .mis-list { margin:10px 0 4px; text-align:left; }
+.fiesta-premio { animation:premioAparece .45s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes premioAparece { from { transform:scale(.4); opacity:0; } to { transform:none; opacity:1; } }
+.fiesta-moneda { display:inline-block; width:18px; height:18px; margin-right:6px; vertical-align:-3px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #FFE58A, #FFC928 55%, #E0A100); border:2px solid var(--ink); }
+
+/* ---- Monedas que vuelan a la chapita de arriba */
+.shibu-moneda { position:fixed; left:0; top:0; width:24px; height:24px; margin:-12px 0 0 -12px; border-radius:50%; z-index:9000; pointer-events:none;
+  background:radial-gradient(circle at 35% 30%, #FFE58A, #FFC928 55%, #E0A100); border:2px solid var(--ink); box-shadow:0 2px 0 var(--ink); }
+.shibu-moneda::after { content:"★"; position:absolute; inset:0; display:grid; place-items:center; font-size:11px; line-height:1; color:var(--ink); }
+.shibu-moneda.ficha { background:radial-gradient(circle at 35% 30%, #FFD3E8, var(--accent) 60%, #C23F86); }
+.shibu-moneda.ficha::after { color:#fff; }
+#btnShibu.recibe { animation:chipRecibe .32s ease; }
+@keyframes chipRecibe { 45% { transform:scale(1.14); box-shadow:0 0 0 4px var(--imo-t); } }
+#btnShibu .chip-pts { font-variant-numeric:tabular-nums; }
+
+/* ---- Avisos de avance: entran por la derecha, debajo de la barra de arriba, y se van solos */
+.shibu-avisos { position:fixed; top:calc(env(safe-area-inset-top, 0px) + 72px); right:12px; z-index:60; display:grid; gap:8px;
+  width:min(340px, calc(100vw - 24px)); pointer-events:none; }
+.shibu-aviso { pointer-events:auto; display:flex; gap:10px; align-items:center; text-align:left; width:100%; margin:0; font:inherit; color:var(--ink);
+  background:var(--surface); border:2px solid var(--ink); border-left:8px solid var(--shibu); border-radius:14px; padding:8px 12px;
+  box-shadow:0 8px 22px rgba(27,45,107,.22); cursor:pointer; animation:avisoEntra .4s cubic-bezier(.34,1.56,.64,1) both; }
+.shibu-aviso.n1 { border-left-color:var(--ok); }
+.shibu-aviso.n2 { border-left-color:var(--info); }
+.shibu-aviso.n3 { border-left-color:var(--accent); }
+.shibu-aviso .sa-txt { flex:1; min-width:0; display:grid; gap:3px; }
+.shibu-aviso .sa-nivel { font-size:11px; font-weight:700; color:var(--muted); }
+.shibu-aviso b { font-size:13px; font-weight:800; line-height:1.25; }
+.shibu-aviso small { font-size:12px; color:var(--muted); font-weight:700; }
+.sa-barra { height:7px; border-radius:5px; background:var(--chip); overflow:hidden; }
+.sa-barra i { display:block; height:100%; background:var(--shibu); border-radius:5px; transition:width .9s ease .3s; }
+.shibu-aviso.sale { animation:avisoSale .35s ease both; }
+@keyframes avisoEntra { from { transform:translateX(48px); opacity:0; } to { transform:none; opacity:1; } }
+@keyframes avisoSale { to { transform:translateX(48px); opacity:0; } }
+
+/* ---- Tienda con la foto del plato y «mantén presionado para comprar» */
+.premio-card { position:relative; }
+.premio-foto { aspect-ratio:4 / 3; border-radius:10px; background:var(--chip); overflow:hidden; display:grid; place-items:center; margin-bottom:4px; }
+.premio-foto img { width:100%; height:100%; object-fit:cover; display:block; }
+.premio-card:not(.alcanza) .premio-foto img { filter:grayscale(.75); opacity:.7; }
+.premio-sin-foto { font-size:34px; color:var(--shibu); }
+.premio-card.alcanza:has(.cargando) { animation-play-state:paused; }
+.premio-mantener { position:relative; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.premio-mantener .pm-lleno { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,255,255,.4); }
+.premio-mantener.cargando .pm-lleno { width:100%; transition:width 1.2s linear; }
+.premio-mantener .pm-txt { position:relative; }
+.premio-entrega { width:132px; aspect-ratio:4 / 3; margin:10px auto 2px; border-radius:14px; overflow:hidden; border:2px solid var(--ink); background:var(--chip);
+  display:grid; place-items:center; animation:entregaCae .6s cubic-bezier(.34,1.56,.64,1) .15s both; }
+.premio-entrega img { width:100%; height:100%; object-fit:cover; display:block; }
+@keyframes entregaCae { from { transform:translateY(-40px) scale(.6); opacity:0; } to { transform:none; opacity:1; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .entra, .salta, .mis-card, .premio-card.alcanza, .shibu-confeti i { animation:none !important; }
+  .entra, .salta, .mis-card, .premio-card.alcanza, .shibu-confeti i, .mis-sello.cae, .mis-sello.cae::after, .fiesta-premio,
+  .shibu-aviso, .premio-entrega, #btnShibu.recibe { animation:none !important; }
+  .mis-barra i, .sa-barra i { transition:none !important; }
 }

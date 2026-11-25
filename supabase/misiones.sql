@@ -523,7 +523,7 @@ begin
     'nuevos', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'nivel', l.nivel, 'texto', l.texto, 'puntos', l.puntos) order by l.at)
                 from public.mis_logros l where l.employee_id = p_emp and not l.visto), '[]'::jsonb),
     'puntos', public.mis_saldo(p_emp), 'fichas', public.mis_fichas_saldo(p_emp),
-    'tienda', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'nombre', t.nombre, 'puntos', t.puntos) order by t.orden, t.puntos, t.nombre)
+    'tienda', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'nombre', t.nombre, 'puntos', t.puntos, 'dish_id', t.dish_id) order by t.orden, t.puntos, t.nombre)
                 from public.tienda_items t where t.activo), '[]'::jsonb),
     'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at) order by c.at desc)
                 from (select * from public.tienda_canjes where employee_id = p_emp order by at desc limit 10) c), '[]'::jsonb),

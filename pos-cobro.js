@@ -271,6 +271,7 @@ function doPay(partial) {
   if (payPerson) { var restAll = num(cur.data.totals.total) - num(cur.data.totals.paid) - list.reduce(function (a, p) { return a + (p.tip ? 0 : payRef(p)); }, 0); partial = restAll > 0.02; }
   rpc("pos_pay", { p_order: cur.order, p_payments: list, p_change_currency: changeCur, p_partial: partial, p_sello: $("selloChk").checked }).then(function (r) {
     $("payDlg").close();
+    if (typeof shibuPronto === "function") shibuPronto();   // al cobrar avanzan las misiones de la caja
     if (r && r.closed === false) {
       chgAlert(r.change);
       toast((payPerson ? pname(payPerson) + " pagó " : "Abono de ") + ref(r.paid) + " · falta " + ref(r.rest)); return loadOrder();

@@ -3,9 +3,13 @@
 // «Mi perfil» muestra sus puntos y fichas, la tienda de premios y el botón «Jugar». En la tienda la maid compra con sus
 // puntos y el premio sale a cocina de una vez (queda en el cierre de caja).
 // Todo lo decide la base (mis_estado, tienda_canjear): la tablet solo muestra. Las frases salen de data/shibu.json.
-var SHIBU = { frases: null, est: null, timer: null };
+// Mejoras que eligió Edgar: el sello de Shibu cae sobre la misión cumplida, los puntos vuelan a la chapita de arriba,
+// un aviso chico cuando avanza una misión y la tienda con la foto del plato («mantén presionado para comprar»).
+var SHIBU = { frases: null, est: null, timer: null, vistos: {}, desde: {}, chipPts: null, retener: false, avisos: [], avisosT: 0,
+  pronto: 0, rectFiesta: null, premioAntes: null };
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
 var MIS_PLATA = ["ventas", "promedio", "primera", "vs_ayer", "vs_semana", "top_ventas", "equipo_meta"];
+var SHIBU_REVISA_MS = 30000, SHIBU_MANTENER_MS = 1200;
 
 function shibuQuieto() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
 function shibuFrases() {
@@ -35,12 +39,21 @@ function shibuDialogoAbierto() { return !!document.querySelector("dialog[open]")
 function shibuEntrar() {
   shibuSalir();
   shibuFrases().then(function () { return shibuPoll(true); });
-  SHIBU.timer = setInterval(function () { shibuPoll(false); }, 45000);
+  SHIBU.timer = setInterval(function () { shibuPoll(false); }, SHIBU_REVISA_MS);
 }
 function shibuSalir() {
-  clearInterval(SHIBU.timer); SHIBU.timer = null; SHIBU.est = null;
+  clearInterval(SHIBU.timer); clearTimeout(SHIBU.pronto); clearTimeout(SHIBU.avisosT);
+  SHIBU.timer = null; SHIBU.est = null; SHIBU.vistos = {}; SHIBU.desde = {}; SHIBU.chipPts = null; SHIBU.retener = false;
+  SHIBU.avisos = []; SHIBU.rectFiesta = null; SHIBU.premioAntes = null;
   show("btnShibu", false);
+  var box = $("shibuAvisos"); if (box) box.innerHTML = "";
   ["shibuDlg", "perfilDlg"].forEach(function (id) { var d = $(id); if (d && d.open) d.close(); });
+}
+// Después de mandar a cocina o de cobrar, las misiones se revisan enseguida (sin esperar la vuelta de 30 s)
+function shibuPronto() {
+  if (!U) return;
+  clearTimeout(SHIBU.pronto);
+  SHIBU.pronto = setTimeout(function () { shibuPoll(false); }, 2500);
 }
 // Revisa las misiones. Al entrar, la bienvenida sale una vez al día.
 function shibuPoll(alEntrar) {
@@ -49,6 +62,19 @@ function shibuPoll(alEntrar) {
   return rpc("mis_estado").then(function (e) {
     if (!U || U.id !== quien) return;
     SHIBU.est = e;
+    if (e && e.juega) {
+      var nuevos = e.nuevos || [];
+      // Los puntos nuevos no se suman de golpe: llegan volando a la chapita cuando se cierra la celebración
+      if (SHIBU.chipPts == null) SHIBU.chipPts = (e.puntos || 0) - nuevos.reduce(function (s, x) { return s + (x.puntos || 0); }, 0);
+      if (nuevos.length) SHIBU.retener = true;
+      nuevos.forEach(function (n) {
+        if (SHIBU.desde[n.id] != null) return;
+        var v = SHIBU.vistos[e.fecha + "|" + n.nivel];
+        SHIBU.desde[n.id] = v && v.pct < 100 ? v.pct : 60;
+      });
+      if (!alEntrar) shibuAvanzo(e);
+      shibuRecuerda(e);
+    }
     shibuChip(); shibuBadge();
     if (!e || !e.juega) return;
     if (alEntrar && !e.saludo_hoy) shibuCuandoLibre(shibuBienvenida);
@@ -73,9 +99,101 @@ function shibuChip() {
   show("btnShibu", ok);
   if (!ok) return;
   var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
-  $("btnShibu").innerHTML = shibuCara("mini") + "<b>★ " + hechas + "/" + m.length + "</b><small>" + (e.puntos || 0) + " pts</small>";
+  var pts = SHIBU.retener && SHIBU.chipPts != null ? SHIBU.chipPts : (e.puntos || 0);
+  if (!SHIBU.retener) SHIBU.chipPts = pts;
+  $("btnShibu").innerHTML = shibuCara("mini") + "<b>★ " + hechas + "/" + m.length + '</b><small><span class="chip-pts">' + pts + "</span> pts</small>";
 }
 $("btnShibu").addEventListener("click", function () { shibuPerfil(); });
+// Un número que sube (o baja) contando hasta su valor nuevo
+function shibuCuentaEn(el, desde, hasta, ms) {
+  if (!el) return;
+  cancelAnimationFrame(el._cuenta);
+  if (shibuQuieto() || desde === hasta) { el.textContent = hasta; return; }
+  var t0 = performance.now(), dur = ms || 700;
+  (function paso(t) {
+    var k = Math.min(1, (t - t0) / dur), v = Math.round(desde + (hasta - desde) * (1 - Math.pow(1 - k, 3)));
+    el.textContent = v;
+    if (k < 1) el._cuenta = requestAnimationFrame(paso);
+  })(t0);
+}
+// Los puntos y la ficha de la celebración vuelan hasta la chapita y el número sube contando
+function shibuVuela(r0, pts, fichas) {
+  var chip = $("btnShibu"), e = SHIBU.est;
+  var hasta = e ? e.puntos || 0 : 0, desde = SHIBU.chipPts == null ? hasta : SHIBU.chipPts;
+  function suma() { SHIBU.retener = false; SHIBU.chipPts = hasta; shibuChip(); shibuCuentaEn(chip.querySelector(".chip-pts"), desde, hasta); }
+  var r1 = chip && !chip.classList.contains("hidden") ? chip.getBoundingClientRect() : null;
+  if (shibuQuieto() || !r1 || !r1.width || !r0 || !document.body.animate) { suma(); return; }
+  var n = Math.max(2, Math.min(7, pts + fichas)), x0 = r0.left + r0.width / 2, y0 = r0.top + r0.height / 2;
+  var x1 = r1.left + Math.min(20, r1.width / 2), y1 = r1.top + r1.height / 2, llegaron = 0;
+  for (var i = 0; i < n; i++) (function (i) {
+    var m = document.createElement("i");
+    m.className = "shibu-moneda" + (i < fichas ? " ficha" : "");
+    document.body.appendChild(m);
+    var jx = (Math.random() - 0.5) * 80, jy = (Math.random() - 0.5) * 24;
+    var mx = (x0 + x1) / 2 + jx, my = Math.min(y0, y1) - 50 - Math.random() * 70;
+    var a = m.animate([
+      { transform: "translate(" + (x0 + jx / 3) + "px," + y0 + "px) scale(.5)", opacity: 0 },
+      { transform: "translate(" + (x0 + jx) + "px," + (y0 + jy - 26) + "px) scale(1.15)", opacity: 1, offset: 0.18 },
+      { transform: "translate(" + mx + "px," + my + "px) scale(1)", opacity: 1, offset: 0.58 },
+      { transform: "translate(" + x1 + "px," + y1 + "px) scale(.5)", opacity: 0.9 }
+    ], { duration: 950, delay: i * 120, easing: "cubic-bezier(.45,0,.55,1)", fill: "both" });
+    a.onfinish = function () {
+      m.remove();
+      chip.classList.remove("recibe"); void chip.offsetWidth; chip.classList.add("recibe");
+      if (++llegaron === 1) suma();
+    };
+  })(i);
+}
+
+// ---- Avisos de avance: un cartelito que entra por la derecha y se va solo (no abre ventanas)
+function shibuClave(x) { return x.extra ? 0 : x.nivel; }
+function shibuPct(x) {
+  if (x.hecha) return 100;
+  if (x.al_cierre) return 0;
+  var a = Number(x.actual) || 0, m = Number(x.meta) || 1;
+  return Math.max(0, Math.min(100, Math.round(a / m * 100)));
+}
+function shibuRecuerda(e) {
+  (e.misiones || []).forEach(function (x) { SHIBU.vistos[e.fecha + "|" + shibuClave(x)] = { actual: Number(x.actual) || 0, pct: shibuPct(x) }; });
+}
+// Avisa lo que avanzó desde la última revisión. Las de plata, las de equipo y las de metas grandes avisan cada 25 %.
+function shibuAvanzo(e) {
+  (e.misiones || []).forEach(function (x) {
+    var v = SHIBU.vistos[e.fecha + "|" + shibuClave(x)], a = Number(x.actual) || 0;
+    if (!v || x.hecha || x.al_cierre || a <= v.actual) return;
+    var pct = shibuPct(x), grande = MIS_PLATA.indexOf(x.tipo) >= 0 || x.equipo || (Number(x.meta) || 0) > 10;
+    if (grande && Math.floor(pct / 25) <= Math.floor(v.pct / 25)) return;
+    SHIBU.avisos.push({ x: x, desde: v.pct, at: Date.now() });
+  });
+  shibuAvisosSigue();
+}
+function shibuAvisosBox() {
+  var b = $("shibuAvisos");
+  if (!b) { b = document.createElement("div"); b.id = "shibuAvisos"; b.className = "shibu-avisos"; b.setAttribute("aria-live", "polite"); document.body.appendChild(b); }
+  return b;
+}
+function shibuAvisosSigue() {
+  clearTimeout(SHIBU.avisosT);
+  if (!U || !SHIBU.avisos.length) return;
+  // Con una ventana abierta se espera (si pasan 2 minutos, ya no vale la pena)
+  if (shibuDialogoAbierto()) { SHIBU.avisosT = setTimeout(shibuAvisosSigue, 1500); return; }
+  var box = shibuAvisosBox();
+  while (SHIBU.avisos.length) {
+    var a = SHIBU.avisos.shift();
+    if (Date.now() - a.at < 120000) shibuAvisoPinta(box, a);
+  }
+}
+function shibuAvisoPinta(box, a) {
+  var x = a.x, el = document.createElement("button");
+  el.type = "button"; el.className = "shibu-aviso n" + shibuClave(x);
+  el.innerHTML = shibuCara("mini") + '<span class="sa-txt"><span class="sa-nivel">' + (x.extra ? "＋" : "★".repeat(x.nivel)) + " Avanzaste</span><b>" + esc(x.texto) +
+    '</b><span class="sa-barra"><i style="width:' + (shibuQuieto() ? shibuPct(x) : a.desde) + '%" data-pct="' + shibuPct(x) + '"></i></span><small>' + esc(shibuAvance(x)) + "</small></span>";
+  box.appendChild(el);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+  shibuLlena(el);
+  el.addEventListener("click", function () { el.remove(); shibuPerfil(); });
+  setTimeout(function () { el.classList.add("sale"); setTimeout(function () { el.remove(); }, 400); }, 5200);
+}
 
 // ---- Tarjetas de misión
 function shibuAvance(x) {
@@ -88,17 +206,34 @@ function shibuAvance(x) {
   }
   return Math.min(a, m) + " de " + m;
 }
-function shibuTarjetas(lista) {
+// El sello de Shibu (su nombre en katakana, como el hanko de un jefe japonés) sobre la misión cumplida.
+// «cae»: en la celebración, el sello cae con golpe cuando la barra termina de llenarse.
+function shibuSello(cae, d) {
+  return '<span class="mis-sello' + (cae ? " cae" : "") + '"' + (cae ? ' style="--d:' + d.toFixed(2) + 's"' : "") +
+    ' aria-hidden="true"><b>シブ</b><i>CUMPLIDA</i><em>★</em></span>';
+}
+// op.desde(x): de qué % arranca la barra para llenarse animada; op.sellar: los sellos caen ahora; op.sello0: cuándo cae el primero
+function shibuTarjetas(lista, op) {
+  op = op || {};
   if (!lista.length) return '<p class="muted">Hoy Shibu no dejó misiones.</p>';
   return '<div class="mis-list">' + lista.map(function (x, i) {
-    var a = Number(x.actual) || 0, m = Number(x.meta) || 1, pct = x.hecha ? 100 : Math.max(0, Math.min(100, Math.round(a / m * 100)));
-    if (x.al_cierre && !x.hecha) pct = 0;
-    return '<div class="mis-card n' + (x.extra ? 0 : x.nivel) + (x.hecha ? " hecha" : "") + '" style="animation-delay:' + (i * 0.18).toFixed(2) + 's">' +
-      '<div class="mis-nivel"><span>' + (x.extra ? "＋" : "★".repeat(x.nivel)) + "</span> " + esc(NIVEL_TXT[x.extra ? 0 : x.nivel] || "") + " · " + x.puntos + " punto" + (x.puntos === 1 ? "" : "s") +
+    var pct = shibuPct(x), desde = op.desde && !shibuQuieto() ? op.desde(x) : pct, cae = !!(op.sellar && x.hecha), d = (op.sello0 || 0) + i * 0.45;
+    return '<div class="mis-card n' + shibuClave(x) + (x.hecha ? " hecha" : "") + (cae ? " fiesta" : "") +
+      '" style="animation-delay:' + (cae ? d + 0.28 : i * 0.18).toFixed(2) + 's">' +
+      '<div class="mis-nivel"><span>' + (x.extra ? "＋" : "★".repeat(x.nivel)) + "</span> " + esc(NIVEL_TXT[shibuClave(x)] || "") + " · " + x.puntos + " punto" + (x.puntos === 1 ? "" : "s") +
       (x.equipo ? ' <em class="mis-eq">Equipo</em>' : "") + "</div>" +
       '<div class="mis-texto">' + esc(x.texto) + "</div>" +
-      '<div class="mis-barra"><i style="width:' + pct + '%"></i></div><div class="mis-avance">' + esc(shibuAvance(x)) + "</div></div>";
+      '<div class="mis-barra"><i style="width:' + desde + '%" data-pct="' + pct + '"></i></div><div class="mis-avance">' + esc(shibuAvance(x)) + "</div>" +
+      (x.hecha ? shibuSello(cae, d) : "") + "</div>";
   }).join("") + "</div>";
+}
+// Después de dibujar, cada barra se llena hasta su avance
+function shibuLlena(box) {
+  var l = box ? box.querySelectorAll("[data-pct]") : [];
+  if (!l.length) return;
+  requestAnimationFrame(function () { requestAnimationFrame(function () {
+    Array.prototype.forEach.call(l, function (i) { i.style.width = i.dataset.pct + "%"; });
+  }); });
 }
 
 // ---- Bienvenida (primera vez del día)
@@ -108,34 +243,50 @@ function shibuBienvenida() {
   var frase = shibuFrase(fuerte ? "manana_fuerte" : "manana") || shibuFrase("manana");
   $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuCara("grande entra") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
     '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
-    "<h3>Tus misiones de hoy, " + esc(String(e.nombre || U.name).split(" ")[0]) + "</h3>" + shibuTarjetas(e.misiones || []) +
+    "<h3>Tus misiones de hoy, " + esc(String(e.nombre || U.name).split(" ")[0]) + "</h3>" +
+    shibuTarjetas(e.misiones || [], { desde: function () { return 0; } }) +
     '<p class="muted shibu-pie">Cada misión da sus puntos para la tienda y 1 ficha para jugar.</p>';
   $("shibuOk").textContent = "¡A trabajar!";
   $("shibuDlg").dataset.modo = "saludo";
   $("shibuDlg").showModal();
+  shibuLlena($("shibuBody"));
   shibuEscribe($("shibuTxt"), frase);
 }
-// ---- Celebración (una o varias misiones recién cumplidas)
+// ---- Celebración (una o varias misiones recién cumplidas): la barra se llena, cae el sello y aparece el premio
 function shibuCelebra() {
   var e = SHIBU.est; if (!e || !(e.nuevos || []).length) return;
   var nuevos = e.nuevos, pts = nuevos.reduce(function (s, x) { return s + (x.puntos || 0); }, 0);
+  // Los avisos de avance que quedaban ya no hacen falta: ahora celebra
+  SHIBU.avisos = []; var avisos = $("shibuAvisos"); if (avisos) avisos.innerHTML = "";
   // «Las tres»: el día completo son las 3 del día (fácil, media y difícil); la extra suma aparte
   var regulares = (e.misiones || []).filter(function (x) { return !x.extra; });
   var todas = nuevos.some(function (x) { return x.nivel > 0; }) && regulares.length > 0 && regulares.every(function (x) { return x.hecha; });
+  var lista = nuevos.map(function (n) {
+    var x = (e.misiones || []).find(function (m) { return shibuClave(m) === n.nivel && m.texto === n.texto; });
+    return Object.assign(x ? Object.assign({}, x) : { nivel: n.nivel, extra: n.nivel === 0, texto: n.texto, puntos: n.puntos, tipo: "", actual: 1, meta: 1 }, { hecha: true, _id: n.id });
+  });
+  var quieto = shibuQuieto(), sello0 = quieto ? 0 : 0.95, tPremio = quieto ? 0 : sello0 + (lista.length - 1) * 0.45 + 0.55;
   var confeti = "";
-  if (!shibuQuieto()) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
+  if (!quieto) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" +
     '<div class="shibu-top">' + shibuCara("grande salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     '<div class="shibu-fiesta"><div class="fiesta-titulo">' + (todas ? "¡Las 3 misiones de hoy!" : nuevos.length > 1 ? "¡Misiones cumplidas!" : "¡Misión cumplida!") + "</div>" +
-    nuevos.map(function (x) { return '<div class="fiesta-mis">✓ ' + esc(x.texto) + "</div>"; }).join("") +
-    '<div class="fiesta-premio"><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") + " · <b>+" + nuevos.length + "</b> ficha" + (nuevos.length === 1 ? "" : "s") + "</div></div>";
+    shibuTarjetas(lista, { sellar: true, sello0: sello0, desde: function (x) { var d = SHIBU.desde[x._id]; return d == null ? 60 : d; } }) +
+    '<div class="fiesta-premio" style="animation-delay:' + tPremio.toFixed(2) + 's"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") +
+    " · <b>+" + nuevos.length + "</b> ficha" + (nuevos.length === 1 ? "" : "s") + "</div></div>";
   $("shibuOk").textContent = "Seguir";
-  $("shibuDlg").dataset.modo = "fiesta";
-  $("shibuDlg").dataset.ids = nuevos.map(function (x) { return x.id; }).join(",");
-  $("shibuDlg").showModal();
+  var d = $("shibuDlg");
+  d.dataset.modo = "fiesta";
+  d.dataset.ids = nuevos.map(function (x) { return x.id; }).join(",");
+  d.dataset.pts = pts; d.dataset.fichas = nuevos.length;
+  d.showModal();
+  shibuLlena($("shibuBody"));
   shibuEscribe($("shibuTxt"), shibuFrase(todas ? "dia_completo" : "mision"));
 }
-$("shibuOk").addEventListener("click", function () { $("shibuDlg").close(); });
+// Dónde estaba el premio de la celebración: de ahí salen volando las monedas
+function shibuGuardaPremio() { var p = $("shibuBody").querySelector(".fiesta-premio"); if (p) SHIBU.rectFiesta = p.getBoundingClientRect(); }
+$("shibuOk").addEventListener("click", function () { shibuGuardaPremio(); $("shibuDlg").close(); });
+$("shibuDlg").addEventListener("cancel", shibuGuardaPremio);
 $("shibuDlg").addEventListener("close", function () {
   var d = $("shibuDlg"), modo = d.dataset.modo; d.dataset.modo = "";
   if (!U) return;
@@ -146,7 +297,15 @@ $("shibuDlg").addEventListener("close", function () {
     var ids = (d.dataset.ids || "").split(",").filter(Boolean).map(Number);
     rpc("mis_marcar", { p_saludo: false, p_logros: ids }).catch(function () {});
     if (SHIBU.est) SHIBU.est.nuevos = [];
+    var r = SHIBU.rectFiesta || { left: innerWidth / 2 - 60, top: innerHeight / 2 - 20, width: 120, height: 40 };
+    SHIBU.rectFiesta = null;
+    shibuVuela(r, Number(d.dataset.pts) || 0, Number(d.dataset.fichas) || 0);
+  } else if (modo === "premio" && SHIBU.premioAntes != null) {
+    // De vuelta en el perfil, los puntos bajan contando
+    shibuCuentaEn(document.querySelector("#perfilBody .perfil-saldos .pts b"), SHIBU.premioAntes, (SHIBU.est && SHIBU.est.puntos) || 0);
+    SHIBU.premioAntes = null;
   }
+  shibuAvisosSigue();
 });
 
 // ---- Mi perfil: puntos, fichas, misiones, tienda y Jugar
@@ -154,6 +313,11 @@ function shibuPerfil() {
   if (!SHIBU.est || !SHIBU.est.juega) return;
   shibuPerfilDibuja(); $("perfilDlg").showModal();
   rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); if ($("perfilDlg").open) shibuPerfilDibuja(); }).catch(function () {});
+}
+// La foto del premio es la del plato del menú (si el premio tiene plato y el plato tiene foto)
+function shibuFoto(t) {
+  var d = t && t.dish_id && typeof MENU !== "undefined" ? (MENU.dishes || []).find(function (x) { return x.id === t.dish_id; }) : null, u = d && d.photo_url;
+  return u && /^(assets\/|data:image\/|https:\/\/)/.test(u) ? '<img src="' + esc(u) + '" alt="" loading="lazy">' : '<span class="premio-sin-foto" aria-hidden="true">★</span>';
 }
 function shibuPerfilDibuja() {
   var e = SHIBU.est; if (!e) return;
@@ -166,8 +330,9 @@ function shibuPerfilDibuja() {
     "<h3>Misiones de hoy</h3>" + shibuTarjetas(e.misiones || []) +
     "<h3>Tienda de premios</h3>" + ((e.tienda || []).length ? '<div class="tienda-list">' + e.tienda.map(function (t) {
       var alcanza = pts >= t.puntos;
-      return '<div class="premio-card' + (alcanza ? " alcanza" : "") + '"><b>' + esc(t.nombre) + '</b><span class="premio-pts">' + t.puntos + " puntos</span>" +
-        '<button type="button" data-canje="' + t.id + '"' + (alcanza ? "" : " disabled") + ">" + (alcanza ? "Comprar" : "Te faltan " + (t.puntos - pts)) + "</button></div>";
+      return '<div class="premio-card' + (alcanza ? " alcanza" : "") + '"><div class="premio-foto">' + shibuFoto(t) + "</div><b>" + esc(t.nombre) + '</b><span class="premio-pts">' + t.puntos + " puntos</span>" +
+        (alcanza ? '<button type="button" class="primary premio-mantener" data-canje="' + t.id + '"><span class="pm-lleno" aria-hidden="true"></span><span class="pm-txt">Mantén para comprar</span></button>'
+          : '<button type="button" data-canje="' + t.id + '" disabled>Te faltan ' + (t.puntos - pts) + "</button>") + "</div>";
     }).join("") + "</div>" : '<p class="muted">La tienda está vacía por ahora.</p>') +
     ((e.canjes || []).length ? "<h3>Mis premios</h3>" + e.canjes.map(function (c) {
       return '<div class="canje-row ' + c.estado + '"><span>' + esc(c.nombre) + " · " + c.puntos + ' pts</span><b>' + esc(est[c.estado] || c.estado) + "</b></div>";
@@ -175,22 +340,52 @@ function shibuPerfilDibuja() {
   if (hayJuegos) $("perfilJugar").addEventListener("click", function () { $("perfilDlg").close(); abrirJuegos(); });
 }
 $("perfilClose").addEventListener("click", function () { $("perfilDlg").close(); });
-$("perfilBody").addEventListener("click", function (ev) {
-  var b = ev.target.closest("[data-canje]"); if (!b || b.disabled) return;
+// Comprar no tiene vuelta atrás (el premio sale a cocina de una vez): se mantiene presionado hasta que el botón se llena
+function shibuMantener(b) {
+  if (!b || b._t || b.disabled) return;
+  b.classList.add("cargando");
+  b._t = setTimeout(function () { b._t = 0; b.classList.remove("cargando"); shibuComprar(b); }, SHIBU_MANTENER_MS);
+}
+function shibuSuelta(b, avisar) {
+  if (!b || !b._t) return;
+  clearTimeout(b._t); b._t = 0; b.classList.remove("cargando");
+  if (!avisar) return;
+  var txt = b.querySelector(".pm-txt");
+  txt.textContent = "Mantén hasta que se llene";
+  clearTimeout(b._h); b._h = setTimeout(function () { txt.textContent = "Mantén para comprar"; }, 2200);
+}
+function shibuComprar(b) {
   var t = (SHIBU.est.tienda || []).find(function (x) { return String(x.id) === b.dataset.canje; }); if (!t) return;
-  // Comprar no tiene vuelta atrás: el premio sale a cocina de una vez
-  if (!confirm("¿Comprar " + t.nombre + " por " + t.puntos + " puntos? Sale a cocina de una vez.")) return;
   b.disabled = true;
+  var antes = SHIBU.est.puntos || 0;
   rpc("tienda_canjear", { p_item: t.id }).then(function () {
+    SHIBU.premioAntes = antes;
     shibuPremio(t);
     return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); shibuPerfilDibuja(); shibuTabRedibuja(); });
   }).catch(function (err) { b.disabled = false; fail(err); });
+}
+$("perfilBody").addEventListener("pointerdown", function (ev) {
+  var b = ev.target.closest(".premio-mantener"); if (!b) return;
+  ev.preventDefault();
+  try { b.setPointerCapture(ev.pointerId); } catch (e) { /* sin captura igual funciona */ }
+  shibuMantener(b);
 });
+$("perfilBody").addEventListener("pointerup", function (ev) { shibuSuelta(ev.target.closest(".premio-mantener"), true); });
+$("perfilBody").addEventListener("pointercancel", function (ev) { shibuSuelta(ev.target.closest(".premio-mantener"), false); });
+$("perfilBody").addEventListener("keydown", function (ev) {
+  var b = ev.target.closest(".premio-mantener");
+  if (b && (ev.key === " " || ev.key === "Enter")) { ev.preventDefault(); if (!ev.repeat) shibuMantener(b); }
+});
+$("perfilBody").addEventListener("keyup", function (ev) {
+  var b = ev.target.closest(".premio-mantener");
+  if (b && (ev.key === " " || ev.key === "Enter")) shibuSuelta(b, true);
+});
+$("perfilBody").addEventListener("contextmenu", function (ev) { if (ev.target.closest(".premio-mantener")) ev.preventDefault(); });
 // Premio comprado: Shibu lo entrega con una frase suya (la comanda ya salió a cocina)
 function shibuPremio(t) {
   $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuCara("grande salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div>' +
     '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
-    '<div class="shibu-fiesta"><div class="fiesta-titulo">¡Premio comprado!</div><div class="fiesta-mis">' + esc(t.nombre) + " va a cocina</div>" +
+    '<div class="shibu-fiesta"><div class="fiesta-titulo">¡Premio comprado!</div><div class="premio-entrega">' + shibuFoto(t) + '</div><div class="fiesta-mis">' + esc(t.nombre) + " va a cocina</div>" +
     '<div class="fiesta-premio"><b>−' + t.puntos + "</b> puntos</div></div>";
   $("shibuOk").textContent = "Listo";
   $("shibuDlg").dataset.modo = "premio";

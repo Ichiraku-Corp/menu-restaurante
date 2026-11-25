@@ -402,7 +402,11 @@ $("send").addEventListener("click", function () {
   var items = cartItems();
   (items.length ? rpc("pos_add", { p_order: cur.order, p_items: items }) : Promise.resolve())
     .then(function () { cur.cart = []; return rpc("pos_send", { p_order: cur.order }); })
-    .then(function (n) { toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar"); return loadOrder(); })
+    .then(function (n) {
+      toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar");
+      if (n && typeof shibuPronto === "function") shibuPronto();   // las misiones avanzan: Shibu avisa enseguida
+      return loadOrder();
+    })
     .catch(fail).then(function () { sending = false; drawTicket(); });
 });
 // Precuenta: una a la vez, y si ya salió hace menos de 5 minutos se pregunta antes de imprimir otra
