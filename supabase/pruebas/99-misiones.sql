@@ -94,6 +94,11 @@ select prueba.ok(public.mis_venta_dia(:mesera, :'hoy') = round(:t1::numeric, 2),
 
 -- 5) Tienda: compra directa con sus puntos; el premio sale a cocina en Ref 0 y queda en el cierre de la caja
 insert into public.tienda_items (nombre, puntos, dish_id) values ('Taiyaki de prueba', 2, :taiyaki) returning id as premio \gset
+-- Con la regla de Edgar (25/11) un premio de la carta cuesta el doble de su precio: se le dan los puntos que le falten
+-- para que le quede 1 punto después de comprarlo
+select public.tienda_puntos(:premio) as precio_premio \gset
+insert into public.mis_puntos (employee_id, delta, motivo) select :mesera, :precio_premio + 1 - public.mis_saldo(:mesera), 'prueba'
+where public.mis_saldo(:mesera) <> :precio_premio + 1;
 select id as sesion from public.pos_sessions where status = 'abierta' \gset
 select count(*) as pedidos_antes from public.pos_orders where session_id = :sesion and status = 'cobrada' and not premio \gset
 set role authenticated;
@@ -108,7 +113,7 @@ select prueba.ok((select status = 'cobrada' and premio and session_id = :sesion 
   'sale la comanda a cocina y el pedido queda en Ref 0 en la caja abierta, con lo que vale en la carta');
 set role authenticated;
 select public.pos_cash_summary() as smp \gset
-select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mesera, '5555', :premio), 'Te faltan 1 puntos', 'sin puntos suficientes no deja comprar');
+select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mesera, '5555', :premio), format('Te faltan %s puntos', :precio_premio - 1), 'sin puntos suficientes no deja comprar');
 reset role;
 select prueba.ok((:'smp'::jsonb ->> 'orders')::int = :pedidos_antes
   and exists (select 1 from jsonb_array_elements(:'smp'::jsonb -> 'premios') v
@@ -124,7 +129,7 @@ select prueba.ok((select tickets from public.daily_sales where sale_date = :'hoy
   'en las ventas del día el premio no cuenta como ticket (no baja el ticket promedio)');
 -- Con la caja cerrada no se compra (el premio tiene que quedar en el registro de una caja)
 -- (la caja se marca cerrada sin disparar los triggers: las misiones del cierre se prueban en el punto 7)
-insert into public.mis_puntos (employee_id, delta, motivo) values (:mesera, 5, 'prueba');
+insert into public.mis_puntos (employee_id, delta, motivo) values (:mesera, :precio_premio, 'prueba');
 set session_replication_role = replica;
 update public.pos_sessions set status = 'cerrada' where id = :sesion;
 set session_replication_role = default;

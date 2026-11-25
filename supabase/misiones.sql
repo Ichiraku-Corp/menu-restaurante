@@ -11,7 +11,9 @@
 -- pos_kv 'misiones': {"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "Tonkotsu"}
 create or replace function public.mis_ajustes() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select '{"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "", "premios_top": [10, 6, 3]}'::jsonb
+  select '{"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "", "premios_top": [10, 6, 3],
+           "tope_mes_usd": 60, "canjes_dia": 2, "grande_puntos": 15, "grandes_semana": 1,
+           "rota_ventanas": 3, "rota_por_semana": 5, "premium_nivel": 2, "estrellas_niveles": [5, 15, 30, 60, 100]}'::jsonb
          || coalesce((select value from public.pos_kv where key = 'misiones'), '{}'::jsonb)
 $$;
 
@@ -512,6 +514,54 @@ create trigger mis_tras_cierre after update of status on public.pos_sessions
 
 -- ---------------------------------------------------------------- Para la tablet
 -- Todo lo que la tablet muestra: misiones con su avance, puntos, fichas, tienda y misiones recién cumplidas (para celebrar).
+-- ---------------------------------------------------------------- Estrellas de los clientes (Edgar, 25/11)
+-- Cada opinión de 4 o 5 estrellas suma 1 estrella a cada maid que atendió la mesa (las mismas del recibo: «Te atendieron
+-- Mei y Nami»); una de 1 o 2 resta 1; una de 3 no cambia nada. El total puede bajar, pero un nivel ganado no se pierde:
+-- el nivel sale de lo más alto a lo que llegó. Niveles a las 5, 15, 30, 60 y 100 (pos_kv 'misiones' → estrellas_niveles).
+create or replace function public.opinion_atendieron(p_order bigint) returns bigint[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(b.emp order by b.orden) filter (where b.orden <= 3), '{}') from (
+    select a.emp, row_number() over (order by a.abrio desc, a.n desc, a.primero) as orden from (
+      select i.created_by as emp, bool_or(i.created_by = o.opened_by) as abrio, count(*) as n, min(i.id) as primero
+      from public.pos_items i join public.pos_orders o on o.id = i.order_id
+      where i.order_id = p_order and i.status <> 'anulado' and i.created_by is not null
+      group by i.created_by) a
+    where coalesce(public.pos_emp_name(a.emp), '') <> '') b $$;
+
+-- Las estrellas de cada maid: el total, las del mes (por la fecha en que el cliente respondió) y lo más alto que llegó
+create or replace function public.mis_estrellas_todas(p_fecha date)
+returns table (employee_id bigint, total int, mes int, maximo int)
+language sql stable security definer set search_path = public as $$
+  with f as (
+    select x.emp, case when o.rating >= 4 then 1 when o.rating <= 2 then -1 else 0 end as d,
+           coalesce(o.answered_at, o.updated_at, o.created_at) as at, o.order_id
+    from public.opiniones o cross join lateral unnest(public.opinion_atendieron(o.order_id)) as x(emp)
+    where o.rating is not null and o.order_id is not null),
+  a as (select emp, d, at, sum(d) over (partition by emp order by at, order_id rows unbounded preceding) as acum from f)
+  select emp, sum(d)::int,
+         coalesce(sum(d) filter (where at >= (date_trunc('month', p_fecha)::timestamp at time zone 'America/Caracas')), 0)::int,
+         greatest(0, max(acum))::int
+  from a group by emp
+$$;
+
+-- Para la tablet: total, las del mes, el nivel (con su nombre) y cuántas faltan para el siguiente
+create or replace function public.mis_estrellas(p_emp bigint, p_fecha date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare r record; niv int[]; n int; sig int;
+  nombres text[] := array['Debut', 'Idol del local', 'Estrella', 'Superestrella', 'Leyenda'];
+begin
+  select array_agg(x::int order by x::int) into niv
+  from jsonb_array_elements_text(coalesce(public.mis_ajustes() -> 'estrellas_niveles', '[5, 15, 30, 60, 100]'::jsonb)) x;
+  select * into r from public.mis_estrellas_todas(p_fecha) e where e.employee_id = p_emp;
+  n := (select count(*) from unnest(niv) v where v <= coalesce(r.maximo, 0));
+  sig := (select min(v) from unnest(niv) v where v > coalesce(r.maximo, 0));
+  return jsonb_build_object('total', coalesce(r.total, 0), 'mes', coalesce(r.mes, 0), 'nivel', n,
+    'nombre', case when n > 0 then nombres[least(n, 5)] else '' end,
+    'siguiente', sig, 'siguiente_nombre', case when sig is not null then nombres[least(n + 1, 5)] end,
+    'falta', case when sig is not null then greatest(1, sig - coalesce(r.total, 0)) end,
+    'niveles', to_jsonb(niv), 'nombres', to_jsonb(nombres));
+end $$;
+
 -- Top maid del mes (pedido de Edgar, 24/11): las meseras que juegan, ordenadas por los puntos que ganaron con misiones
 -- en el mes (por el día de la misión). No cuentan los juegos (son suerte) ni se resta lo que gastaron en la tienda.
 -- Las cajeras no entran. Con empate, el mismo puesto.
@@ -528,9 +578,10 @@ $$;
 -- Para la tablet: «yo» marca a quien pregunta
 create or replace function public.mis_ranking(p_fecha date, p_emp bigint) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(jsonb_build_object('puesto', r.puesto, 'nombre', r.nombre, 'puntos', r.puntos, 'yo', r.employee_id = p_emp)
+  select coalesce(jsonb_agg(jsonb_build_object('puesto', r.puesto, 'nombre', r.nombre, 'puntos', r.puntos, 'yo', r.employee_id = p_emp,
+                                               'estrellas', coalesce(s.total, 0))
                             order by r.puesto, r.nombre), '[]'::jsonb)
-  from public.mis_ranking_filas(p_fecha) r
+  from public.mis_ranking_filas(p_fecha) r left join public.mis_estrellas_todas(p_fecha) s on s.employee_id = r.employee_id
 $$;
 
 -- Premio del Top maid (Edgar, 24/11): al empezar un mes, las 3 primeras del mes anterior ganan puntos extra para la tienda
@@ -575,9 +626,118 @@ begin
   update public.mis_top_premios set visto = true where id = p_id and employee_id = p_emp;
 end $$;
 
+-- ---------------------------------------------------------------- Economía de la expendedora (Edgar, 25/11)
+-- Doc «Economía de puntos y estrellas de las maids». Lo que eligió Edgar:
+--  · Cada premio cuesta en puntos el doble de su precio en la carta (mínimo 3): 1 punto = medio dólar de carta.
+--  · Tope del mes: $60 en insumos (costo de la receta). Al llegar, la máquina «se recarga» y vuelve el día 1.
+--  · Los puntos no vencen.
+-- Y además: 2 premios al día por maid, 1 premio grande (15 puntos o más) por semana, y la máquina con ventanas fijas,
+-- 3 que rotan cada lunes (5 unidades por semana para todas) y 1 premium que cambia cada 2 semanas y se abre con el
+-- nivel 2 de estrellas. Todo se cambia en pos_kv 'misiones' (gestion_misiones_ajustes).
+alter table public.tienda_items add column if not exists ventana text not null default 'fija';
+alter table public.tienda_items add column if not exists por_semana int;
+do $$
+begin
+  alter table public.tienda_items drop constraint if exists tienda_items_ventana_check;
+  alter table public.tienda_items add constraint tienda_items_ventana_check check (ventana in ('fija', 'rota', 'premium'));
+end $$;
+alter table public.tienda_canjes add column if not exists costo numeric(10,2) not null default 0;
+alter table public.tienda_canjes add column if not exists regalo boolean not null default false;
+
+-- Precio de un plato (y tamaño) en la carta
+create or replace function public.tienda_precio_carta(p_dish bigint, p_variant text) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(
+    (select (e.x ->> 'price')::numeric from public.dishes d
+       cross join lateral jsonb_array_elements(case when jsonb_typeof(d.variants) = 'array' then d.variants else '[]'::jsonb end) e(x)
+      where d.id = p_dish and coalesce(p_variant, '') <> '' and e.x ->> 'label' = p_variant limit 1),
+    (select d.price from public.dishes d where d.id = p_dish))
+$$;
+-- Puntos de un premio: el doble de su precio en la carta, mínimo 3. Los que no son de la carta, los que se anotaron.
+create or replace function public.tienda_puntos(p_item bigint) returns int
+language sql stable security definer set search_path = public as $$
+  select case when t.dish_id is not null and coalesce(public.tienda_precio_carta(t.dish_id, t.variant), 0) > 0
+              then greatest(3, round(2 * public.tienda_precio_carta(t.dish_id, t.variant))::int) else t.puntos end
+  from public.tienda_items t where t.id = p_item
+$$;
+-- Lo que le cuesta a Ichiraku en insumos: la receta; sin receta, la meta de insumos de Gestión (35 %) sobre el precio
+create or replace function public.tienda_costo(p_item bigint) returns numeric
+language sql stable security definer set search_path = public as $$
+  select round(coalesce(public.kpi_costo_unidad(t.dish_id, t.variant),
+                        coalesce((select g.meta_insumos_pct from public.gestion_settings g limit 1), 35) / 100.0
+                          * coalesce(public.tienda_precio_carta(t.dish_id, t.variant), 0)), 2)
+  from public.tienda_items t where t.id = p_item
+$$;
+-- La semana va de lunes a domingo; la ventana premium cambia cada 2 semanas (desde el lunes 5 de enero de 2026)
+create or replace function public.tienda_lunes(p_fecha date) returns date language sql immutable as $$
+  select (p_fecha - (extract(isodow from p_fecha)::int - 1))::date $$;
+create or replace function public.tienda_quincena(p_fecha date) returns date language sql immutable as $$
+  select (date '2026-01-05' + ((public.tienda_lunes(p_fecha) - date '2026-01-05') / 14) * 14)::date $$;
+-- Lo que hay en la máquina esa semana: todas las fijas, 3 de las que rotan y 1 premium. La elección es la misma para
+-- todas durante la semana (sale de la fecha, no de quién mira)
+create or replace function public.tienda_vitrina(p_fecha date)
+returns table (item_id bigint, ventana text)
+language sql stable security definer set search_path = public as $$
+  select t.id, t.ventana from public.tienda_items t where t.activo and t.ventana = 'fija'
+  union all
+  (select t.id, t.ventana from public.tienda_items t where t.activo and t.ventana = 'rota'
+   order by md5(public.tienda_lunes(p_fecha)::text || '#' || t.id::text)
+   limit greatest(0, coalesce((public.mis_ajustes() ->> 'rota_ventanas')::int, 3)))
+  union all
+  (select t.id, t.ventana from public.tienda_items t where t.activo and t.ventana = 'premium'
+   order by md5(public.tienda_quincena(p_fecha)::text || '#' || t.id::text) limit 1)
+$$;
+-- Unidades que quedan esta semana de un premio que rota (null: los demás no se acaban)
+create or replace function public.tienda_quedan(p_item bigint, p_fecha date) returns int
+language sql stable security definer set search_path = public as $$
+  select case when t.ventana = 'rota' then greatest(0,
+           coalesce(t.por_semana, (public.mis_ajustes() ->> 'rota_por_semana')::int, 5)
+           - (select count(*) from public.tienda_canjes c where c.item_id = t.id and c.estado <> 'rechazado'
+                and (c.at at time zone 'America/Caracas')::date between public.tienda_lunes(p_fecha) and public.tienda_lunes(p_fecha) + 6)::int) end
+  from public.tienda_items t where t.id = p_item
+$$;
+-- Lo que llevan gastado todas en el mes (insumos de los premios que salieron)
+create or replace function public.tienda_gasto_mes(p_fecha date) returns numeric
+language sql stable security definer set search_path = public as $$
+  select coalesce(sum(c.costo), 0) from public.tienda_canjes c
+  where c.estado <> 'rechazado' and c.at >= (date_trunc('month', p_fecha)::timestamp at time zone 'America/Caracas')
+    and c.at < ((date_trunc('month', p_fecha) + interval '1 month')::timestamp at time zone 'America/Caracas')
+$$;
+-- Cómo va una maid con los topes de la máquina
+create or replace function public.tienda_limites(p_emp bigint, p_fecha date) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with aj as (select public.mis_ajustes() a),
+  c as (select * from public.tienda_canjes where employee_id = p_emp and estado <> 'rechazado')
+  select jsonb_build_object(
+    'canjes_hoy', (select count(*) from c where (c.at at time zone 'America/Caracas')::date = p_fecha),
+    'canjes_dia', (select coalesce((a ->> 'canjes_dia')::int, 2) from aj),
+    'grande_puntos', (select coalesce((a ->> 'grande_puntos')::int, 15) from aj),
+    'grande_semana', (select count(*) from c where not c.regalo and c.puntos >= (select coalesce((a ->> 'grande_puntos')::int, 15) from aj)
+                        and (c.at at time zone 'America/Caracas')::date between public.tienda_lunes(p_fecha) and public.tienda_lunes(p_fecha) + 6),
+    'grandes_semana', (select coalesce((a ->> 'grandes_semana')::int, 1) from aj),
+    'gasto_mes', public.tienda_gasto_mes(p_fecha),
+    'tope_mes', (select nullif(coalesce((a ->> 'tope_mes_usd')::numeric, 0), 0) from aj),
+    -- Nivel 4 de estrellas: un premio gratis, una sola vez
+    'regalo', coalesce((public.mis_estrellas(p_emp, p_fecha) ->> 'nivel')::int, 0) >= 4
+              and not exists (select 1 from public.tienda_canjes x where x.employee_id = p_emp and x.regalo and x.estado <> 'rechazado'))
+$$;
+-- Por qué un premio no se puede pedir ahora (sin contar los puntos): null si se puede
+create or replace function public.tienda_bloqueo(p_item bigint, p_fecha date, p_lim jsonb, p_est jsonb) returns text
+language sql stable security definer set search_path = public as $$
+  select case
+    when (p_lim ->> 'tope_mes') is not null and (p_lim ->> 'gasto_mes')::numeric + public.tienda_costo(t.id) > (p_lim ->> 'tope_mes')::numeric then 'recarga'
+    when (p_lim ->> 'canjes_hoy')::int >= (p_lim ->> 'canjes_dia')::int then 'hoy'
+    when not coalesce((p_lim ->> 'regalo')::boolean, false) and public.tienda_puntos(t.id) >= (p_lim ->> 'grande_puntos')::int
+         and (p_lim ->> 'grande_semana')::int >= (p_lim ->> 'grandes_semana')::int then 'grande'
+    when t.ventana = 'premium' and coalesce((p_est ->> 'nivel')::int, 0) < coalesce((public.mis_ajustes() ->> 'premium_nivel')::int, 2) then 'nivel'
+    when t.ventana = 'rota' and public.tienda_quedan(t.id, p_fecha) <= 0 then 'agotado'
+  end
+  from public.tienda_items t where t.id = p_item
+$$;
+
 create or replace function public.mis_estado(p_emp bigint, p_pin text) returns jsonb
 language plpgsql volatile security definer set search_path = public as $$
-declare f date := public.mis_hoy(); aj jsonb := public.mis_ajustes(); juega boolean;
+declare f date := public.mis_hoy(); aj jsonb := public.mis_ajustes(); juega boolean; est jsonb; lim jsonb;
 begin
   perform public.pos_auth(p_emp, p_pin);
   juega := public.mis_juega(p_emp);
@@ -587,6 +747,8 @@ begin
   perform public.mis_asignar(f);
   perform public.mis_revisar(p_emp, f, false);
   perform public.mis_top_revisar(f);
+  est := public.mis_estrellas(p_emp, f);
+  lim := public.tienda_limites(p_emp, f);
   return jsonb_build_object(
     'juega', true, 'activo', true, 'fecha', f, 'tipo_dia', public.mis_tipo_dia(f),
     'nombre', (select name from public.employees where id = p_emp),
@@ -602,9 +764,16 @@ begin
     'nuevos', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'nivel', l.nivel, 'texto', l.texto, 'puntos', l.puntos) order by l.at)
                 from public.mis_logros l where l.employee_id = p_emp and not l.visto), '[]'::jsonb),
     'puntos', public.mis_saldo(p_emp), 'fichas', public.mis_fichas_saldo(p_emp),
-    'tienda', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'nombre', t.nombre, 'puntos', t.puntos, 'dish_id', t.dish_id) order by t.orden, t.puntos, t.nombre)
-                from public.tienda_items t where t.activo), '[]'::jsonb),
-    'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at) order by c.at desc)
+    -- La máquina de esta semana: precio en puntos (carta × 2), ventana, unidades que quedan y por qué no se puede pedir
+    'tienda', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'nombre', t.nombre, 'puntos', public.tienda_puntos(t.id), 'dish_id', t.dish_id,
+                  'ventana', t.ventana, 'quedan', public.tienda_quedan(t.id, f), 'bloqueo', public.tienda_bloqueo(t.id, f, lim, est))
+                order by case t.ventana when 'fija' then 0 when 'rota' then 1 else 2 end, t.orden, t.nombre)
+                from public.tienda_vitrina(f) v join public.tienda_items t on t.id = v.item_id), '[]'::jsonb),
+    'regalo', coalesce((lim ->> 'regalo')::boolean, false),
+    'canjes_hoy', (lim ->> 'canjes_hoy')::int, 'canjes_dia', (lim ->> 'canjes_dia')::int,
+    'premium_nivel', coalesce((aj ->> 'premium_nivel')::int, 2),
+    'estrellas', est,
+    'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at, 'regalo', c.regalo) order by c.at desc)
                 from (select * from public.tienda_canjes where employee_id = p_emp order by at desc limit 10) c), '[]'::jsonb),
     'ranking', public.mis_ranking(f, p_emp),
     'premios_top', coalesce(aj -> 'premios_top', '[10, 6, 3]'::jsonb),
@@ -634,26 +803,39 @@ end $$;
 -- para llevar marcado como premio (se imprime su comanda y descuenta el inventario) y queda en el cierre de esta caja.
 create or replace function public.tienda_canjear(p_emp bigint, p_pin text, p_item bigint) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare it record; cid bigint; oid bigint; sess bigint; quien text;
+declare it record; cid bigint; oid bigint; sess bigint; quien text; f date := public.mis_hoy();
+  lim jsonb; est jsonb; pts int; costo numeric; regalo boolean; bloqueo text; pn int := coalesce((public.mis_ajustes() ->> 'premium_nivel')::int, 2);
 begin
   perform public.pos_auth(p_emp, p_pin);
   if not public.mis_juega(p_emp) then raise exception 'La tienda es para las meseras y cajeras'; end if;
   select * into it from public.tienda_items where id = p_item and activo;
   if it.id is null then raise exception 'Ese premio ya no está en la tienda'; end if;
-  perform pg_advisory_xact_lock(hashtext('tienda'), p_emp::int);
-  if public.mis_saldo(p_emp) < it.puntos then
-    raise exception 'Te faltan % puntos para %', it.puntos - public.mis_saldo(p_emp), it.nombre;
+  if not exists (select 1 from public.tienda_vitrina(f) v where v.item_id = it.id) then raise exception 'Ese premio no está en la máquina esta semana'; end if;
+  -- Un candado para todas: las unidades de la semana y el tope del mes son de todas
+  perform pg_advisory_xact_lock(hashtext('tienda'), 0);
+  est := public.mis_estrellas(p_emp, f);
+  lim := public.tienda_limites(p_emp, f);
+  pts := public.tienda_puntos(it.id); costo := public.tienda_costo(it.id); regalo := coalesce((lim ->> 'regalo')::boolean, false);
+  bloqueo := public.tienda_bloqueo(it.id, f, lim, est);
+  if bloqueo = 'recarga' then raise exception 'La máquina se está recargando: vuelve el día 1'; end if;
+  if bloqueo = 'hoy' then raise exception 'Ya pediste % premios hoy: vuelve mañana', lim ->> 'canjes_dia'; end if;
+  if bloqueo = 'grande' then raise exception 'Ya pediste tu premio grande de la semana: vuelve el lunes'; end if;
+  if bloqueo = 'nivel' then raise exception 'Este premio se abre con el nivel % de estrellas (% ⭐)', pn, (est -> 'niveles') ->> (pn - 1); end if;
+  if bloqueo = 'agotado' then raise exception 'Se agotó esta semana: vuelve el lunes'; end if;
+  if not regalo and public.mis_saldo(p_emp) < pts then
+    raise exception 'Te faltan % puntos para %', pts - public.mis_saldo(p_emp), it.nombre;
   end if;
+  if regalo then pts := 0; end if;
   select id into sess from public.pos_sessions where status = 'abierta' order by id desc limit 1;
   if sess is null then raise exception 'La caja está cerrada: los premios se piden con la caja abierta'; end if;
   select name into quien from public.employees where id = p_emp;
-  insert into public.tienda_canjes (employee_id, item_id, nombre, puntos, estado, resuelto_at, resuelto_por)
-  values (p_emp, it.id, it.nombre, it.puntos, 'entregado', now(), p_emp) returning id into cid;
-  insert into public.mis_puntos (employee_id, delta, motivo, ref_id) values (p_emp, -it.puntos, 'canje', cid);
+  insert into public.tienda_canjes (employee_id, item_id, nombre, puntos, estado, resuelto_at, resuelto_por, costo, regalo)
+  values (p_emp, it.id, it.nombre, pts, 'entregado', now(), p_emp, costo, regalo) returning id into cid;
+  if pts > 0 then insert into public.mis_puntos (employee_id, delta, motivo, ref_id) values (p_emp, -pts, 'canje', cid); end if;
   if it.dish_id is not null then
     oid := public.pos_open(p_emp, p_pin, null, left('Premio: ' || coalesce(quien, ''), 40));
     perform public.pos_add(p_emp, p_pin, oid, jsonb_build_array(jsonb_build_object('dish_id', it.dish_id, 'variant', it.variant, 'qty', 1,
-                                                                                   'notes', 'Premio de misiones de ' || coalesce(quien, ''))));
+                                                                                   'notes', case when regalo then 'Premio gratis (nivel 4 de estrellas) de ' else 'Premio de misiones de ' end || coalesce(quien, ''))));
     -- Ref 0, pero con lo que vale en la carta (list_price) para el cierre
     update public.pos_items set list_price = coalesce(list_price, unit_price), unit_price = 0, promo = 'Premio de misiones' where order_id = oid;
     perform public.pos_send(p_emp, p_pin, oid);
@@ -662,8 +844,8 @@ begin
     update public.tienda_canjes set order_id = oid where id = cid;
   end if;
   insert into public.pos_log (employee_id, action, order_id, detail)
-  values (p_emp, 'canje_entregado', oid, jsonb_build_object('canje', cid, 'premio', it.nombre, 'puntos', it.puntos));
-  return jsonb_build_object('id', cid, 'nombre', it.nombre, 'order_id', oid, 'puntos', public.mis_saldo(p_emp));
+  values (p_emp, 'canje_entregado', oid, jsonb_build_object('canje', cid, 'premio', it.nombre, 'puntos', pts, 'regalo', regalo));
+  return jsonb_build_object('id', cid, 'nombre', it.nombre, 'order_id', oid, 'puntos', public.mis_saldo(p_emp), 'regalo', regalo);
 end $$;
 -- Antes la cajera aprobaba cada premio; ya no hace falta (la compra es directa)
 drop function if exists public.tienda_pendientes(bigint, text);
@@ -868,11 +1050,15 @@ begin
                           from public.mis_catalogo k), '[]'::jsonb),
     'personas', coalesce((select jsonb_agg(jsonb_build_object('id', e.id, 'nombre', e.name, 'puntos', public.mis_saldo(e.id), 'fichas', public.mis_fichas_saldo(e.id),
                             'misiones_mes', (select count(*) from public.mis_logros l where l.employee_id = e.id and l.fecha >= m0),
-                            'puntos_mes', (select coalesce(sum(p.delta), 0) from public.mis_puntos p where p.employee_id = e.id and p.delta > 0 and p.at >= (m0::timestamp at time zone 'America/Caracas')))
+                            'puntos_mes', (select coalesce(sum(p.delta), 0) from public.mis_puntos p where p.employee_id = e.id and p.delta > 0 and p.at >= (m0::timestamp at time zone 'America/Caracas')),
+                            'estrellas', public.mis_estrellas(e.id, f))
                           order by e.name) from public.employees e where public.mis_juega(e.id)), '[]'::jsonb),
     'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'quien', e.name, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at) order by c.at desc)
                         from (select * from public.tienda_canjes order by at desc limit 50) c join public.employees e on e.id = c.employee_id), '[]'::jsonb),
-    'tienda', coalesce((select jsonb_agg(to_jsonb(t) order by t.orden, t.puntos) from public.tienda_items t), '[]'::jsonb));
+    'tienda', coalesce((select jsonb_agg(to_jsonb(t) || jsonb_build_object('puntos_carta', public.tienda_puntos(t.id), 'costo', public.tienda_costo(t.id),
+                          'en_maquina', exists (select 1 from public.tienda_vitrina(f) v where v.item_id = t.id), 'quedan', public.tienda_quedan(t.id, f))
+                        order by t.orden, t.puntos) from public.tienda_items t), '[]'::jsonb),
+    'gasto_mes', public.tienda_gasto_mes(f));
 end $$;
 
 create or replace function public.gestion_mision_guardar(p_id bigint, p_activa boolean, p_texto text default null, p_nivel int default null,
@@ -888,18 +1074,25 @@ begin
     nivel = coalesce(p_nivel, nivel), dias = coalesce(p_dias, dias), params = coalesce(p_params, params), updated_at = now() where id = p_id;
 end $$;
 
+-- Un premio de la máquina. Los de la carta cuestan el doble de su precio (tienda_puntos); p_puntos vale para los demás.
+-- ventana: 'fija', 'rota' (cambia cada lunes; p_por_semana unidades por semana) o 'premium' (cada 2 semanas, nivel 2)
+drop function if exists public.gestion_tienda_guardar(bigint, text, integer, bigint, text, boolean);
 create or replace function public.gestion_tienda_guardar(p_id bigint, p_nombre text, p_puntos int, p_dish bigint default null,
-  p_variant text default '', p_activo boolean default true) returns bigint
+  p_variant text default '', p_activo boolean default true, p_ventana text default 'fija', p_por_semana int default null) returns bigint
 language plpgsql security definer set search_path = public as $$
 declare nid bigint;
 begin
   if not public.can_manage() then raise exception 'Sin permiso'; end if;
   if coalesce(trim(p_nombre), '') = '' or coalesce(p_puntos, 0) < 1 or p_puntos > 1000 then raise exception 'Escribe el premio y sus puntos (1 a 1000)'; end if;
+  if coalesce(p_ventana, 'fija') not in ('fija', 'rota', 'premium') then raise exception 'La ventana es fija, rota o premium'; end if;
+  if p_por_semana is not null and p_por_semana not between 1 and 50 then raise exception 'Las unidades por semana van de 1 a 50'; end if;
   if p_id is null then
-    insert into public.tienda_items (nombre, puntos, dish_id, variant, activo) values (trim(p_nombre), p_puntos, p_dish, coalesce(p_variant, ''), coalesce(p_activo, true))
+    insert into public.tienda_items (nombre, puntos, dish_id, variant, activo, ventana, por_semana)
+    values (trim(p_nombre), p_puntos, p_dish, coalesce(p_variant, ''), coalesce(p_activo, true), coalesce(p_ventana, 'fija'), p_por_semana)
     returning id into nid;
   else
-    update public.tienda_items set nombre = trim(p_nombre), puntos = p_puntos, dish_id = p_dish, variant = coalesce(p_variant, ''), activo = coalesce(p_activo, true)
+    update public.tienda_items set nombre = trim(p_nombre), puntos = p_puntos, dish_id = p_dish, variant = coalesce(p_variant, ''), activo = coalesce(p_activo, true),
+      ventana = coalesce(p_ventana, 'fija'), por_semana = p_por_semana
     where id = p_id returning id into nid;
   end if;
   return nid;
@@ -911,8 +1104,17 @@ declare v jsonb;
 begin
   if not public.can_manage() then raise exception 'Sin permiso'; end if;
   v := public.mis_ajustes() || (coalesce(p_ajustes, '{}'::jsonb) - array(select k from jsonb_object_keys(coalesce(p_ajustes, '{}'::jsonb)) k
-                                                                          where k not in ('activo', 'juegos', 'tope_juegos', 'plato_semana')));
+                                                                          where k not in ('activo', 'juegos', 'tope_juegos', 'plato_semana', 'tope_mes_usd',
+                                                                                          'canjes_dia', 'grande_puntos', 'grandes_semana', 'rota_ventanas',
+                                                                                          'rota_por_semana', 'premium_nivel')));
   if (v ->> 'tope_juegos')::int not between 0 and 10 then raise exception 'El tope de los juegos va de 0 a 10 puntos'; end if;
+  if coalesce((v ->> 'tope_mes_usd')::numeric, 0) not between 0 and 1000 then raise exception 'El tope del mes va de $0 (sin tope) a $1000'; end if;
+  if (v ->> 'canjes_dia')::int not between 1 and 10 then raise exception 'Los premios por día van de 1 a 10'; end if;
+  if (v ->> 'grande_puntos')::int not between 1 and 1000 or (v ->> 'grandes_semana')::int not between 0 and 7 then
+    raise exception 'Revisa el premio grande: de 1 a 1000 puntos y de 0 a 7 por semana'; end if;
+  if (v ->> 'rota_ventanas')::int not between 0 and 8 or (v ->> 'rota_por_semana')::int not between 1 and 50 then
+    raise exception 'Revisa las ventanas que rotan: de 0 a 8, con 1 a 50 unidades por semana'; end if;
+  if (v ->> 'premium_nivel')::int not between 0 and 5 then raise exception 'El nivel de la ventana premium va de 0 a 5'; end if;
   insert into public.pos_kv (key, value) values ('misiones', v) on conflict (key) do update set value = excluded.value, updated_at = now();
   return v;
 end $$;
@@ -966,7 +1168,11 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
   public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
   public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date), public.mis_ranking(date, bigint),
-  public.mis_ranking_filas(date), public.mis_top_revisar(date)
+  public.mis_ranking_filas(date), public.mis_top_revisar(date),
+  public.opinion_atendieron(bigint), public.mis_estrellas_todas(date), public.mis_estrellas(bigint, date),
+  public.tienda_precio_carta(bigint, text), public.tienda_puntos(bigint), public.tienda_costo(bigint), public.tienda_lunes(date),
+  public.tienda_quincena(date), public.tienda_vitrina(date), public.tienda_quedan(bigint, date), public.tienda_gasto_mes(date),
+  public.tienda_limites(bigint, date), public.tienda_bloqueo(bigint, date, jsonb, jsonb)
   from anon, public, authenticated;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)
@@ -978,7 +1184,7 @@ begin
                            'jgo_estado(bigint, text)',
                            'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text)', 'jgo_bj_empezar(bigint, text)',
                            'jgo_bj_accion(bigint, text, bigint, text)', 'gestion_misiones()', 'gestion_mision_guardar(bigint, boolean, text, integer, text, jsonb)',
-                           'gestion_tienda_guardar(bigint, text, integer, bigint, text, boolean)', 'gestion_misiones_ajustes(jsonb)'] loop
+                           'gestion_tienda_guardar(bigint, text, integer, bigint, text, boolean, text, integer)', 'gestion_misiones_ajustes(jsonb)'] loop
     execute format('revoke execute on function public.%s from anon, public', f);
     execute format('grant execute on function public.%s to authenticated, service_role', f);
   end loop;
@@ -1088,9 +1294,16 @@ insert into public.mis_catalogo (numero, texto, nivel, dias, tipo, params) value
   (100, 'Cierra la caja sin pedidos abiertos y con todos los para llevar entregados', 1, 'todos', 'pendiente', '{}')
 on conflict (numero) do nothing;
 
--- Premios de la tienda para empezar (los ejemplos de Edgar; la economía se ajusta con los costos)
-insert into public.tienda_items (nombre, puntos, dish_id, variant, orden)
-select x.nombre, x.puntos, d.id, x.variant, x.orden
-from (values ('Refresco', 6, 'Refresco', 'Lata', 1), ('Taiyaki', 7, 'Taiyaki', '', 2), ('Amaterasu', 10, 'Amaterasu', 'Peq', 3)) x(nombre, puntos, plato, variant, orden)
+-- Premios de la máquina para empezar (doc «Economía de puntos y estrellas», 25/11): 2 fijas, 7 que rotan cada lunes
+-- (5 unidades por semana) y 2 premium. Los puntos de aquí son de referencia: los de la carta cuestan el doble de su precio.
+insert into public.tienda_items (nombre, puntos, dish_id, variant, orden, ventana, por_semana)
+select x.nombre, x.puntos, d.id, x.variant, x.orden, x.ventana, x.por_semana
+from (values ('Refresco', 5, 'Refresco', 'Lata', 1, 'fija', null::int), ('Taiyaki', 5, 'Taiyaki', '', 2, 'fija', null),
+             ('Té Verde', 3, 'Té Verde', '', 3, 'rota', 5), ('Jugo Sakura', 4, 'Jugo Sakura', '', 4, 'rota', 5),
+             ('Limonada rosa', 4, 'Limonada rosa', '', 5, 'rota', 5), ('Dorayaki', 6, 'Dorayaki', '', 6, 'rota', 5),
+             ('Bubble Tea', 8, 'Bubble Tea', '', 7, 'rota', 5), ('Gyozas', 10, 'Gyozas', '', 8, 'rota', 5),
+             ('Dangos', 10, 'Dangos', '', 9, 'rota', 5),
+             ('Milk Tea', 10, 'Milk Tea', '', 10, 'premium', null), ('Amaterasu', 20, 'Amaterasu', 'Peq', 11, 'premium', null))
+     x(nombre, puntos, plato, variant, orden, ventana, por_semana)
 join public.dishes d on d.name = x.plato
 on conflict (nombre) do nothing;
