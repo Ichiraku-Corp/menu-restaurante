@@ -591,7 +591,13 @@ $("jgoDlg").addEventListener("close", function () { jgoAcabarYa(); jgoSinEfectos
     if (t.classList.contains("centro") && t.closest(".jgo-carrete")) t.closest(".jgo-carrete").classList.remove("late");
   });
 });
-$("jgoMenu").addEventListener("click", function (e) { var b = e.target.closest("[data-jgo]"); if (b && !b.disabled) jgoVista(b.dataset.jgo); });
+// Al elegir, la carta «se usa»: salta un poco antes de abrir su juego
+$("jgoMenu").addEventListener("click", function (e) {
+  var b = e.target.closest("[data-jgo]"); if (!b || b.disabled || b.classList.contains("usando")) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { jgoVista(b.dataset.jgo); return; }
+  b.classList.add("usando");
+  setTimeout(function () { b.classList.remove("usando"); jgoVista(b.dataset.jgo); }, 300);
+});
 $("jgoGirar").addEventListener("click", jgoSlotJugar);
 $("jgoRulGirar").addEventListener("click", jgoRulJugar);
 $("jgoRepartir").addEventListener("click", jgoBjEmpezar);

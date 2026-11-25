@@ -1,0 +1,180 @@
+/* Tienda de Shibu: máquina expendedora a pantalla completa (pos-tienda.js) */
+#tiendaDlg { width:100vw; height:100vh; height:100dvh; max-width:100vw; max-height:100vh; max-height:100dvh; margin:0 !important; padding:0;
+  border:0; border-radius:0 !important; box-shadow:none; background:#FAF6F0; color:var(--ink); overflow:hidden; }
+#tiendaDlg[open] { height:100dvh !important; max-height:100dvh !important; }
+#tiendaDlg::backdrop { background:#1B2D6B; }
+
+/* La sala: pared con puntitos, luz desde arriba y piso */
+.vm-sala { position:relative; width:100%; height:100%; display:grid; place-items:center; padding:14px 18px 22px; overflow:hidden;
+  background:
+    radial-gradient(ellipse 60% 45% at 50% 0%, rgba(255,233,166,.55), transparent 70%),
+    linear-gradient(transparent 84%, #E8DCCB 84%, #D9CBB6),
+    radial-gradient(rgba(234,91,166,.14) 1.6px, transparent 2px) 0 0 / 22px 22px,
+    #FAF6F0; }
+.vm-sala::after { content:""; position:absolute; left:50%; bottom:2.5%; width:min(900px, 80vw); height:34px; transform:translateX(-50%);
+  background:radial-gradient(ellipse at center, rgba(27,45,107,.35), transparent 70%); pointer-events:none; }
+.vm-cerrar { position:absolute; top:14px; right:16px; z-index:4; font:800 16px/1 "Poppins", sans-serif; padding:11px 18px; border-radius:14px;
+  background:#fff; color:var(--ink); border:2.5px solid var(--ink); box-shadow:3px 4px 0 var(--ink); cursor:pointer; }
+.vm-cerrar:active { transform:translate(2px, 2px); box-shadow:1px 2px 0 var(--ink); }
+
+/* La máquina */
+.vm { position:relative; z-index:1; width:min(1040px, calc(100% - 150px)); height:min(770px, 100%); display:grid; grid-template-rows:auto minmax(0, 1fr) auto; gap:10px;
+  padding:12px 14px 12px; border:3px solid var(--ink); border-radius:30px;
+  background:linear-gradient(100deg, #F27BBB 0%, #EA5BA6 38%, #D9468F 100%);
+  box-shadow:10px 12px 0 var(--ink), inset 0 5px 0 rgba(255,255,255,.35), inset 0 -10px 0 rgba(0,0,0,.12); }
+.vm::before { content:""; position:absolute; left:10px; top:90px; bottom:120px; width:10px; border-radius:6px; background:rgba(255,255,255,.28); pointer-events:none; }
+
+/* Letrero luminoso con focos */
+.vm-letrero { position:relative; height:64px; display:grid; place-items:center; overflow:hidden; border:3px solid var(--ink); border-radius:18px;
+  background:linear-gradient(#24387A, #16245A); box-shadow:inset 0 0 20px rgba(0,0,0,.45); }
+.vm-focos { position:absolute; inset:5px 12px; display:flex; flex-wrap:wrap; justify-content:space-between; align-content:space-between; pointer-events:none; }
+.vm-focos i { flex:0 0 auto; width:7px; height:7px; margin:0 calc((100% - 11 * 7px) / 22); border-radius:50%; background:#FFE066;
+  box-shadow:0 0 6px #FFE066, 0 0 10px rgba(255,201,40,.8); animation:vmFoco 1.1s steps(2, end) infinite; }
+.vm-focos i:nth-child(odd) { animation-delay:.55s; }
+@keyframes vmFoco { 50% { background:#7C5A00; box-shadow:none; } }
+.vm-marca { position:relative; display:grid; justify-items:center; line-height:1.05; }
+.vm-marca b { font:900 30px/1 "Poppins", sans-serif; letter-spacing:.14em; color:#FFE066;
+  text-shadow:0 0 6px #FFC928, 0 0 16px #FF9F1C, 2px 2px 0 #7C3A00; }
+.vm-marca small { margin-top:4px; font:700 11px/1 "Poppins", sans-serif; letter-spacing:.16em; text-transform:uppercase; color:rgba(255,255,255,.78); }
+
+.vm-cuerpo { display:grid; grid-template-columns:minmax(0, 1fr) 296px; gap:12px; min-height:0; }
+
+/* El vidrio con los premios */
+.vm-vidrio { position:relative; min-height:0; padding:12px 12px 6px; overflow:hidden; border:3px solid var(--ink); border-radius:18px;
+  background:linear-gradient(#24376F, #131F4B); box-shadow:inset 0 0 0 5px #4A5B98, inset 0 14px 30px rgba(0,0,0,.45); }
+.vm-reflejo { position:absolute; inset:0; pointer-events:none; border-radius:15px;
+  background:linear-gradient(104deg, transparent 0 16%, rgba(255,255,255,.11) 16% 25%, transparent 25% 58%, rgba(255,255,255,.07) 58% 61%, transparent 61%); }
+.vm-estantes { height:100%; display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); grid-auto-rows:minmax(0, 1fr); gap:6px 10px; }
+.vm-slot { position:relative; min-height:0; display:grid; grid-template-rows:minmax(0, 1fr) auto auto auto; justify-items:center; align-items:end;
+  padding:8px 4px 0; border:0; border-radius:14px; background:transparent; color:#fff; font:inherit; cursor:pointer;
+  transition:background .15s ease, box-shadow .15s ease, transform .15s ease; }
+button.vm-slot:active { transform:scale(.98); }
+.vm-slot.sel { background:rgba(255,255,255,.07); box-shadow:0 0 0 3px #FFE066, 0 0 24px rgba(255,224,102,.55); }
+.vm-prod { width:100%; height:100%; min-height:0; display:grid; place-items:end center; }
+.vm-prod img { max-width:86%; max-height:100%; object-fit:contain; background:#fff; border:2.5px solid var(--ink); border-radius:14px;
+  box-shadow:inset 0 -6px 0 rgba(27,45,107,.08); filter:drop-shadow(0 7px 4px rgba(0,0,0,.5)); }
+.vm-prod .premio-sin-foto { font-size:46px; color:#FFC928; }
+.vm-prod.repone { animation:vmRepone .6s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes vmRepone { from { transform:translateY(-18px); opacity:0; } to { transform:none; opacity:1; } }
+.vm-slot.falta .vm-prod img { filter:grayscale(.65) brightness(.75) drop-shadow(0 7px 4px rgba(0,0,0,.5)); }
+/* La espiral (vista de frente): gira cuando el premio sale */
+.vm-espiral { width:84%; height:15px; margin-top:-2px; border-radius:8px;
+  background:repeating-linear-gradient(112deg, #F1F4F9 0 3px, #8E97A8 3px 6px, rgba(0,0,0,0) 6px 11px); box-shadow:0 3px 0 rgba(0,0,0,.35); }
+.vm-slot.cae .vm-espiral { animation:vmEspiral .35s linear infinite; }
+@keyframes vmEspiral { to { background-position:-22px 0; } }
+.vm-nombre { margin-top:3px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:700 12px/1.3 "Poppins", sans-serif;
+  text-shadow:0 1px 2px rgba(0,0,0,.6); }
+/* Repisa de metal con la etiqueta: código y precio */
+.vm-etiqueta { width:calc(100% + 14px); margin:4px -7px 0; display:flex; justify-content:center; padding:4px 0 6px;
+  background:linear-gradient(#D5DBE7, #8E97A8); border-top:2px solid #F1F4F9; border-bottom:3px solid #3C4770; }
+.vm-etiqueta b, .vm-etiqueta span { font:800 12px/1 "Poppins", sans-serif; padding:3px 7px; border:2px solid var(--ink); }
+.vm-etiqueta b { background:var(--ink); color:#fff; border-radius:6px 0 0 6px; }
+.vm-etiqueta span { background:#FFC928; color:var(--ink); border-left:0; border-radius:0 6px 6px 0; font-variant-numeric:tabular-nums; }
+.vm-slot.falta .vm-etiqueta span { background:#E3E7EF; color:#5A6587; }
+.vm-slot.vacio { opacity:.5; cursor:default; }
+.vm-slot.vacio .vm-prod { place-items:center; }
+.vm-slot.vacio .vm-prod svg { width:34px; height:34px; fill:none; stroke:#9AA8D4; stroke-width:2; stroke-linecap:round; }
+.vm-slot.vacio .vm-etiqueta span { background:#E3E7EF; color:#5A6587; }
+.vm-cayendo { position:absolute; z-index:6; display:grid; place-items:end center; pointer-events:none; }
+.vm-cayendo img { max-width:86%; max-height:100%; object-fit:contain; background:#fff; border:2.5px solid var(--ink); border-radius:14px; filter:drop-shadow(0 8px 5px rgba(0,0,0,.45)); }
+
+/* El panel: pantalla, teclado, botón grande, Shibu y el recibo */
+.vm-panel { position:relative; min-height:0; display:flex; flex-direction:column; gap:10px; padding:16px 14px 12px; overflow:hidden;
+  border:3px solid var(--ink); border-radius:18px; background:linear-gradient(160deg, #F7F9FC, #D3D9E5); box-shadow:inset 0 3px 0 #fff; }
+.vm-tornillo { position:absolute; width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #8E97A8); border:1.5px solid #5A6587; }
+.vm-tornillo::after { content:""; position:absolute; left:1px; right:1px; top:3px; height:1.5px; background:#5A6587; transform:rotate(35deg); }
+.vm-tornillo.t1 { left:5px; top:5px; } .vm-tornillo.t2 { right:5px; top:5px; } .vm-tornillo.t3 { left:5px; bottom:5px; } .vm-tornillo.t4 { right:5px; bottom:5px; }
+.vm-lcd { position:relative; padding:8px 12px 9px; border:3px solid var(--ink); border-radius:12px; overflow:hidden;
+  background:#0B2B26; color:#8CFFB8; text-shadow:0 0 6px rgba(140,255,184,.65); box-shadow:inset 0 0 18px rgba(0,0,0,.65);
+  font-family:"Poppins", sans-serif; text-transform:uppercase; }
+.vm-lcd::after { content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
+.lcd-fila { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.lcd-fila small { font-weight:700; font-size:11px; letter-spacing:.16em; opacity:.75; }
+.lcd-fila b { font-weight:800; font-size:26px; letter-spacing:.04em; font-variant-numeric:tabular-nums; }
+.lcd-msg { min-height:2.7em; margin-top:2px; font-weight:700; font-size:13px; line-height:1.35; letter-spacing:.06em; }
+.lcd-msg.falta { color:#FF9DC4; text-shadow:0 0 6px rgba(255,157,196,.6); }
+.lcd-msg.ok { color:#FFE066; text-shadow:0 0 6px rgba(255,224,102,.7); }
+.vm-teclado { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:6px; }
+.vm-teclado .vm-borrar { grid-column:4; }
+.vm-teclado button { height:36px; padding:0; border:2px solid var(--ink); border-radius:9px; background:linear-gradient(#FFFFFF, #E2E7F0); color:var(--ink);
+  font:800 15px/1 "Poppins", sans-serif; box-shadow:0 3px 0 var(--ink); cursor:pointer; }
+.vm-teclado button:active { transform:translateY(2px); box-shadow:0 1px 0 var(--ink); }
+.vm-teclado .vm-borrar { background:linear-gradient(#FFE9A6, #FFC928); }
+.vm-boton-caja { display:grid; place-items:center; padding:6px 0 2px; }
+.vm-comprar { position:relative; width:122px; height:122px; padding:0; border-radius:50%; border:3px solid var(--ink); color:#fff; cursor:pointer;
+  background:radial-gradient(circle at 35% 28%, #FF9BCD, #EA5BA6 55%, #BF3A83); box-shadow:0 7px 0 var(--ink), inset 0 -7px 0 rgba(0,0,0,.16);
+  touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; transition:transform .08s ease, box-shadow .08s ease; }
+.vm-comprar:disabled { cursor:not-allowed; border-color:#7D87A3; color:#F3F5FA; box-shadow:0 7px 0 #7D87A3, inset 0 -7px 0 rgba(0,0,0,.1);
+  background:radial-gradient(circle at 35% 28%, #E6EAF2, #C3CAD8 60%, #A6AFC2); }
+.vm-comprar.cargando { transform:translateY(5px); box-shadow:0 2px 0 var(--ink), inset 0 -4px 0 rgba(0,0,0,.16); }
+.vm-anillo { position:absolute; left:-12px; top:-12px; width:calc(100% + 24px); height:calc(100% + 24px); transform:rotate(-90deg); pointer-events:none; }
+.vm-anillo circle { fill:none; stroke-width:7; }
+.vm-anillo .an-fondo { stroke:rgba(27,45,107,.12); }
+.vm-anillo .an-lleno { stroke:#FFC928; stroke-linecap:round; stroke-dasharray:339.3; stroke-dashoffset:339.3; }
+.vm-comprar.cargando .an-lleno { stroke-dashoffset:0; transition:stroke-dashoffset 1.2s linear; }
+.vm-comprar-txt { position:relative; display:grid; line-height:1.05; }
+.vm-comprar-txt b { font:900 20px/1 "Poppins", sans-serif; letter-spacing:.04em; }
+.vm-comprar-txt small { font:700 11px/1.2 "Poppins", sans-serif; opacity:.92; }
+.vm-shibu { display:flex; align-items:center; gap:8px; min-height:64px; }
+.vm-ayuda { flex:1; min-width:0; margin:0; font:600 12.5px/1.35 "Poppins", sans-serif; color:#4A5577; }
+.vm-shibu .shibu-cara.media { width:56px; height:56px; }
+.vm-globo { position:relative; flex:1; min-width:0; margin:0; padding:7px 10px; border:2px solid var(--ink); border-radius:14px 14px 14px 4px;
+  background:#fff; font:700 13px/1.35 "Poppins", sans-serif; animation:vmGlobo .35s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes vmGlobo { from { transform:scale(.6); opacity:0; } }
+/* Recibo de papel térmico con el borde dentado */
+.vm-recibo { margin-top:auto; padding:9px 11px 16px; background:#FFFEF8; color:#3B4466; border:2px solid var(--ink); border-bottom:0;
+  border-radius:6px 6px 0 0; font:600 12px/1.35 "Poppins", sans-serif;
+  -webkit-mask:linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 14px 7px repeat-x;
+  mask:linear-gradient(#000 0 0) top / 100% calc(100% - 7px) no-repeat, conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / 14px 7px repeat-x; }
+.rec-tit { display:block; padding-bottom:4px; margin-bottom:4px; border-bottom:1.5px dashed #9AA3BC; font-weight:800; font-size:11px; letter-spacing:.16em; color:var(--ink); }
+.vm-recibo ol { list-style:none; margin:0; padding:0; display:grid; gap:2px; }
+.vm-recibo li { display:flex; justify-content:space-between; gap:8px; }
+.vm-recibo li span:last-child { white-space:nowrap; font-variant-numeric:tabular-nums; }
+.vm-recibo p { margin:0; }
+
+/* La bandeja donde cae el premio */
+.vm-bandeja { position:relative; height:86px; display:grid; grid-template-columns:1fr minmax(0, 60%) 1fr; align-items:center; justify-items:center; }
+.vm-bandeja .vm-hueco { grid-column:2; width:100%; }
+/* A los lados de la bandeja: la placa de Ichiraku y la ranura de los puntos */
+.vm-placa { display:inline-flex; align-items:center; gap:8px; padding:6px 12px 6px 6px; border:2.5px solid var(--ink); border-radius:12px;
+  background:linear-gradient(#FFF6D6, #FFC928); box-shadow:inset 0 2px 0 #fff, 2px 3px 0 var(--ink); }
+.vm-placa img { width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#fff; }
+.vm-placa b { font:900 13px/1.05 "Poppins", sans-serif; letter-spacing:.08em; color:var(--ink); }
+.vm-placa small { display:block; font:700 9px/1 "Poppins", sans-serif; letter-spacing:.16em; color:#7C5A00; }
+.vm-ranura { display:grid; justify-items:center; gap:4px; font:800 9px/1 "Poppins", sans-serif; letter-spacing:.18em; color:rgba(255,255,255,.9); }
+.vm-ranura i { width:44px; height:56px; border:2.5px solid var(--ink); border-radius:10px; background:linear-gradient(#E9EDF5, #B9C1D2); position:relative; box-shadow:2px 3px 0 var(--ink); }
+.vm-ranura i::after { content:""; position:absolute; left:50%; top:12px; width:6px; height:28px; margin-left:-3px; border-radius:3px; background:var(--ink); }
+.vm-hueco { position:relative; width:60%; height:74px; display:grid; place-items:center; overflow:hidden; border:3px solid var(--ink); border-radius:16px;
+  background:linear-gradient(#0B142F, #1B2D6B); box-shadow:inset 0 12px 18px rgba(0,0,0,.65); }
+.vm-hueco-txt { font:800 11px/1 "Poppins", sans-serif; letter-spacing:.18em; color:rgba(255,255,255,.42); }
+.vm-premio { position:absolute; bottom:6px; left:50%; width:64px; height:56px; margin-left:-32px; display:grid; place-items:end center; transform:rotate(-8deg);
+  animation:vmRebota .55s cubic-bezier(.34,1.56,.64,1) both; }
+.vm-premio img { max-width:100%; max-height:100%; object-fit:contain; background:#fff; border:2px solid var(--ink); border-radius:10px; filter:drop-shadow(0 4px 3px rgba(0,0,0,.6)); }
+@keyframes vmRebota { from { transform:translateY(-30px) rotate(-30deg) scale(.8); } }
+.vm-tapa { position:absolute; top:6px; left:calc(20% + 6px); width:calc(60% - 12px); height:34px; border:2px solid rgba(255,255,255,.55); border-radius:12px 12px 4px 4px;
+  background:linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.08)); transform-origin:50% 0; pointer-events:none; }
+.vm-tapa.golpe { animation:vmTapa .7s ease-out; }
+@keyframes vmTapa { 0% { transform:perspective(260px) rotateX(-55deg); } 40% { transform:perspective(260px) rotateX(18deg); } 70% { transform:perspective(260px) rotateX(-6deg); } }
+.vm-patas { position:absolute; left:48px; right:48px; bottom:-15px; display:flex; justify-content:space-between; pointer-events:none; }
+.vm-patas i { width:76px; height:13px; border:3px solid var(--ink); border-top:0; border-radius:0 0 10px 10px; background:#2B3B78; }
+
+/* Teléfono: el vidrio arriba con 2 columnas y el panel abajo; la sala se puede deslizar */
+@media (max-width: 760px) {
+  .vm-sala { place-items:start center; padding:56px 10px 26px; overflow:auto; }
+  .vm { width:100%; height:auto; padding:10px; border-radius:24px; box-shadow:6px 8px 0 var(--ink); }
+  .vm-bandeja { grid-template-columns:minmax(0, 1fr); height:80px; }
+  .vm-bandeja .vm-hueco { grid-column:1; width:86%; }
+  .vm-placa, .vm-ranura { display:none; }
+  .vm::before { display:none; }
+  .vm-letrero { height:54px; }
+  .vm-marca b { font-size:22px; }
+  .vm-marca small { font-size:9px; letter-spacing:.1em; }
+  .vm-cuerpo { grid-template-columns:minmax(0, 1fr); }
+  .vm-estantes { grid-template-columns:repeat(2, minmax(0, 1fr)); grid-auto-rows:176px; }
+  .vm-comprar { width:108px; height:108px; }
+  .vm-tapa { left:7%; width:86%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vm-focos i, .vm-slot.cae .vm-espiral, .vm-prod.repone, .vm-premio, .vm-tapa.golpe, .vm-globo { animation:none !important; }
+  .vm-comprar.cargando .an-lleno { transition:stroke-dashoffset 1.2s linear; }
+}

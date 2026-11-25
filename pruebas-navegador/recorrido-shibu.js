@@ -1,5 +1,6 @@
 // Misiones de Shibu en la tablet: bienvenida del día, celebración con el sello y las monedas que vuelan a la chapita,
-// avisos de avance, Mi perfil con la tienda (foto del plato y «mantén presionado para comprar») y la pestaña «Maids».
+// avisos de avance, Mi perfil (carnet y Top maid en podio olímpico), la tienda en máquina expendedora, el premio del mes
+// de la Top maid y la pestaña «Maids».
 // Uso: node pruebas-navegador/recorrido-shibu.js   (CAPTURA_SHIBU=carpeta guarda capturas a 1280×800)
 "use strict";
 const fs=require("fs"),path=require("path"),http=require("http"),{chromium}=require("playwright");
@@ -9,7 +10,7 @@ const srv=http.createServer((q,r)=>{const f=path.join(ROOT,decodeURIComponent(q.
 const CAP=process.env.CAPTURA_SHIBU||"";if(CAP)fs.mkdirSync(CAP,{recursive:true});
 // Las funciones de misiones y tienda, falsas, con estado en window.__MIS (la base de verdad se prueba en supabase/pruebas/99-misiones.sql)
 const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
-  var M=window.__MIS={saludo:{},nuevos:{},puntos:{1:8,2:12},fichas:{1:1,2:0},canjes:[],marcar:[],seq:50,
+  var M=window.__MIS={saludo:{},nuevos:{},puntos:{1:8,2:12},fichas:{1:1,2:0},canjes:[],marcar:[],seq:50,top:null,topVisto:[],
     misiones:[{nivel:1,texto:'Vende 3 postres',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false},
               {nivel:2,texto:'Comanda promedio de $18 o más (mínimo 8 comandas)',puntos:2,tipo:'promedio',actual:14.5,meta:18,hecha:false},
               {nivel:3,texto:'Equipo: el local pasa la meta del día por 20 %',puntos:3,tipo:'equipo_meta',actual:310,meta:540,hecha:false,equipo:true},
@@ -19,7 +20,9 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
     canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0},grupo:'meseras',
-    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false},{puesto:2,nombre:e.name,puntos:20,yo:true},{puesto:3,nombre:'Hana',puntos:18,yo:false},{puesto:4,nombre:'Yumi',puntos:9,yo:false}]}; };
+    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false},{puesto:2,nombre:e.name,puntos:20,yo:true},{puesto:3,nombre:'Hana',puntos:18,yo:false},{puesto:4,nombre:'Yumi',puntos:9,yo:false}],
+    premios_top:[10,6,3],campeona:{mes:'2026-10-01',nombre:'Sakura'},top_premio:M.top&&M.topVisto.indexOf(M.top.id)<0?M.top:null}; };
+  R.mis_top_visto=function(a){ quien(a); M.topVisto.push(a.p_id); return null; };
   R.mis_marcar=function(a){ var e=quien(a); M.marcar.push({emp:e.id,saludo:a.p_saludo,logros:a.p_logros}); if(a.p_saludo) M.saludo[e.id]=true;
     if(a.p_logros) M.nuevos[e.id]=(M.nuevos[e.id]||[]).filter(function(x){return a.p_logros.indexOf(x.id)<0;}); return null; };
   // Compra directa: el premio queda entregado (en la base sale a cocina en Ref 0 y queda en el cierre de caja)
@@ -76,49 +79,69 @@ ok(await p.locator(".shibu-aviso").count()===1&&/Vende 3 artículos de la tienda
 await foto("aviso.png");
 await p.waitForTimeout(5000);
 ok(await p.locator(".shibu-aviso").count()===0,"el aviso se va solo");
-// 3) Mi perfil: puntos, fichas, misiones y tienda; canjea lo que le alcanza
+// 3) Mi perfil: el carnet, sus misiones y el Top maid del mes en el podio olímpico
 await p.click("#btnShibu");await p.waitForSelector("#perfilDlg[open]");await p.waitForTimeout(1000);
-const cards=p.locator("#perfilBody .premio-card");
-ok(await cards.count()===3&&await p.isEnabled('#perfilBody [data-canje="2"]')&&await p.isDisabled('#perfilBody [data-canje="3"]')&&/Te faltan 1/.test(await p.textContent('#perfilBody [data-canje="3"]')),
-  "en la tienda se canjea lo que le alcanza (9 puntos: Taiyaki sí, Amaterasu le faltan 1)");
-ok(/Top maid de noviembre/.test(await p.textContent("#perfilBody"))&&await p.evaluate(()=>{
-    const l=[...document.querySelectorAll("#perfilBody .top-podio .top-lugar")];
-    return l.length===3&&l[0].classList.contains("p2")&&l[1].classList.contains("p1")&&l[2].classList.contains("p3")
-      &&!!l[1].querySelector(".taiyaki.oro.grande")&&!!l[0].querySelector(".taiyaki.plata")&&!!l[2].querySelector(".taiyaki.bronce")
-      &&/Top 1 del mes/.test(l[1].textContent)&&/Sakura/.test(l[1].textContent)&&/34 pts/.test(l[1].textContent)
-      &&l[0].classList.contains("yo")&&/Mesera\s*\(tú\)/.test(l[0].textContent);}),
-  "en el perfil está el Top maid del mes: podio con taiyaki de oro (Top 1), plata y bronce, y su puesto marcado");
-ok(/4\.º\s*Yumi\s*9 pts/.test(await p.textContent("#perfilBody .top-resto")),"desde el 4.º puesto, el ranking sigue en lista");
-await p.evaluate(()=>document.querySelector("#perfilBody .top-podio").scrollIntoView({block:"center"}));await p.waitForTimeout(300);
-await foto("top-maid.png");
-ok(await p.locator('#perfilBody .premio-card img[src="assets/dishes/taiyaki.webp"]').count()===1&&await p.locator("#perfilBody .premio-foto img").count()===3,
-  "cada premio sale con la foto de su plato del menú");
+ok(/Mesera/.test(await p.textContent("#perfilBody .carnet"))&&/2\.º del Top maid/.test(await p.textContent("#perfilBody .carnet"))&&/9\s*puntos/.test(await p.textContent("#perfilBody .perfil-saldos"))
+  &&/2\s*fichas/.test(await p.textContent("#perfilBody .perfil-saldos"))&&await p.isVisible("#perfilTienda")&&await p.isVisible("#perfilJugar"),
+  "el carnet de la maid muestra su nombre, su puesto en el Top maid, sus puntos y fichas, y los botones Tienda y Jugar");
 await foto("perfil.png");
-// Comprar no tiene vuelta atrás: un toque no compra; hay que mantener presionado hasta que el botón se llene
+ok(await p.evaluate(()=>{
+    const s=document.querySelector("#perfilBody svg.olimpo"); if(!s) return false;
+    const n=[...s.querySelectorAll(".ol-nombre")].map(x=>x.textContent);
+    return /TOP MAID · NOVIEMBRE/.test(s.querySelector(".ol-friso").textContent)&&n.join(",")==="MESERA,HANA,SAKURA"
+      &&!!s.querySelector(".ol-estatua.e1")&&!!s.querySelector(".ol-laurel")&&s.querySelectorAll(".ol-tu").length===1&&/1\.ª Sakura con 34 puntos/.test(s.getAttribute("aria-label"));}),
+  "el Top maid es un podio olímpico: templo con el mes, la Top 1 al centro con su estatua de oro y laurel, y «TÚ» sobre su puesto");
+ok(/4\.º\s*Yumi\s*9 pts/.test(await p.textContent("#perfilBody .olimpo-resto"))&&/Top maid de octubre:\s*Sakura/.test(await p.textContent("#perfilBody .olimpo-campeona"))
+  &&/la 1\.ª gana \+10, la 2\.ª \+6 y la 3\.ª \+3 puntos/.test(await p.textContent("#perfilBody .olimpo-caja")),
+  "desde el 4.º puesto sigue en tablillas, sale la campeona del mes pasado y el premio de fin de mes");
+await p.evaluate(()=>{const d=document.getElementById("perfilDlg"),s=document.querySelector("#perfilBody .olimpo-caja");d.scrollTop=s.offsetTop-20;});await p.waitForTimeout(400);
+await foto("top-maid.png");
+// 4) La tienda: una máquina expendedora a pantalla completa
+await p.click("#perfilTienda");await p.waitForSelector("#tiendaDlg[open]");await p.waitForTimeout(700);
+ok(!(await p.isVisible("#perfilDlg"))&&await p.evaluate(()=>{const d=document.getElementById("tiendaDlg").getBoundingClientRect();return d.width>=1270&&d.height>=790;}),
+  "la tienda es una máquina que cubre toda la pantalla");
+ok(await p.locator("#vmSlots .vm-slot[data-i]").count()===3&&await p.locator("#vmSlots .vm-slot.vacio").count()===5
+  &&await p.locator('#vmSlots .vm-slot img[src="assets/dishes/taiyaki.webp"]').count()===1&&/9/.test(await p.textContent("#vmSaldo")),
+  "en el vidrio están los 3 premios con su foto (y 5 casillas «Pronto»); la pantalla muestra el saldo");
+await p.click('#vmSlots .vm-slot[data-i="2"]');await p.waitForTimeout(200);
+ok(/TE FALTAN 1 PTS/.test(await p.textContent("#vmMsg"))&&await p.isDisabled("#vmComprar"),"si elige algo que no le alcanza, la pantalla dice cuánto le falta y el botón no se prende");
+await p.click('#vmTeclado [data-k="A"]');await p.click('#vmTeclado [data-k="2"]');await p.waitForTimeout(200);
+ok(/A2 · TAIYAKI · 7 PTS/.test(await p.textContent("#vmMsg"))&&await p.isEnabled("#vmComprar")&&await p.evaluate(()=>document.querySelector('#vmSlots .vm-slot[data-i="1"]').classList.contains("sel")),
+  "con el teclado (A y 2) elige el Taiyaki: se marca en el vidrio y el botón grande se prende");
+await foto("maquina.png");
 let dialogos=0;p.on("dialog",()=>{dialogos++;});
-const taiyaki=p.locator('#perfilBody [data-canje="2"]');
-await taiyaki.click();await p.waitForTimeout(300);
-ok((await M()).canjes.length===0&&/Mantén hasta que se llene/.test(await taiyaki.textContent()),"un toque no compra: el botón dice «Mantén hasta que se llene»");
-await taiyaki.hover();await p.mouse.down();await p.waitForTimeout(600);
-ok(await p.evaluate(()=>document.querySelector('#perfilBody [data-canje="2"]').classList.contains("cargando")),"al mantenerlo presionado el botón se va llenando");
+await p.click("#vmComprar");await p.waitForTimeout(300);
+ok((await M()).canjes.length===0&&/MANTÉN HASTA QUE SE LLENE/.test(await p.textContent("#vmMsg")),"un toque no compra: la pantalla dice «Mantén hasta que se llene»");
+await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(600);
+ok(await p.evaluate(()=>document.getElementById("vmComprar").classList.contains("cargando")),"al mantenerlo presionado, el anillo del botón se va llenando");
 await p.waitForTimeout(900);await p.mouse.up();
-await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1800);
-ok(dialogos===0,"ya no sale la pregunta del navegador: la compra se confirma manteniendo presionado");
-ok(await p.locator('#shibuBody .premio-entrega img[src="assets/dishes/taiyaki.webp"]').count()===1,"Shibu entrega el premio con la foto del plato");
-ok((await M()).canjes.length===1&&(await M()).canjes[0].estado==="entregado"&&/¡Premio comprado!/.test(await p.textContent("#shibuBody"))&&/Taiyaki va a cocina/.test(await p.textContent("#shibuBody")),
-  "al comprar, el premio sale a cocina de una vez (sin esperar a la cajera)");
-ok(fr.canje_aprobado.indexOf(await p.textContent("#shibuTxt"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#shibuTxt"))+"»");
+await p.waitForSelector("#vmHueco .vm-premio img",{timeout:6000});await p.waitForTimeout(1200);
+ok(dialogos===0&&(await M()).canjes.length===1&&(await M()).canjes[0].estado==="entregado","la compra se hace manteniendo presionado (sin preguntas del navegador) y el premio sale a cocina");
+ok(await p.locator('#vmHueco .vm-premio img[src="assets/dishes/taiyaki.webp"]').count()===1&&/¡LISTO! TAIYAKI VA A COCINA/.test(await p.textContent("#vmMsg"))
+  &&/2/.test(await p.textContent("#vmSaldo"))&&/Taiyaki/.test(await p.textContent("#vmRecibo")),
+  "el Taiyaki cae a la bandeja, la pantalla dice que va a cocina, el saldo baja a 2 y sale en el recibo");
+ok(fr.canje_aprobado.indexOf(await p.textContent("#vmGlobo"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#vmGlobo"))+"»");
 await foto("premio.png");
-await p.click("#shibuOk");await p.waitForTimeout(1200);
-ok(await p.isVisible("#perfilDlg")&&/2 puntos/.test(await p.textContent("#perfilBody .perfil-saldos"))&&/Taiyaki · 7 pts\s*A cocina/.test(await p.textContent("#perfilBody")),
-  "vuelve a su perfil: sus puntos bajan y en «Mis premios» sale «A cocina»");
+await p.click("#vmCerrar");await p.waitForTimeout(800);
+ok(await p.isVisible("#perfilDlg")&&/2\s*puntos/.test(await p.textContent("#perfilBody .perfil-saldos"))&&/Taiyaki · 7 pts\s*A cocina/.test(await p.textContent("#perfilBody")),
+  "al cerrar la máquina vuelve a su perfil: sus puntos bajaron y en «Mis premios» sale «A cocina»");
 await p.click("#perfilClose");await p.waitForTimeout(200);
+// 5) Al empezar el mes, la Top maid del mes pasado recibe su premio: su estatua y los puntos volando a la chapita
+await p.evaluate(()=>{window.__MIS.top={id:77,mes:'2026-10-01',puesto:1,puntos:10};window.__MIS.puntos[1]+=10;});
+await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .olimpo-estatua",{timeout:5000});await p.waitForTimeout(1500);
+ok(/¡Fuiste la Top maid de octubre!/.test(await p.textContent("#shibuBody"))&&/\+10\s*puntos para la tienda/.test(await p.textContent("#shibuBody .fiesta-premio"))
+  &&/2 pts/.test(await p.textContent("#btnShibu")),"la Top maid ve su estatua de oro con su premio de +10 puntos (la chapita espera)");
+await foto("premio-del-mes.png");
+await p.click("#shibuOk");await p.waitForTimeout(2600);
+ok((await M()).topVisto.indexOf(77)>=0&&/12 pts/.test(await p.textContent("#btnShibu")),"al seguir, el premio queda visto y la chapita sube contando hasta 12 puntos");
+await p.evaluate(()=>shibuPoll(false));await p.waitForTimeout(500);
+ok(!(await p.isVisible("#shibuDlg")),"el premio del mes no se vuelve a celebrar");
 // La pestaña «Maids» va junto a Edo; la maid ve su día con Shibu
 const tabs=await p.$$eval("#areas [data-area]",l=>l.map(x=>x.dataset.area));
 ok(tabs.indexOf("Maids")===tabs.indexOf("Edo")+1,"la pestaña «Maids» está junto a Edo ("+tabs.join(", ")+")");
 await p.click('#areas [data-area="Maids"]');await p.waitForTimeout(300);
-ok(/Tu día con Shibu/.test(await p.textContent("#areaBody"))&&await p.isVisible("#maidsPerfil")&&await p.isVisible("#maidsJugar")&&!(await p.isVisible('#areas [data-area="Maids"] .cnt')),
-  "en «Maids» la maid ve su día con Shibu, su perfil con la tienda y «Jugar» (sin nada que esperar)");
+ok(/Tu día con Shibu/.test(await p.textContent("#areaBody"))&&await p.isVisible("#maidsPerfil")&&await p.isVisible("#maidsTienda")&&await p.isVisible("#maidsJugar")
+  &&!(await p.isVisible('#areas [data-area="Maids"] .cnt')),"en «Maids» la maid ve su día con Shibu y entra a su perfil, la tienda o los juegos");
 await foto("maids-mesera.png");
 await p.click('#areas [data-area="Tokio"]');
 // 4) Quien no juega (Gestión le apagó las misiones) no ve la pestaña ni la chapita

@@ -11,7 +11,7 @@
 -- pos_kv 'misiones': {"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "Tonkotsu"}
 create or replace function public.mis_ajustes() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select '{"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": ""}'::jsonb
+  select '{"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "", "premios_top": [10, 6, 3]}'::jsonb
          || coalesce((select value from public.pos_kv where key = 'misiones'), '{}'::jsonb)
 $$;
 
@@ -499,19 +499,66 @@ create trigger mis_tras_cierre after update of status on public.pos_sessions
 -- Todo lo que la tablet muestra: misiones con su avance, puntos, fichas, tienda y misiones recién cumplidas (para celebrar).
 -- Top maid del mes (pedido de Edgar, 24/11): las meseras que juegan, ordenadas por los puntos que ganaron con misiones
 -- en el mes (por el día de la misión). No cuentan los juegos (son suerte) ni se resta lo que gastaron en la tienda.
--- Las cajeras no entran. Con empate, el mismo puesto. «yo» marca a quien pregunta.
+-- Las cajeras no entran. Con empate, el mismo puesto.
+create or replace function public.mis_ranking_filas(p_fecha date)
+returns table (employee_id bigint, nombre text, puntos int, puesto int)
+language sql stable security definer set search_path = public as $$
+  select e.id, public.pos_emp_name(e.id), sum(l.puntos)::int, (rank() over (order by sum(l.puntos) desc))::int
+  from public.mis_logros l join public.employees e on e.id = l.employee_id
+  where l.fecha >= date_trunc('month', p_fecha)::date and l.fecha < (date_trunc('month', p_fecha) + interval '1 month')::date
+    and public.mis_juega(e.id) and public.mis_grupo(e.id) = 'meseras'
+  group by e.id
+  having sum(l.puntos) > 0
+$$;
+-- Para la tablet: «yo» marca a quien pregunta
 create or replace function public.mis_ranking(p_fecha date, p_emp bigint) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(jsonb_build_object('puesto', r.puesto, 'nombre', r.nombre, 'puntos', r.pts, 'yo', r.id = p_emp)
+  select coalesce(jsonb_agg(jsonb_build_object('puesto', r.puesto, 'nombre', r.nombre, 'puntos', r.puntos, 'yo', r.employee_id = p_emp)
                             order by r.puesto, r.nombre), '[]'::jsonb)
-  from (select e.id, public.pos_emp_name(e.id) as nombre, sum(l.puntos)::int as pts,
-               rank() over (order by sum(l.puntos) desc)::int as puesto
-        from public.mis_logros l join public.employees e on e.id = l.employee_id
-        where l.fecha >= date_trunc('month', p_fecha)::date and l.fecha < (date_trunc('month', p_fecha) + interval '1 month')::date
-          and public.mis_juega(e.id) and public.mis_grupo(e.id) = 'meseras'
-        group by e.id
-        having sum(l.puntos) > 0) r
+  from public.mis_ranking_filas(p_fecha) r
 $$;
+
+-- Premio del Top maid (Edgar, 24/11): al empezar un mes, las 3 primeras del mes anterior ganan puntos extra para la tienda
+-- (+10, +6 y +3; se cambian en pos_kv 'misiones' → premios_top). Se reparte una sola vez, la primera vez que una tablet
+-- revisa las misiones en el mes nuevo. Con empate, cada una gana el premio de su puesto. Queda como historia del Top maid.
+create table if not exists public.mis_top_premios (
+  id          bigserial primary key,
+  mes         date not null,
+  employee_id bigint not null references public.employees(id) on delete cascade,
+  puesto      int not null,
+  puntos      int not null,
+  nombre      text not null,
+  at          timestamptz not null default now(),
+  visto       boolean not null default false,
+  unique (mes, employee_id));
+alter table public.mis_top_premios enable row level security;
+
+create or replace function public.mis_top_revisar(p_fecha date) returns void
+language plpgsql security definer set search_path = public as $$
+declare v_mes date := (date_trunc('month', p_fecha) - interval '1 month')::date; premios jsonb := public.mis_ajustes() -> 'premios_top';
+begin
+  if exists (select 1 from public.pos_kv where key = 'top_maid' and (value ->> 'mes')::date >= v_mes) then return; end if;
+  perform pg_advisory_xact_lock(hashtext('mis_top_revisar'));
+  if exists (select 1 from public.pos_kv where key = 'top_maid' and (value ->> 'mes')::date >= v_mes) then return; end if;
+  with ins as (
+    insert into public.mis_top_premios (mes, employee_id, puesto, puntos, nombre)
+    select v_mes, r.employee_id, r.puesto, (premios ->> (r.puesto - 1))::int, r.nombre
+    from public.mis_ranking_filas(v_mes) r
+    where r.puesto <= 3 and coalesce((premios ->> (r.puesto - 1))::int, 0) > 0
+    on conflict (mes, employee_id) do nothing
+    returning id, employee_id, puntos)
+  insert into public.mis_puntos (employee_id, delta, motivo, ref_id) select employee_id, puntos, 'top_maid', id from ins;
+  insert into public.pos_kv (key, value) values ('top_maid', jsonb_build_object('mes', v_mes))
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+end $$;
+
+-- La ganadora ya vio su premio (la tablet se lo celebra una sola vez)
+create or replace function public.mis_top_visto(p_emp bigint, p_pin text, p_id bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  update public.mis_top_premios set visto = true where id = p_id and employee_id = p_emp;
+end $$;
 
 create or replace function public.mis_estado(p_emp bigint, p_pin text) returns jsonb
 language plpgsql volatile security definer set search_path = public as $$
@@ -524,6 +571,7 @@ begin
   end if;
   perform public.mis_asignar(f);
   perform public.mis_revisar(p_emp, f, false);
+  perform public.mis_top_revisar(f);
   return jsonb_build_object(
     'juega', true, 'activo', true, 'fecha', f, 'tipo_dia', public.mis_tipo_dia(f),
     'nombre', (select name from public.employees where id = p_emp),
@@ -544,6 +592,11 @@ begin
     'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at) order by c.at desc)
                 from (select * from public.tienda_canjes where employee_id = p_emp order by at desc limit 10) c), '[]'::jsonb),
     'ranking', public.mis_ranking(f, p_emp),
+    'premios_top', coalesce(aj -> 'premios_top', '[10, 6, 3]'::jsonb),
+    'top_premio', (select jsonb_build_object('id', t.id, 'mes', t.mes, 'puesto', t.puesto, 'puntos', t.puntos)
+                   from public.mis_top_premios t where t.employee_id = p_emp and not t.visto order by t.mes desc limit 1),
+    'campeona', (select jsonb_build_object('mes', t.mes, 'nombre', t.nombre) from public.mis_top_premios t
+                 where t.mes = (date_trunc('month', f) - interval '1 month')::date and t.puesto = 1 order by t.nombre limit 1),
     'juegos', jsonb_build_object('activo', coalesce((aj ->> 'juegos')::boolean, true), 'tope_dia', coalesce((aj ->> 'tope_juegos')::int, 3),
                                  'ganado_hoy', public.jgo_ganado_hoy(p_emp)));
 end $$;
@@ -855,7 +908,8 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
   public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
-  public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date), public.mis_ranking(date, bigint)
+  public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date), public.mis_ranking(date, bigint),
+  public.mis_ranking_filas(date), public.mis_top_revisar(date)
   from anon, public, authenticated;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)
@@ -863,6 +917,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['mis_estado(bigint, text)', 'mis_marcar(bigint, text, boolean, bigint[])', 'tienda_canjear(bigint, text, bigint)',
+                           'mis_top_visto(bigint, text, bigint)',
                            'jgo_estado(bigint, text)',
                            'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text)', 'jgo_bj_empezar(bigint, text)',
                            'jgo_bj_accion(bigint, text, bigint, text)', 'gestion_misiones()', 'gestion_mision_guardar(bigint, boolean, text, integer, text, jsonb)',

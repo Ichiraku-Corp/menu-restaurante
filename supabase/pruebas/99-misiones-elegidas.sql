@@ -212,6 +212,36 @@ select public.mis_estado(:hana, '7373') as eh \gset
 reset role;
 select prueba.ok((pg_temp.del_top(:'eh'::jsonb -> 'ranking', 'Hana') ->> 'yo')::boolean,
   'la tablet recibe el Top maid con su puesto marcado');
+
+-- 8) Premio del Top maid al empezar el mes: +10, +6 y +3 a las 3 primeras del mes anterior, una sola vez
+insert into public.employees (name, job_title, pos_can_charge, pos_pin_hash) values
+  ('Rin Prueba', 'Maid · Rin', false, extensions.crypt('7474', extensions.gen_salt('bf'))),
+  ('Yumi Prueba', 'Maid · Yumi', false, extensions.crypt('7575', extensions.gen_salt('bf')));
+select (select id from public.employees where name = 'Rin Prueba') rin, (select id from public.employees where name = 'Yumi Prueba') yumi,
+       (date_trunc('month', :'hoy'::date) - interval '1 month')::date pm \gset
+delete from public.mis_logros where employee_id in (:maid, :hana, :caja, :rin, :yumi);
+delete from public.mis_top_premios;
+delete from public.pos_kv where key = 'top_maid';
+insert into public.mis_logros (employee_id, fecha, nivel, texto, puntos) values
+  (:maid, :'pm', 1, 'Fácil', 3), (:maid, :'pm', 2, 'Media', 3), (:hana, :'pm', 1, 'Fácil', 4),
+  (:rin, :'pm', 1, 'Fácil', 2), (:yumi, :'pm', 1, 'Fácil', 1), (:caja, :'pm', 3, 'Difícil de caja', 9);
+select public.mis_top_revisar(:'hoy');
+select public.mis_top_revisar(:'hoy');
+select prueba.ok((select string_agg(nombre || ':' || puesto || ':' || puntos, ',' order by puesto) from public.mis_top_premios where mes = :'pm') = 'Sakura:1:10,Hana:2:6,Rin:3:3'
+  and (select sum(delta) from public.mis_puntos where motivo = 'top_maid') = 19 and (select count(*) from public.mis_puntos where motivo = 'top_maid') = 3,
+  'al empezar el mes, las 3 primeras del Top maid del mes pasado ganan +10, +6 y +3 puntos (una sola vez; la 4.ª y la cajera no)');
+set role authenticated;
+select public.mis_estado(:maid, '7171') as es \gset
+reset role;
+select prueba.ok((:'es'::jsonb -> 'top_premio' ->> 'puesto')::int = 1 and (:'es'::jsonb -> 'top_premio' ->> 'puntos')::int = 10
+  and :'es'::jsonb -> 'campeona' ->> 'nombre' = 'Sakura',
+  'la ganadora recibe su premio en la tablet y todas ven quién fue la Top maid del mes pasado');
+set role authenticated;
+select public.mis_top_visto(:maid, '7171', (:'es'::jsonb -> 'top_premio' ->> 'id')::bigint);
+select public.mis_estado(:maid, '7171') as es \gset
+reset role;
+select prueba.ok(:'es'::jsonb -> 'top_premio' = 'null'::jsonb or :'es'::jsonb -> 'top_premio' is null,
+  'después de verlo, el premio no se vuelve a celebrar');
 select set_config('request.jwt.claims', '', false);
 rollback;
 \echo TODAS LAS PRUEBAS DE LAS MISIONES ELEGIDAS PASARON

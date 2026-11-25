@@ -24,7 +24,10 @@ const dice=async k=>FR[k].includes((await txt("#jgoBub")).trim());   // ¿el glo
 // Qué casilla de la rueda quedó bajo la flecha (arriba): la rueda gira «w» grados y la casilla k está en k × 24°
 const bajoFlecha=()=>p.evaluate(()=>{const w=+/rotate\(([-\d.]+)\)/.exec(document.getElementById("jgoRueda").getAttribute("transform"))[1];
   const n=document.querySelectorAll("#jgoRueda .r-cas").length,d=(((-w)%360)+360)%360;return {k:Math.round(d/(360/n))%n,resto:Math.abs(d/(360/n)-Math.round(d/(360/n)))};});
-const ir=async(desde,a)=>{if(desde)await p.click(`#${desde} [data-volver]`);await p.click(`#jgoMenu [data-jgo="${a}"]`);};
+// Tocar una carta del menú: la carta hace su animación «usando» (0,3 s) y después se abre su juego
+const VISTA={slot:"jgoSlot",rul:"jgoRul",bj:"jgoBj"};
+const elige=async a=>{await p.click(`#jgoMenu [data-jgo="${a}"]`);await p.waitForSelector(`#${VISTA[a]}:not(.hidden)`,{timeout:3000});};
+const ir=async(desde,a)=>{if(desde)await p.click(`#${desde} [data-volver]`);await elige(a);};
 try{
 await p.goto("http://localhost:8796/pos.html");await p.fill("#devEmail","a@b.c");await p.fill("#devPass","x");await p.click("#device button");
 await pin("2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
@@ -159,7 +162,7 @@ await p.click(await p.isVisible("#jgoOtra")?"#jgoOtra":"#jgoRepartir");await lib
 await p.click("#jgoPlantarse");await libre("jgoBj");
 ok(/Empate: te devolvemos la ficha/.test(await txt("#jgoBjRes"))&&await dice("juego_empate")&&/Fichas: 1/.test(await txt("#jgoFichas")),
   "17 contra 17: «"+(await txt("#jgoBjRes"))+"», la ficha vuelve ("+(await txt("#jgoFichas"))+") y Shibu: «"+(await txt("#jgoBub"))+"»");
-await p.click("#jgoBj [data-volver]");await p.click('#jgoMenu [data-jgo="slot"]');
+await p.click("#jgoBj [data-volver]");await elige("slot");
 // ---- Ruleta con premio: sale x2 → +2 puntos, confeti y Shibu contento
 await p.evaluate(()=>{Object.assign(window.__S.jgo,{ganado_hoy:0,fichas:2});window.__JGO={casilla:10};});
 await ir("jgoSlot","rul");
@@ -167,7 +170,7 @@ await p.click("#jgoRulGirar");await libre("jgoRul");
 ok((await bajoFlecha()).k===10&&/¡x2! \+2 puntos/.test(await txt("#jgoRulRes"))&&(await txt("#jgoHubN"))==="x2"&&await dice("juego_gana")&&await p.evaluate(()=>!!document.querySelector("#jgoRul .jgo-confeti")),
   "salió x2: «"+(await txt("#jgoRulRes"))+"», confeti y Shibu: «"+(await txt("#jgoBub"))+"»");
 await p.waitForTimeout(700);await foto("ruleta-gana.png");
-await p.click("#jgoRul [data-volver]");await p.click('#jgoMenu [data-jgo="slot"]');
+await p.click("#jgoRul [data-volver]");await elige("slot");
 // ---- Tamaños: tablet (1280×800) y teléfono (390×844): nada se sale a lo ancho, los botones miden 44 px o más y en la
 //      tablet cada juego cabe entero sin desplazar
 await p.evaluate(()=>{Object.assign(window.__S.jgo,{ganado_hoy:0,fichas:3});});
@@ -177,7 +180,7 @@ for(const [nombre,w,h] of [["la tablet",1280,800],["el teléfono",390,844]]){
   await p.setViewportSize({width:w,height:h});await p.click("#jgoCerrar");await p.evaluate(()=>abrirJuegos());await p.waitForTimeout(300);
   let bien=true;const detalle=[];
   for(const v of ["menu","slot","rul","bj"]){
-    if(v!=="menu"){if(!(await p.isVisible("#jgoMenu")))await p.click(".jgo-vista:not(.hidden) [data-volver]");await p.click(`#jgoMenu [data-jgo="${v}"]`);}
+    if(v!=="menu"){if(!(await p.isVisible("#jgoMenu")))await p.click(".jgo-vista:not(.hidden) [data-volver]");await elige(v);}
     await p.waitForTimeout(350);const x=await medir();
     const mal=(x.ancho?"":" se sale a lo ancho")+(x.chicos?" con "+x.chicos+" botones chicos":"")+(w>1000&&!x.cabe?" no cabe sin desplazar":"");
     detalle.push(v+mal);if(mal)bien=false;
@@ -185,7 +188,7 @@ for(const [nombre,w,h] of [["la tablet",1280,800],["el teléfono",390,844]]){
   ok(bien,"en "+nombre+" ("+w+"×"+h+") "+(w>1000?"cada vista cabe entera, ":"")+"nada se sale a lo ancho y los botones miden 44 px o más ("+detalle.join(", ")+")");
 }
 await p.click("#jgoBj [data-volver]");
-await p.click('#jgoMenu [data-jgo="rul"]');await p.waitForTimeout(300);
+await elige("rul");await p.waitForTimeout(300);
 ok(await p.evaluate(()=>{const b=document.getElementById("jgoRulGirar").getBoundingClientRect();return b.bottom<=innerHeight&&b.top>=0;}),"en el teléfono «Girar» de la ruleta queda a la vista");
 }catch(e){fallos++;console.log("FALLÓ: la prueba se detuvo: "+e.message);}
 ok(err.length===0,"sin errores de JavaScript"+(err.length?": "+err.join(" | "):""));

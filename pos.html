@@ -14,8 +14,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
 <link rel="stylesheet" href="pos.css?v=630c6ac8d7">
-<link rel="stylesheet" href="shibu.css?v=cc655360ad">
-<link rel="stylesheet" href="juegos.css?v=2ab8a89504">
+<link rel="stylesheet" href="shibu.css?v=0336311b7c">
+<link rel="stylesheet" href="tienda.css">
+<link rel="stylesheet" href="juegos.css?v=90d2bc4ebf">
 <script src="config.js"></script>
 <script src="vendor/sentry-browser-10.42.0/sentry.min.js"></script>
 <script src="monitoreo.js?v=becf3892de"></script>
@@ -29,8 +30,9 @@
 <script src="pos-whatsapp.js?v=5f1daed24f" defer></script>
 <script src="pos-sinred.js?v=15dc6dfc47" defer></script>
 <script src="pos-caja.js?v=aab53aee36" defer></script>
-<script src="pos-juegos.js?v=c53d2a1431" defer></script>
-<script src="pos-shibu.js?v=7a65e72895" defer></script>
+<script src="pos-juegos.js?v=bd3012c592" defer></script>
+<script src="pos-shibu.js?v=58633a9e8f" defer></script>
+<script src="pos-tienda.js?v=b1dde67831" defer></script>
 </head>
 <body>
 <header>
@@ -236,6 +238,7 @@
 <!-- Avisos del restaurante (se confirman con «Entendido») -->
 <!-- Misiones de Shibu: bienvenida y celebración (pos-shibu.js) -->
 <dialog id="shibuDlg"><div id="shibuBody"></div><p style="text-align:right;margin:12px 0 0"><button type="button" class="primary big" id="shibuOk">¡A trabajar!</button></p></dialog>
+<dialog id="tiendaDlg" aria-label="Tienda de Shibu"></dialog>
 <dialog id="perfilDlg"><div class="row between"><h2 style="margin:0">Mi perfil</h2><button type="button" id="perfilClose">Cerrar</button></div><div id="perfilBody"></div></dialog>
 <dialog id="annDlg">
   <h2 id="annTitle">Avisos para ti</h2>
@@ -368,17 +371,29 @@
   <div class="jgo-menu" id="jgoMenu">
     <p class="jgo-apagado hidden" id="jgoApagado" role="status">Los juegos están apagados por hoy</p>
     <div class="jgo-cards">
-      <button type="button" class="jgo-card" data-jgo="slot">
-        <span class="jgo-arte jgo-arte-slot" aria-hidden="true"><i>🍜</i><i>🐶</i><i>🍣</i></span>
-        <b>Tragamonedas</b><small>Tres carretes: junta símbolos iguales</small><span class="jgo-costo">1 ficha por jugada</span>
+      <button type="button" class="jgo-card carta" data-jgo="slot">
+        <span class="carta-cab"><b>Tragamonedas</b><span class="carta-costo" title="Usa 1 ficha"><i class="jgo-moneda" aria-hidden="true"></i>1</span></span>
+        <span class="carta-arte arte-slot" aria-hidden="true"><span class="maq"><span class="maq-luz"></span><span class="maq-ventana"><i>🍜</i><i>🐶</i><i>🍣</i></span><span class="maq-boca"></span></span><span class="maq-palanca"></span></span>
+        <span class="carta-tipo">Carta de suerte</span>
+        <span class="carta-texto">Gira los tres carretes y junta símbolos iguales.</span>
+        <span class="carta-premios"><span><em>3 iguales</em><strong>+3</strong></span><span><em>2 iguales</em><strong>+1</strong></span></span>
+        <span class="carta-usar">Usar carta</span>
       </button>
-      <button type="button" class="jgo-card" data-jgo="rul">
-        <span class="jgo-arte jgo-arte-rul" aria-hidden="true"><i></i></span>
-        <b>Ruleta</b><small>Gira la rueda: x1, x2 o x3 te dan puntos</small><span class="jgo-costo">1 ficha por jugada</span>
+      <button type="button" class="jgo-card carta" data-jgo="rul">
+        <span class="carta-cab"><b>Ruleta</b><span class="carta-costo" title="Usa 1 ficha"><i class="jgo-moneda" aria-hidden="true"></i>1</span></span>
+        <span class="carta-arte arte-rul" aria-hidden="true"><span class="rue"><span class="rue-disco"></span><span class="rue-centro">x3</span></span><span class="rue-flecha"></span></span>
+        <span class="carta-tipo">Carta de suerte</span>
+        <span class="carta-texto">Gira la rueda de premios. Si sale Shibu, no hay premio.</span>
+        <span class="carta-premios"><span><em>x1</em><strong>+1</strong></span><span><em>x2</em><strong>+2</strong></span><span><em>x3</em><strong>+3</strong></span></span>
+        <span class="carta-usar">Usar carta</span>
       </button>
-      <button type="button" class="jgo-card" data-jgo="bj">
-        <span class="jgo-arte jgo-arte-bj" aria-hidden="true"><i>A<em>&#x2660;&#xFE0E;</em></i><i class="roja">K<em>&#x2665;&#xFE0E;</em></i></span>
-        <b>Blackjack</b><small>Acércate a 21 sin pasarte</small><span class="jgo-costo">1 ficha por mano</span>
+      <button type="button" class="jgo-card carta" data-jgo="bj">
+        <span class="carta-cab"><b>Blackjack</b><span class="carta-costo" title="Usa 1 ficha"><i class="jgo-moneda" aria-hidden="true"></i>1</span></span>
+        <span class="carta-arte arte-bj" aria-hidden="true"><span class="naipe">A<em>&#x2660;&#xFE0E;</em></span><span class="naipe roja">K<em>&#x2665;&#xFE0E;</em></span><span class="fichita"></span></span>
+        <span class="carta-tipo">Carta de estrategia</span>
+        <span class="carta-texto">Acércate a 21 sin pasarte y gánale al crupier.</span>
+        <span class="carta-premios"><span><em>Ganas</em><strong>+1</strong></span><span><em>Blackjack</em><strong>+2</strong></span></span>
+        <span class="carta-usar">Usar carta</span>
       </button>
     </div>
     <p class="jgo-nota">Las fichas se ganan cumpliendo las misiones del día. Lo que sale en cada jugada lo decide el sistema.</p>

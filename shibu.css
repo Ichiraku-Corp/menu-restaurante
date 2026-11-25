@@ -61,11 +61,6 @@
 .perfil-saldos { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; }
 .perfil-saldos span { background:var(--chip); border-radius:999px; padding:2px 10px; font-size:13px; }
 .perfil-saldos .pts { background:var(--imo-t); }
-.tienda-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
-.premio-card { border:2px solid var(--line); border-radius:14px; padding:10px; display:grid; gap:4px; background:var(--surface); }
-.premio-card.alcanza { border-color:var(--ink); animation:premioMueve 2.4s ease-in-out infinite; }
-@keyframes premioMueve { 0%, 88%, 100% { transform:none; } 92% { transform:rotate(-3deg); } 96% { transform:rotate(3deg); } }
-.premio-pts { color:var(--muted); font-size:13px; }
 .canje-row { display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:14px; }
 .canje-row.pendiente b { color:var(--warn); }
 .canje-row.entregado b { color:var(--ok); }
@@ -124,56 +119,81 @@
 @keyframes avisoEntra { from { transform:translateX(48px); opacity:0; } to { transform:none; opacity:1; } }
 @keyframes avisoSale { to { transform:translateX(48px); opacity:0; } }
 
-/* ---- Tienda con la foto del plato y «mantén presionado para comprar» */
-.premio-card { position:relative; }
-.premio-foto { aspect-ratio:4 / 3; border-radius:10px; background:var(--chip); overflow:hidden; display:grid; place-items:center; margin-bottom:4px; }
-.premio-foto img { width:100%; height:100%; object-fit:cover; display:block; }
-.premio-card:not(.alcanza) .premio-foto img { filter:grayscale(.75); opacity:.7; }
-.premio-sin-foto { font-size:34px; color:var(--shibu); }
-.premio-card.alcanza:has(.cargando) { animation-play-state:paused; }
-.premio-mantener { position:relative; overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
-.premio-mantener .pm-lleno { position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,255,255,.4); }
-.premio-mantener.cargando .pm-lleno { width:100%; transition:width 1.2s linear; }
-.premio-mantener .pm-txt { position:relative; }
-.premio-entrega { width:132px; aspect-ratio:4 / 3; margin:10px auto 2px; border-radius:14px; overflow:hidden; border:2px solid var(--ink); background:var(--chip);
-  display:grid; place-items:center; animation:entregaCae .6s cubic-bezier(.34,1.56,.64,1) .15s both; }
-.premio-entrega img { width:100%; height:100%; object-fit:cover; display:block; }
-@keyframes entregaCae { from { transform:translateY(-40px) scale(.6); opacity:0; } to { transform:none; opacity:1; } }
+/* ---- Mi perfil: el carnet de la maid */
+@font-face { font-family:"Cinzel"; font-weight:400 900; font-display:swap; src:url(assets/fuentes/cinzel.woff2) format("woff2"); }
+.carnet { position:relative; display:grid; grid-template-columns:auto minmax(0, 1fr) auto; grid-template-areas:"ava quien botones" "ava saldos botones";
+  align-items:center; gap:4px 14px; margin:6px 0 10px; padding:14px 16px; border:2.5px solid var(--ink); border-radius:20px; overflow:hidden;
+  background:linear-gradient(120deg, #FFF6FB 0%, #FDE3EF 55%, #FBD6E5 100%); box-shadow:4px 5px 0 var(--ink); }
+.carnet::after { content:""; position:absolute; right:-40px; top:-50px; width:180px; height:180px; border-radius:50%;
+  background:radial-gradient(rgba(234,91,166,.18) 1.6px, transparent 2px) 0 0 / 12px 12px; pointer-events:none; }
+.carnet-ava { grid-area:ava; width:64px; height:64px; border-radius:50%; display:grid; place-items:center; border:3px solid #fff;
+  box-shadow:0 0 0 2.5px var(--ink); background:linear-gradient(135deg, #F27BBB, #EA5BA6); color:#fff; font:900 28px/1 "Poppins", sans-serif; }
+.carnet-quien { grid-area:quien; min-width:0; display:grid; }
+.carnet-quien b { font-size:21px; font-weight:900; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.carnet-quien span { font-size:13px; font-weight:700; color:var(--muted); }
+.carnet .perfil-saldos { grid-area:saldos; margin:0; gap:8px; }
+.carnet .perfil-saldos span { display:inline-flex; align-items:center; gap:6px; padding:4px 12px 4px 6px; border:2px solid var(--ink); border-radius:999px;
+  background:#fff; font-size:13px; font-weight:700; }
+.carnet .perfil-saldos b { font-size:17px; font-weight:900; font-variant-numeric:tabular-nums; }
+.carnet .perfil-saldos .pts { background:#FFF3C4; }
+.carnet-ico { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#FFC928; border:2px solid var(--ink);
+  font-style:normal; font-size:12px; color:var(--ink); }
+.carnet { --jgo-oro:#FFC928; }
+.carnet .jgo-moneda { width:22px; height:22px; }
+.carnet-botones { grid-area:botones; position:relative; z-index:1; display:grid; gap:8px; }
+.carnet-botones button { min-width:118px; }
 
-/* ---- Top maid del mes: podio con taiyakis de oro, plata y bronce */
-.taiyaki { width:70px; height:44px; overflow:visible; flex:none; }
-.taiyaki.grande { width:104px; height:65px; }
-.taiyaki path, .taiyaki circle { stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
-.taiyaki .t-cuerpo, .taiyaki .t-cola { fill:var(--t-base); }
-.taiyaki .t-esc, .taiyaki .t-agalla { fill:none; stroke:var(--t-osc); stroke-width:1.6; }
-.taiyaki .t-brillo { fill:none; stroke:rgba(255,255,255,.75); stroke-width:2.2; }
-.taiyaki .t-ojo { fill:var(--ink); stroke:none; }
-.taiyaki.oro { --t-base:#FFC928; --t-osc:#B8860B; animation:oroBrilla 2.6s ease-in-out infinite; }
-.taiyaki.plata { --t-base:#DCE1EA; --t-osc:#8A93A6; }
-.taiyaki.bronce { --t-base:#E2A46E; --t-osc:#9C5A2A; }
-@keyframes oroBrilla { 0%, 100% { filter:drop-shadow(0 0 0 rgba(255,201,40,0)); } 50% { filter:drop-shadow(0 0 7px rgba(255,201,40,.95)); } }
-.top-podio { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; align-items:end; margin:16px 0 6px; }
-.top-lugar { position:relative; display:grid; justify-items:center; align-content:end; gap:2px; text-align:center; min-width:0;
-  padding:12px 8px 10px; border:2px solid var(--line); border-radius:14px; background:var(--surface); min-height:132px; }
-.top-lugar.p1 { border-color:var(--ink); background:var(--imo-t); box-shadow:0 4px 0 var(--ink); min-height:168px; padding-top:20px; }
-.top-lugar.p2 { min-height:148px; }
-.top-lugar b { font-weight:800; font-size:15px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.top-lugar b small, .top-resto b small { font-weight:600; color:var(--muted); }
-.top-pts { font-size:13px; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
-.top-lugar em { font-style:normal; font-weight:900; font-size:12px; color:var(--muted); }
-.top-lugar.yo { outline:3px solid var(--accent); outline-offset:2px; }
-.top-cinta { position:absolute; top:-12px; left:50%; transform:translateX(-50%); white-space:nowrap; background:var(--accent); color:#fff;
-  border:2px solid var(--ink); border-radius:999px; padding:1px 10px; font-size:11px; font-weight:800; letter-spacing:.03em; }
-.top-resto { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; }
-.top-resto li { display:grid; grid-template-columns:44px minmax(0, 1fr) auto; align-items:center; gap:8px; padding:6px 12px;
-  border:1.5px solid var(--line); border-radius:10px; background:var(--surface); }
-.top-resto li em { font-style:normal; font-weight:900; color:var(--muted); }
-.top-resto li b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.top-resto li.yo { border-color:var(--accent); background:var(--accent-soft); }
-.top-nota { font-size:12px; margin:8px 0 0; }
+/* ---- La tienda desde el perfil: una mini máquina que invita a entrar */
+.tienda-banner { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; margin:16px 0 6px; padding:12px 14px;
+  border:2.5px solid var(--ink); border-radius:18px; background:linear-gradient(100deg, #1B2D6B, #2A3F86); color:#fff; box-shadow:4px 5px 0 var(--ink); }
+.tb-maq { width:54px; height:68px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:7px 6px 14px; border:2.5px solid var(--ink); border-radius:10px;
+  background:linear-gradient(#F27BBB, #D9468F); box-shadow:inset 0 -6px 0 rgba(0,0,0,.15); }
+.tb-maq i { border-radius:4px; background:#24376F; box-shadow:inset 0 -5px 0 #FFC928; }
+.tb-maq i:nth-child(2) { box-shadow:inset 0 -5px 0 #2FB2E8; } .tb-maq i:nth-child(3) { box-shadow:inset 0 -5px 0 #F38C32; } .tb-maq i:nth-child(4) { box-shadow:inset 0 -5px 0 #8CFFB8; }
+.tb-txt { display:grid; min-width:0; }
+.tb-txt b { font:900 18px/1.2 "Poppins", sans-serif; letter-spacing:.08em; color:#FFE066; text-shadow:0 0 8px rgba(255,201,40,.6); }
+.tb-txt span { font-size:13px; font-weight:600; color:rgba(255,255,255,.85); }
+
+/* ---- Top maid del mes: el podio olímpico griego */
+.olimpo-caja { margin:16px 0 6px; }
+.olimpo-tit { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.olimpo { display:block; width:100%; height:auto; border:2.5px solid var(--ink); border-radius:18px; box-shadow:4px 5px 0 var(--ink); background:#FDF5E6; }
+.ol-friso { font:900 15px/1 "Cinzel", "Poppins", serif; letter-spacing:.32em; fill:var(--ink); }
+.ol-num { font-family:"Cinzel", "Poppins", serif; font-weight:900; fill:#B5AB9A; paint-order:stroke; stroke:#fff; stroke-width:1.2px; }
+.ol-nombre { font-family:"Cinzel", "Poppins", serif; font-weight:900; fill:var(--ink); letter-spacing:.06em; }
+.ol-pts { font-family:"Poppins", sans-serif; font-weight:800; fill:#6B5E4A; letter-spacing:.06em; }
+.ol-premio { font:800 9.5px/1 "Poppins", sans-serif; letter-spacing:.08em; fill:#B8860B; }
+.ol-vacio { font:900 26px/1 "Cinzel", serif; fill:#B5AB9A; }
+.ol-tu text { font:900 11px/1 "Poppins", sans-serif; fill:#fff; letter-spacing:.06em; }
+.ol-rayos { animation:olRayos 40s linear infinite; }
+@keyframes olRayos { to { transform:rotate(360deg); } }
+.ol-glint { animation:olGlint 3.4s ease-in-out infinite; }
+@keyframes olGlint { 0%, 55% { transform:translateX(0); } 100% { transform:translateX(110px); } }
+.ol-destello { animation:olDestello 1.9s ease-in-out infinite; }
+@keyframes olDestello { 0%, 100% { transform:scale(.35); opacity:.25; } 50% { transform:scale(1.1); opacity:1; } }
+.ol-estatua.e1 { filter:drop-shadow(0 0 7px rgba(255,201,40,.85)); }
+.olimpo-resto { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:6px; }
+.olimpo-resto li { display:grid; grid-template-columns:52px minmax(0, 1fr) auto; align-items:center; gap:8px; padding:7px 14px;
+  border:2px solid var(--ink); border-radius:12px; background:linear-gradient(100deg, #FFFFFF, #EEE8DD); }
+.olimpo-resto em { font:900 15px/1 "Cinzel", serif; font-style:normal; color:#8C8170; }
+.olimpo-resto b { font:900 15px/1.2 "Cinzel", "Poppins", serif; letter-spacing:.04em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.olimpo-resto b small { font:700 12px "Poppins", sans-serif; color:var(--muted); letter-spacing:0; }
+.olimpo-resto span { font-weight:800; font-variant-numeric:tabular-nums; color:#6B5E4A; }
+.olimpo-resto li.yo { background:linear-gradient(100deg, #FFF6FB, #FDE3EF); box-shadow:inset 6px 0 0 var(--accent); }
+.olimpo-campeona { margin:10px 0 0; padding:8px 12px; border:2px solid var(--ink); border-radius:12px; background:#FFF3C4; font-weight:700; }
+.olimpo-campeona b { font-family:"Cinzel", "Poppins", serif; font-weight:900; letter-spacing:.05em; }
+.olimpo-nota { margin:8px 2px 0; font-size:12px; color:var(--muted); }
+/* La estatua sola, en la celebración del premio del mes */
+.olimpo-estatua { display:block; width:min(300px, 80%); height:auto; margin:0 auto 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .entra, .salta, .mis-card, .premio-card.alcanza, .shibu-confeti i, .mis-sello.cae, .mis-sello.cae::after, .fiesta-premio,
-  .shibu-aviso, .premio-entrega, #btnShibu.recibe, .taiyaki.oro { animation:none !important; }
+  .entra, .salta, .mis-card, .shibu-confeti i, .mis-sello.cae, .mis-sello.cae::after, .fiesta-premio,
+  .shibu-aviso, #btnShibu.recibe, .ol-rayos, .ol-glint, .ol-destello { animation:none !important; }
   .mis-barra i, .sa-barra i { transition:none !important; }
+}
+@media (max-width: 640px) {
+  .carnet { grid-template-columns:auto minmax(0, 1fr); grid-template-areas:"ava quien" "saldos saldos" "botones botones"; }
+  .carnet-botones { grid-template-columns:1fr 1fr; }
+  .tienda-banner { grid-template-columns:auto minmax(0, 1fr); }
+  .tienda-banner button { grid-column:1 / -1; }
 }
