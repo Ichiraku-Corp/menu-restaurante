@@ -43,7 +43,7 @@ language sql stable security definer set search_path = public as $$
   select case when coalesce((select e.job_title from public.employees e where e.id = p_emp), '') ~* '^\s*caj' then 'cajeras' else 'meseras' end
 $$;
 -- Un número del 0 al 99, fijo para cada día y misión (para las que salen con una frecuencia, como la #43 al 40 %)
-create or replace function public.mis_azar(p_fecha date, p_id bigint) returns int language sql immutable as $$
+create or replace function public.mis_azar(p_fecha date, p_id bigint) returns int language sql immutable set search_path = public as $$
   select (('x' || substr(md5(p_fecha::text || '#' || p_id::text), 1, 7))::bit(28)::int % 100) $$;
 -- ¿Hay una promoción activa ese día? (las misiones de «la promo del día» solo salen así)
 create or replace function public.mis_hay_promo(p_fecha date) returns boolean
@@ -52,8 +52,8 @@ language sql stable security definer set search_path = public as $$
                  and (p.date_from is null or p.date_from <= p_fecha) and (p.date_to is null or p.date_to >= p_fecha)) $$;
 
 -- Hoy en Venezuela, y qué tipo de día es (con los datos de noviembre: martes y miércoles flojos, sábado y domingo fuertes)
-create or replace function public.mis_hoy() returns date language sql stable as $$ select (now() at time zone 'America/Caracas')::date $$;
-create or replace function public.mis_tipo_dia(p_fecha date) returns text language sql immutable as $$
+create or replace function public.mis_hoy() returns date language sql stable set search_path = public as $$ select (now() at time zone 'America/Caracas')::date $$;
+create or replace function public.mis_tipo_dia(p_fecha date) returns text language sql immutable set search_path = public as $$
   select case extract(isodow from p_fecha)::int when 2 then 'flojos' when 3 then 'flojos' when 6 then 'fuertes' when 7 then 'fuertes' else 'normales' end
 $$;
 
@@ -344,14 +344,14 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Tipos que se pueden medir hoy; los demás quedan «pendiente» (no se pueden activar)
-create or replace function public.mis_tipo_medible(p_tipo text) returns boolean language sql immutable as $$
+create or replace function public.mis_tipo_medible(p_tipo text) returns boolean language sql immutable set search_path = public as $$
   select p_tipo in ('comandas', 'atendidas', 'ventas', 'unidades', 'distintos', 'secciones', 'comandas_con', 'promedio', 'primera',
                     'platos_comanda', 'vs_ayer', 'vs_semana', 'top_ventas', 'equipo_meta', 'equipo_unidades', 'sellos', 'clientes_nuevos',
                     'para_llevar', 'delivery', 'rapidas', 'express', 'sin_anulaciones', 'sin_bajas', 'proporcion', 'vuelven', 'opiniones',
                     'nombrada', 'sin_quejas', 'racha', 'cierre_cuadrado')
 $$;
 -- Las que solo se saben al cerrar la caja
-create or replace function public.mis_tipo_cierre(p_tipo text) returns boolean language sql immutable as $$
+create or replace function public.mis_tipo_cierre(p_tipo text) returns boolean language sql immutable set search_path = public as $$
   select p_tipo in ('top_ventas', 'sin_anulaciones', 'sin_bajas', 'proporcion', 'sin_quejas', 'cierre_cuadrado') $$;
 
 -- Cuánto lleva y cuánto pide la misión: {"actual": 2, "meta": 3}
@@ -589,6 +589,16 @@ begin
   end loop;
 end $$;
 
+-- La misma medida, pero si una misión quedó mal escrita (un texto donde va un número, por ejemplo) da «sin avance» en vez
+-- de fallar: esa misión no tumba a las demás ni la pantalla de la maid (tercer revisor, 25/11)
+create or replace function public.mis_medir_seguro(p_emp bigint, p_fecha date, p_tipo text, p_params jsonb) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  return public.mis_medir(p_emp, p_fecha, p_tipo, p_params);
+exception when others then
+  return jsonb_build_object('actual', 0, 'meta', 1, 'error', true);
+end $$;
+
 -- Devuelve las misiones nuevas cumplidas, o -1 si no pudo revisar (otra tablet estaba revisando a esta maid)
 create or replace function public.mis_revisar(p_emp bigint, p_fecha date, p_cierre boolean default false) returns int
 language plpgsql security definer set search_path = public as $$
@@ -601,7 +611,7 @@ begin
     if exists (select 1 from public.mis_logros where employee_id = p_emp and fecha = p_fecha and nivel = d.slot) then continue; end if;
     if public.mis_tipo_cierre(d.tipo) and not p_cierre then continue; end if;
     if (d.tipo like 'equipo_%' or public.mis_tipo_cierre(d.tipo)) and not public.mis_trabajo(p_emp, p_fecha) then continue; end if;
-    r := public.mis_medir(p_emp, p_fecha, d.tipo, d.params);
+    r := public.mis_medir_seguro(p_emp, p_fecha, d.tipo, d.params);
     if (r ->> 'actual')::numeric >= (r ->> 'meta')::numeric then
       insert into public.mis_logros (employee_id, fecha, nivel, texto, puntos) values (p_emp, p_fecha, d.slot, d.texto, d.puntos)
         on conflict do nothing returning id into lid;
@@ -621,6 +631,7 @@ end $$;
 -- Al cobrar un pedido: se revisan las misiones de quienes anotaron, abrieron o cobraron ese pedido.
 -- Nunca frena un cobro (revisión del 25/11): cualquier problema se ignora, no espera candados de otras tablets y tiene
 -- un tope de 1 segundo. Las demás maids (equipo, bandera) se revisan solas en su tablet cada 30 s y al cerrar la caja.
+-- Cada maid va por su cuenta: si la revisión de una falla, las demás igual reciben lo suyo (tercer revisor, 25/11).
 create or replace function public.mis_tras_cobro() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare f date; e bigint; t0 timestamptz := clock_timestamp();
@@ -628,7 +639,7 @@ begin
   begin
     perform set_config('ichiraku.mis_sin_espera', '1', true);
     f := (new.closed_at at time zone 'America/Caracas')::date;
-    perform public.mis_asignar(f);
+    begin perform public.mis_asignar(f); exception when others then null; end;
     for e in
       select distinct x from (
         select i.created_by x from public.pos_items i where i.order_id = new.id
@@ -636,7 +647,7 @@ begin
       where x is not null
     loop
       exit when clock_timestamp() - t0 > interval '1 second';
-      perform public.mis_revisar(e, f, false);
+      begin perform public.mis_revisar(e, f, false); exception when others then null; end;
     end loop;
   exception when others then null;
   end;
@@ -649,18 +660,26 @@ create trigger mis_tras_cobro after update of status on public.pos_orders
 
 -- Al cerrar la caja: se miden las misiones del final del día para todas las que trabajaron. Nunca frena el cierre:
 -- no espera candados y tiene un tope de 2 segundos; las que no alcance quedan pendientes y las revisa su tablet.
+-- Las pendientes se anotan primero y aparte, y cada maid va por su cuenta: si la revisión de una falla, las demás igual
+-- quedan revisadas y la suya la termina su tablet (tercer revisor, 25/11).
 create or replace function public.mis_tras_cierre() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare f date; e bigint; t0 timestamptz := clock_timestamp();
 begin
+  perform set_config('ichiraku.mis_sin_espera', '1', true);
+  f := (new.opened_at at time zone 'America/Caracas')::date;
   begin
-    perform set_config('ichiraku.mis_sin_espera', '1', true);
-    f := (new.opened_at at time zone 'America/Caracas')::date;
     delete from public.mis_pendientes where fecha < f - 7;
     insert into public.mis_pendientes (employee_id, fecha) select id, f from public.employees where public.mis_juega(id) on conflict do nothing;
+  exception when others then null;
+  end;
+  begin
     for e in select employee_id from public.mis_pendientes where fecha = f order by employee_id loop
       exit when clock_timestamp() - t0 > interval '2 seconds';
-      if public.mis_revisar(e, f, true) >= 0 then delete from public.mis_pendientes where employee_id = e and fecha = f; end if;
+      begin
+        if public.mis_revisar(e, f, true) >= 0 then delete from public.mis_pendientes where employee_id = e and fecha = f; end if;
+      exception when others then null;
+      end;
     end loop;
     if clock_timestamp() - t0 < interval '2 seconds' then perform public.com_resolver_duelos(f); end if;   -- Duelo amistoso: quién vendió más hoy
   exception when others then null;
@@ -834,9 +853,9 @@ language sql stable security definer set search_path = public as $$
   from public.tienda_items t where t.id = p_item
 $$;
 -- La semana va de lunes a domingo; la ventana premium cambia cada 2 semanas (desde el lunes 5 de enero de 2026)
-create or replace function public.tienda_lunes(p_fecha date) returns date language sql immutable as $$
+create or replace function public.tienda_lunes(p_fecha date) returns date language sql immutable set search_path = public as $$
   select (p_fecha - (extract(isodow from p_fecha)::int - 1))::date $$;
-create or replace function public.tienda_quincena(p_fecha date) returns date language sql immutable as $$
+create or replace function public.tienda_quincena(p_fecha date) returns date language sql immutable set search_path = public as $$
   select (date '2026-01-05' + ((public.tienda_lunes(p_fecha) - date '2026-01-05') / 14) * 14)::date $$;
 -- Lo que hay en la máquina esa semana: todas las fijas, 3 de las que rotan y 1 premium. La elección es la misma para
 -- todas durante la semana (sale de la fecha, no de quién mira)
@@ -920,11 +939,11 @@ $$;
 create or replace function public.mis_nivel(p_emp bigint, p_fecha date) returns int
 language sql stable security definer set search_path = public as $$
   select coalesce((public.mis_estrellas(p_emp, p_fecha) ->> 'nivel')::int, 0) $$;
-create or replace function public.com_listo(p_efecto text) returns boolean language sql immutable as $$
+create or replace function public.com_listo(p_efecto text) returns boolean language sql immutable set search_path = public as $$
   select p_efecto in ('x2_todo', 'x2_hoy', 'x3_proxima', 'x2_dificil', 'x2_finde', 'mas1_mision', 'hora_feliz', 'extra_facil', 'extra_dificil',
                       'doble_media', 'sorpresa', 'cambio', 'mapa', 'reloj', 'fichas3', 'trebol', 'tope5', 'ficha_dorada', 'carta', 'bandera',
                       'regalo', 'duelo', 'cupon', 'premio_sorpresa', 'insignia') $$;
-create or replace function public.com_instantaneo(p_efecto text) returns boolean language sql immutable as $$
+create or replace function public.com_instantaneo(p_efecto text) returns boolean language sql immutable set search_path = public as $$
   select p_efecto in ('fichas3', 'regalo', 'premio_sorpresa', 'insignia', 'cambio', 'reloj') $$;
 create or replace function public.com_reglas() returns jsonb
 language sql stable security definer set search_path = public as $$
@@ -1261,7 +1280,7 @@ begin
                   order by d.slot = 0, d.slot)
                 from public.com_misiones(p_emp, f) d
                 left join public.mis_logros l on l.employee_id = p_emp and l.fecha = f and l.nivel = d.slot
-                cross join lateral (select public.mis_medir(p_emp, f, d.tipo, d.params) m) z), '[]'::jsonb),
+                cross join lateral (select public.mis_medir_seguro(p_emp, f, d.tipo, d.params) m) z), '[]'::jsonb),
     'grupo', public.mis_grupo(p_emp),
     'nuevos', coalesce((select jsonb_agg(jsonb_build_object('id', l.id, 'nivel', coalesce(p.nivel, l.nivel), 'slot', l.nivel, 'texto', l.texto,
                   'puntos', l.puntos, 'comodin', l.extra, 'origen', p.origen) order by l.at)
@@ -1393,7 +1412,7 @@ begin
   if public.mis_saldo(p_emp) < k.puntos then raise exception 'Te faltan % puntos para %', k.puntos - public.mis_saldo(p_emp), k.nombre; end if;
   -- Lo que hay que elegir antes de comprar
   if k.efecto in ('regalo', 'duelo') then
-    otra := case when coalesce(v_datos ->> 'para', '') ~ '^\d+$' then (v_datos ->> 'para')::bigint end;
+    otra := case when coalesce(v_datos ->> 'para', '') ~ '^\d{1,15}$' then (v_datos ->> 'para')::bigint end;
     if otra is null or otra = p_emp or not public.mis_juega(otra) then raise exception 'Elige a una compañera'; end if;
     dat := jsonb_build_object(case when k.efecto = 'regalo' then 'para' else 'rival' end, otra);
   elsif k.efecto = 'insignia' then
@@ -1566,7 +1585,7 @@ end $$;
 -- Ruleta (pedido de Edgar, 24/11): una rueda de premios de 15 casillas. 12 tienen la cara de Shibu (sin premio) y 3
 -- pagan x1, x2 y x3 (1, 2 o 3 puntos): se gana 3 de cada 15 veces, el 20 %. Cada casilla sale con la misma probabilidad,
 -- así la rueda que se ve dice la verdad. La tablet la dibuja con esta misma lista (jgo_estado la manda).
-create or replace function public.jgo_ruleta_casillas() returns int[] language sql immutable as $$
+create or replace function public.jgo_ruleta_casillas() returns int[] language sql immutable set search_path = public as $$
   select array[3, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2, 0, 0, 0, 0] $$;
 -- Con el Trébol de cuatro hojas (comodín), la rueda de ese día tiene la mitad de caras de Shibu: gana 1 de cada 3 veces
 create or replace function public.jgo_casillas(p_emp bigint) returns int[]
@@ -1596,7 +1615,7 @@ begin
 end $$;
 
 -- Blackjack: el crupier se planta en 17. Ganar = 1 punto, blackjack = 2, empate = devuelve la ficha.
-create or replace function public.jgo_bj_total(p_cartas jsonb) returns int language plpgsql immutable as $$
+create or replace function public.jgo_bj_total(p_cartas jsonb) returns int language plpgsql immutable set search_path = public as $$
 declare t int := 0; ases int := 0; c text; r text;
 begin
   for c in select jsonb_array_elements_text(coalesce(p_cartas, '[]'::jsonb)) loop
@@ -1646,7 +1665,7 @@ begin
   perform public.jgo_pagar(p.employee_id, 'blackjack', premio, p_id);
 end $$;
 
-create or replace function public.jgo_bj_mensaje(p_estado text, p_premio int) returns text language sql immutable as $$
+create or replace function public.jgo_bj_mensaje(p_estado text, p_premio int) returns text language sql immutable set search_path = public as $$
   select case p_estado when 'blackjack' then case when p_premio > 1 then '¡Blackjack! +' || p_premio || ' puntos'
                                                   when p_premio = 1 then '¡Blackjack! +1 punto (llegaste al tope de hoy)'
                                                   else '¡Blackjack! (ya llegaste al tope de hoy)' end
@@ -1660,6 +1679,7 @@ language plpgsql security definer set search_path = public as $$
 declare mazo jsonb; j jsonb; c jsonb; pid bigint; v jsonb; carta bigint;
 begin
   perform public.pos_auth(p_emp, p_pin);
+  perform pg_advisory_xact_lock(hashtext('juegos'), p_emp::int);   -- dos toques a la vez no reparten dos manos
   if exists (select 1 from public.jgo_partidas where employee_id = p_emp and juego = 'blackjack' and estado = 'jugando') then
     select id into pid from public.jgo_partidas where employee_id = p_emp and juego = 'blackjack' and estado = 'jugando' order by id desc limit 1;
     v := public.jgo_bj_vista(pid);
@@ -1748,9 +1768,19 @@ begin
   select * into k from public.mis_catalogo where id = p_id;
   if k.id is null then raise exception 'Misión no encontrada'; end if;
   if coalesce(p_activa, false) and not public.mis_tipo_medible(k.tipo) then raise exception 'Esa misión todavía no se puede medir sola'; end if;
+  -- Cada dato con el tipo con que lo lee mis_medir: números (las horas, minutos y conteos, enteros), sí o no, textos y la
+  -- lista de platos. Un dato mal escrito dejaría a esa misión sin poder medirse (tercer revisor, 25/11).
   if (p_params is not null and case when jsonb_typeof(p_params) = 'object' then exists (select 1 from jsonb_each(p_params) x
-       where x.key in ('n', 'monto', 'dias', 'nivel', 'pct', 'minimo', 'min') and jsonb_typeof(x.value) <> 'number') else true end) then
-    raise exception 'Revisa los datos de la misión: los números van como números'; end if;
+       where case
+         when x.key in ('n', 'monto', 'dias', 'pct', 'min', 'platos') then jsonb_typeof(x.value) <> 'number'
+         when x.key in ('nivel', 'minimo', 'desde', 'hasta', 'minutos', 'visitas', 'estrellas') then
+           case when jsonb_typeof(x.value) <> 'number' then true
+                else (x.value #>> '{}')::numeric <> trunc((x.value #>> '{}')::numeric) or abs((x.value #>> '{}')::numeric) > 100000 end
+         when x.key in ('semana', 'grande', 'extras', 'promo', 'sorpresa') then jsonb_typeof(x.value) <> 'boolean'
+         when x.key in ('cat', 'con') then jsonb_typeof(x.value) <> 'string'
+         when x.key = 'nombres' then jsonb_typeof(x.value) <> 'array'
+         else false end) else true end) then
+    raise exception 'Revisa los datos de la misión: los números van como números (horas, minutos y conteos sin decimales), los sí o no como true o false y «nombres» como una lista'; end if;
   update public.mis_catalogo set activa = coalesce(p_activa, activa), texto = coalesce(nullif(trim(p_texto), ''), texto),
     nivel = coalesce(p_nivel, nivel), dias = coalesce(p_dias, dias), params = coalesce(p_params, params), updated_at = now() where id = p_id;
 end $$;
@@ -1788,6 +1818,10 @@ begin
                                                                           where k not in ('activo', 'juegos', 'tope_juegos', 'plato_semana', 'tope_mes_usd',
                                                                                           'canjes_dia', 'grande_puntos', 'grandes_semana', 'rota_ventanas',
                                                                                           'rota_por_semana', 'premium_nivel', 'comodines', 'mejoras')));
+  if coalesce(jsonb_typeof(v -> 'activo'), 'boolean') <> 'boolean' or coalesce(jsonb_typeof(v -> 'juegos'), 'boolean') <> 'boolean' then
+    raise exception 'Revisa los ajustes: «activo» y «juegos» van como sí o no (true o false)'; end if;
+  if coalesce(jsonb_typeof(v -> 'plato_semana'), 'string') not in ('string', 'null') then
+    raise exception 'El plato de la semana va con su nombre, entre comillas'; end if;
   if (v ->> 'tope_juegos')::int not between 0 and 10 then raise exception 'El tope de los juegos va de 0 a 10 puntos'; end if;
   if coalesce((v ->> 'tope_mes_usd')::numeric, 0) not between 0 and 1000 then raise exception 'El tope del mes va de $0 (sin tope) a $1000'; end if;
   if (v ->> 'canjes_dia')::int not between 1 and 10 then raise exception 'Los premios por día van de 1 a 10'; end if;
@@ -1857,7 +1891,7 @@ end $$;
 -- ---------------------------------------------------------------- Permisos: las funciones internas no se llaman desde afuera
 revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), public.mis_saldo(bigint), public.mis_fichas_saldo(bigint),
   public.jgo_ganado_hoy(bigint), public.mis_items(bigint, date), public.mis_items_rango(bigint, date, date), public.mis_comandas(bigint, date), public.mis_venta_dia(bigint, date),
-  public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
+  public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_medir_seguro(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
   public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
   public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date), public.mis_ranking(date, bigint),
@@ -2019,4 +2053,6 @@ from (values ('Refresco', 5, 'Refresco', 'Lata', 1, 'fija', null::int), ('Taiyak
              ('Milk Tea', 10, 'Milk Tea', '', 10, 'premium', null), ('Amaterasu', 20, 'Amaterasu', 'Peq', 11, 'premium', null))
      x(nombre, puntos, plato, variant, orden, ventana, por_semana)
 join public.dishes d on d.name = x.plato
+where not exists (select 1 from public.tienda_items) and not exists (select 1 from public.pos_kv where key = 'tienda_sembrada')
 on conflict (nombre) do nothing;
+insert into public.pos_kv (key, value) values ('tienda_sembrada', jsonb_build_object('fecha', current_date)) on conflict (key) do nothing;
