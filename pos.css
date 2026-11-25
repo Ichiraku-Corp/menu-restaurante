@@ -709,6 +709,15 @@ dialog h2 { font-weight:900; }
    los teléfonos y toda la página quedaba corrida). Primero se achica; si igual no cabe, pasa a una segunda fila. */
 header { flex-wrap:wrap; row-gap:6px; }
 @media (max-width: 1100px) { .health b { display:none; } .health { gap:6px; padding:4px 10px; } }
+/* En la Fire acostada (962 px) la barra cabe en una fila aunque esté WhatsApp (revisión del 25/11: con WhatsApp pasaba a
+   2 filas y en el pedido «Más opciones» quedaba fuera): WhatsApp queda con su ícono y su número, y el avance de las
+   misiones se ve dentro de Mi perfil. */
+@media (max-width: 1100px) {
+  #btnShibu .pf-mis { display:none; }
+  #btnWa { font-size:0; min-width:46px; display:inline-flex; align-items:center; justify-content:center; gap:4px; }
+  #btnWa::before { content:"💬"; font-size:19px; line-height:1; }
+  #btnWa .wabadge { font-size:12px; }
+}
 @media (max-width: 900px) { #btnShibu .pf-mis { display:none; } header .brand h1 small { display:none; } }
 @media (max-width: 760px) {
   header .brand h1 { display:none; }
