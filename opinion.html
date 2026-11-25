@@ -7,7 +7,9 @@
 <title>Ichiraku Ramen · Tu opinión</title>
 <meta name="description" content="Cuéntanos cómo te fue en Ichiraku Ramen.">
 <meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#EA5BA6">
+<meta name="darkreader-lock">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   /* Marca Ichiraku · estilo E02 «Interfaz de juego» (encuestas): ventana de app, botones gruesos, interruptor y barra */
@@ -19,7 +21,7 @@
   :root {
     --noche: #1B2D6B; --rosa: #EA5BA6; --celeste: #2FB2E8; --oro: #FFC928; --crema: #FAF6F0; --blanco: #fff;
     --texto: #1B2D6B; --suave: #5a6690; --linea: #d9dcea; --error: #b3261e;
-    color-scheme: light;
+    color-scheme: light dark;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -87,6 +89,20 @@
   .xp { margin-top: 18px; font-size: 12.5px; font-weight: 800; color: var(--suave); letter-spacing: .04em; text-transform: uppercase; }
   footer { text-align: center; font-size: 12px; color: var(--suave); margin-top: 18px; }
   footer a { color: var(--suave); }
+  /* Modo oscuro («Noche»), igual que la carta: así el navegador ya no la oscurece a la fuerza */
+  @media (prefers-color-scheme: dark) {
+    :root { --noche: #070C26; --crema: #0E1530; --blanco: #18234D; --texto: #F3F0FF; --suave: #AEB6DA; --linea: #3A4780; --error: #FF8A80; }
+    body { background-image: radial-gradient(rgba(47, 178, 232, .26) 1.6px, transparent 1.7px); }
+    .kana, .gr .kana-g { color: #FF8CC8; }
+    .star path { fill: #2A3770; stroke: #AEB6DA; }
+    .star.on path { fill: var(--oro); stroke: #070C26; }
+    .meter { background: #212E62; }
+    textarea, input[type=text], input[type=tel] { background: #212E62; }
+    textarea::placeholder, input::placeholder { color: #8F98C2; }
+    .btn.google, .btn.sec { background: #fff; color: #1B2D6B; }
+    .card { background: #132A55; }
+    .nota a { color: #9FD8F5; }
+  }
 </style>
 </head>
 <body>
