@@ -51,8 +51,16 @@
   $("form").addEventListener("input", function () { $("error").hidden = true; });  // al corregir, se quita el aviso
   $("quiero").addEventListener("change", function () { $("datos").hidden = !this.checked; if (this.checked) $("nombre").focus(); });
 
+  // Quién atendió (lo dice el recibo): «¿Cómo te atendió Mei?» · «¿Cómo te atendieron Mei y Nami?»
+  function pregunta(quien) {
+    quien = (Array.isArray(quien) ? quien : []).filter(function (x) { return typeof x === "string" && x.trim(); }).slice(0, 3);
+    if (!quien.length) return "¿Cómo te fue?";
+    var juntos = quien.length > 1 ? quien.slice(0, -1).join(", ") + " y " + quien[quien.length - 1] : quien[0];
+    return "¿Cómo te " + (quien.length > 1 ? "atendieron " : "atendió ") + juntos + "?";
+  }
   function formulario() {
     var info = S.info || {};
+    $("titulo").textContent = pregunta(info.atendio);
     $("fecha").textContent = info.fecha ? "Tu visita del " + info.fecha + " · tarda 1 minuto" : "";
     calificar(info.rating || 0);
     $("comentario").value = info.comment || ""; $("cuenta").textContent = $("comentario").value.length + " / 500";

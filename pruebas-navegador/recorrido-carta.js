@@ -96,8 +96,48 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   const dibujos = await p.$$eval("main section > h2", (l) => l.map((h) => { const i = h.querySelector("img.dibujo"); return h.firstChild.textContent.trim() + ":" + (i && i.complete && i.naturalWidth > 0 ? i.getAttribute("src").split("/").pop() : "-"); }));
   ok(dibujos.length > 0 && dibujos.every((t) => !/:-$/.test(t)) && dibujos.some((t) => /^Entradas:gyoza\.svg$/.test(t)), "cada sección trae su dibujo (" + dibujos.join(", ") + ")");
   const bien = await p.evaluate(() => { const b = document.querySelector(".bienvenida"); if (!b) return null;
-    return { imgs: [...b.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth > 0).length, links: [...b.querySelectorAll(".nombres a")].map((a) => a.firstChild.textContent.trim() + ">" + (document.querySelector(a.getAttribute("href") + " > h2") || { firstChild: { textContent: "?" } }).firstChild.textContent.trim()) }; });
-  ok(bien && bien.imgs === 3 && bien.links.join(",") === "Miso>Ramen,Dango>Postres,Imo>Entradas", "la bienvenida trae a las tres maids y cada una lleva a su parte (" + (bien ? bien.links.join(", ") : "no está") + ")");
+    const cargada = (i) => i.complete && i.naturalWidth > 0;
+    return { imgs: [...b.querySelectorAll(".intro > img")].filter(cargada).length, cerca: [...b.querySelectorAll(".perfil .cerca")].filter(cargada).length,
+      logo: [...b.querySelectorAll(".sello img")].filter(cargada).length,
+      kanji: [...b.querySelectorAll(".nombres small[lang=ja]")].map((x) => x.textContent).join(" "),
+      links: [...b.querySelectorAll(".nombres a")].map((a) => a.firstChild.textContent.trim() + ">" + (document.querySelector(a.getAttribute("href") + " > h2") || { firstChild: { textContent: "?" } }).firstChild.textContent.trim()) }; });
+  ok(bien && bien.imgs === 3 && bien.cerca === 3 && bien.logo === 1 && bien.links.join(",") === "Miso>Ramen,Dango>Postres,Imo>Entradas" && bien.kanji === "味噌 団子 芋",
+    "la bienvenida trae a las tres maids (juntas, con el logo, y de cerca), su kanji, y cada una lleva a su parte (" + (bien ? bien.links.join(", ") : "no está") + ")");
+  // Presentación de las maids (25/11): las tres con el logo y después cada una con su ficha; vuelta de 15 s
+  const est = () => p.evaluate(() => { const b = document.querySelector(".bienvenida");
+    return { actual: b.getAttribute("data-actual"), quieta: b.classList.contains("quieta"), pausa: b.querySelector(".pausa").getAttribute("aria-pressed"),
+      on: [...b.querySelectorAll(".escena.on")].map((e) => e.getAttribute("data-maid") || "intro").join(","),
+      visibles: [...b.querySelectorAll(".escena:not([aria-hidden])")].map((e) => e.getAttribute("data-maid") || "intro").join(",") }; });
+  const fichas = await p.$$eval(".bienvenida .perfil", (l) => l.map((e) => e.getAttribute("data-maid") + ": " + e.querySelector(".ficha").textContent));
+  ok(fichas.length === 3 && /Maid atleta.*19 años.*1,62 m.*Maid capitana.*La número 1 de su clase.*Le gusta el ajedrez/.test(fichas[0]) && /Maid cantante.*18 años.*1,75 m.*Comer es su pasión/.test(fichas[1])
+     && /Maid streamer.*19 años.*1,61 m.*PlayStation 1.*Ama el café.*Odia el calor/.test(fichas[2]), "cada maid tiene su ficha: rol, edad, estatura y sus tres datos");
+  await p.evaluate(() => window.scrollTo(0, 0));
+  const press = await p.evaluate(() => { const x = document.querySelector(".bienvenida .press"); return x && x.textContent + "|" + getComputedStyle(x).textTransform + "|" + x.getAttribute("aria-hidden"); });
+  ok(press === "Ichiraku Ramen|uppercase|true", "en la intro, «ICHIRAKU RAMEN» en blanco parpadea como un PRESS START (los lectores de pantalla leen el logo una sola vez)");
+  let e0 = await est();
+  ok(e0.actual === "intro" && e0.on === "intro" && e0.visibles === "intro" && e0.pausa === "false", "empieza con las tres y el logo; las fichas quedan ocultas para los lectores de pantalla");
+  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "miso", null, 7000);
+  e0 = await est();
+  ok(e0.actual === "miso" && e0.on === "miso" && e0.visibles === "miso", "a los 4 segundos entra Miso con su ficha");
+  await p.click(".bienvenida .pausa");
+  e0 = await est();
+  ok(e0.quieta && e0.pausa === "true" && /Seguir/.test(await p.getAttribute(".bienvenida .pausa", "aria-label")), "el botón de pausa la detiene (y dice que ahora sirve para seguir)");
+  await p.waitForTimeout(4600);
+  ok((await est()).actual === "miso", "detenida, no cambia de maid");
+  await p.click(".bienvenida .pausa");
+  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "dango", null, 7000);
+  ok((await est()).pausa === "false", "al seguir, pasa a Dango");
+  await p.fill("#q", "gyoza");
+  await esperar(p, () => document.querySelector(".bienvenida").hidden, null, 3000);
+  ok((await est()).quieta, "al buscar, la bienvenida se aparta y se detiene");
+  await p.fill("#q", "");
+  await esperar(p, () => !document.querySelector(".bienvenida").hidden, null, 3000);
+  await p.evaluate(() => window.scrollTo(0, 0));
+  await esperar(p, () => !document.querySelector(".bienvenida").classList.contains("quieta"), null, 3000).catch(() => {});
+  ok(!(await est()).quieta, "al borrar la búsqueda y volver arriba, la presentación sigue");
+  await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await esperar(p, () => document.querySelector(".bienvenida").classList.contains("quieta"), null, 3000).catch(() => {});
+  ok((await est()).quieta, "si se baja por la carta y no se ve, se detiene (no gasta batería)");
   ok(err.length === 0, "sin errores de JavaScript" + (err.length ? ": " + err.join(" | ") : ""));
   await b.close(); srv.close();
   if (fallos) { console.log(fallos + " prueba(s) fallaron"); process.exit(1); }

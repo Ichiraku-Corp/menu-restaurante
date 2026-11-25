@@ -81,5 +81,23 @@ ok(t[0] === 0x1b && t[1] === 0x40 && ceros.length === 512 && ceros.every((x) => 
 const t2 = P.render("@qr " + "x".repeat(300));
 ok(t2.indexOf(Buffer.from("xxxx")) < 0, "si el enlace no cabe, el ticket sale igual sin el código");
 
+// 5) El QR dentro del bloque de reseña (25/11) se lee de vuelta desde la imagen que va a la impresora, con su margen blanco
+const bloque = P.resenaBytes(BASE + "AbCdEfGh12_-", ["Mei", "Nami"]);
+const filas = []; let anchoB = 0;
+for (let k = bloque.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00])); k >= 0; k = bloque.indexOf(Buffer.from([0x1d, 0x76, 0x30, 0x00]), k + 1)) {
+  const bw2 = bloque[k + 4] | (bloque[k + 5] << 8), h2 = bloque[k + 6] | (bloque[k + 7] << 8); anchoB = bw2 * 8;
+  for (let r = 0; r < h2; r++) filas.push(bloque.subarray(k + 8 + r * bw2, k + 8 + (r + 1) * bw2)); k += 8 + bw2 * h2 - 1;
+}
+const negro = (x, y) => (filas[y][x >> 3] & (0x80 >> (x & 7))) !== 0;
+const qb = P.qrMatrix(BASE + "AbCdEfGh12_-"), [hx, hy, hl] = P.RESENA.hueco, px = 6, mx = hx + (hl - (qb.size + 8) * px) / 2 + 4 * px, my = hy + (hl - (qb.size + 8) * px) / 2 + 4 * px;
+const leido = { size: qb.size, fn: qb.fn, modules: qb.modules.map((fila, r) => fila.map((_, c) => negro(mx + c * px + 3, my + r * px + 3))) };
+const rb = leer(leido);
+ok(anchoB === 512 && !rb.error && rb.sindromesCero && rb.texto === BASE + "AbCdEfGh12_-", "el QR del bloque de reseña se lee de vuelta desde la imagen impresa: " + (rb.texto || rb.error));
+let margenSucio = 0;
+for (let y = my - 4 * px; y < my + (qb.size + 4) * px; y++) for (let x = mx - 4 * px; x < mx + (qb.size + 4) * px; x++) {
+  const dentro = x >= mx && x < mx + qb.size * px && y >= my && y < my + qb.size * px; if (!dentro && negro(x, y)) margenSucio++;
+}
+ok(margenSucio === 0, "y alrededor del código quedan 4 módulos en blanco, como pide la norma (" + margenSucio + " puntos negros)");
+
 if (fallos) { console.log(fallos + " prueba(s) fallaron"); process.exit(1); }
 console.log("TODAS LAS PRUEBAS DEL CÓDIGO QR PASARON");

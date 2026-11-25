@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-B1RMNg9xv704Lg3Yok4K3Ty6xHRmwpcKCRnqYmKGC4E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-gbc2gyhgH8DlPKdc+0c0Y5dtTJZXnBdMTaBn/sUTpz8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -18,7 +18,10 @@
 <meta property="og:image:alt" content="Ichiraku Ramen: ramen, sushi y postres japoneses">
 <meta property="og:locale" content="es_VE">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#FAF6F0">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#FAF6F0">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0E1530">
+<meta name="darkreader-lock">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <style>
   /* Estilo «Pop dulce» (E01 de la marca): crema con puntos, contornos Azul Noche tipo sticker y cada categoría con el color de su maid:
@@ -93,11 +96,12 @@
   .dibujo { position: absolute; right: 10px; top: 50%; width: 98px; height: 98px; transform: translateY(-50%) rotate(-7deg);
     filter: drop-shadow(2.5px 0 0 #fff) drop-shadow(-2.5px 0 0 #fff) drop-shadow(0 2.5px 0 #fff) drop-shadow(0 -2.5px 0 #fff) drop-shadow(3px 4px 0 rgba(27,45,107,.85)); }
   section.con-dibujo:nth-of-type(even) .dibujo { transform: translateY(-50%) rotate(6deg); }
-  /* Bienvenida: las tres maids (Miso, Dango e Imo); al tocar una, la carta baja a su parte */
+  /* Bienvenida: las tres maids (Miso, Dango e Imo); al tocar una, la carta baja a su parte.
+     Es una presentación que rota (Edgar, 25/11): las tres con el logo y luego cada una de cerca con su ficha (vuelta de 16 s). */
   .bienvenida { position: relative; margin: 18px 0 6px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 26px; box-shadow: 5px 6px 0 var(--ink); overflow: hidden; }
-  .bienvenida .fondo { position: relative; height: 300px; overflow: hidden; border-bottom: 2.5px solid var(--ink);
+  .bienvenida .fondo { position: relative; isolation: isolate; height: 300px; overflow: hidden; border-bottom: 2.5px solid var(--ink);   /* isolation: sus capas nunca tapan la barra de secciones */
     background: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px), linear-gradient(90deg, var(--miso-t), var(--dango-t) 50%, var(--imo-t)); }
-  .bienvenida .fondo img { position: absolute; bottom: -120px; height: 420px; width: auto; max-width: none; }
+  .bienvenida .intro > img { position: absolute; bottom: -120px; height: 420px; width: auto; max-width: none; }
   .bienvenida .m1 { left: -26px; } .bienvenida .m3 { right: -30px; }
   .bienvenida .m2 { left: 50%; transform: translateX(-50%); height: 450px; bottom: -150px; z-index: 2; }
   .bienvenida .burbuja { position: absolute; left: 12px; bottom: 14px; z-index: 3; transform: rotate(-4deg); background: #fff; color: var(--ink); border: 2.5px solid var(--ink);
@@ -107,7 +111,76 @@
   .bienvenida .nombres a { display: grid; gap: 2px; align-content: start; text-decoration: none; color: var(--ink); font-size: 15px; font-weight: 900; border-radius: 14px; padding: 2px 0 4px; }
   .bienvenida .nombres a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .bienvenida .nombres small { font-size: 11.5px; font-weight: 700; line-height: 1.25; color: var(--muted); }
-  .bienvenida .nombres a::before { content: ""; display: block; height: 6px; border-radius: 9px; margin: 0 18px 6px; background: var(--c); }
+  .bienvenida .nombres small[lang="ja"] { font-size: 15px; font-weight: 900; letter-spacing: .18em; margin-left: .18em; line-height: 1.3; }
+  .bienvenida .nombres > *::before { content: ""; display: block; height: 6px; border-radius: 9px; margin: 0 18px 6px; background: var(--c); transform-origin: left; transition: opacity .3s; }
+  .bienvenida .nombres > span { display: grid; gap: 2px; align-content: start; color: var(--ink); font-size: 15px; font-weight: 900; padding: 2px 0 4px; }
+  /* Las escenas: la de las tres (intro) y la de cada una (perfil). Entra con un barrido en diagonal y la anterior queda debajo */
+  .bienvenida .escena { position: absolute; inset: 0; visibility: hidden; }
+  .bienvenida .escena.on, .bienvenida .escena.sale { visibility: visible; }
+  .bienvenida .escena.on { z-index: 2; } .bienvenida .escena.sale { z-index: 1; }
+  .bienvenida .intro { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px), linear-gradient(90deg, var(--miso-t), var(--dango-t) 50%, var(--imo-t)); }
+  /* El logo de Ichiraku (イチラク con la corona) en el centro, debajo de la cara de Dango; debajo, «ICHIRAKU RAMEN» en
+     blanco sale de último y parpadea como el «PRESS START» de los juegos */
+  .bienvenida .sello { position: absolute; left: 50%; top: 52%; z-index: 4; width: min(50%, 210px); display: flex; flex-direction: column; align-items: center; gap: 6px;
+    transform: translate(-50%, -50%); }
+  .bienvenida .sello img { display: block; width: 100%; height: auto; filter: drop-shadow(0 0 7px rgba(255,255,255,.9)) drop-shadow(2px 4px 0 rgba(27,45,107,.3)); }
+  .bienvenida .press { opacity: 0; color: #fff; font-size: 19px; font-weight: 900; line-height: 1.1; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+    -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-shadow: 2px 3px 0 var(--ink); }
+  @media (min-width: 521px) { .bienvenida .press { font-size: 23px; } }
+  .bienvenida .perfil { overflow: hidden;
+    background: repeating-linear-gradient(-45deg, rgba(255,255,255,.32) 0 10px, transparent 10px 20px), linear-gradient(112deg, var(--t) 0 56%, var(--m) 56% 100%); }
+  .bienvenida .perfil .kjfondo { position: absolute; right: 8px; top: 10px; writing-mode: vertical-rl; font: 900 70px/1 "Noto Sans JP", sans-serif; color: rgba(255,255,255,.5); letter-spacing: .04em; }
+  .bienvenida .perfil .cerca { position: absolute; top: -1%; height: 256%; width: auto; max-width: none; left: calc(70% - var(--fx));
+    -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,.12) 0, #000 42%); mask-image: linear-gradient(90deg, rgba(0,0,0,.12) 0, #000 42%); }
+  .bienvenida .perfil[data-maid="miso"] .cerca { --fx: 217px; }
+  .bienvenida .perfil[data-maid="dango"] .cerca { --fx: 240px; }
+  .bienvenida .perfil[data-maid="imo"] .cerca { --fx: 206px; }
+  .bienvenida .perfil .ficha { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); z-index: 2; width: min(52%, 320px); color: var(--ink); }
+  .bienvenida .perfil .rol { display: inline-block; padding: 5px 10px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .bienvenida .perfil .nom { display: block; margin: 8px 0 0; font-size: 46px; font-weight: 900; line-height: 1; color: #fff; -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 3px 4px 0 var(--ink); }
+  .bienvenida .perfil .kj { display: block; margin-top: 6px; font: 900 17px/1.2 "Noto Sans JP", sans-serif; letter-spacing: .22em; }
+  .bienvenida .perfil .stats { display: flex; gap: 6px; margin: 10px 0 8px; padding: 0; list-style: none; }
+  .bienvenida .perfil .stats li { padding: 4px 9px 5px; border: 2px solid var(--ink); border-radius: 11px; background: #fff; box-shadow: 2px 3px 0 var(--ink); font-size: 14px; font-weight: 900; line-height: 1.1; }
+  .bienvenida .perfil .stats b { display: block; font-size: 9px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #5A6694; }
+  .bienvenida .perfil .datos { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+  .bienvenida .perfil .datos li { position: relative; padding-left: 17px; font-size: 12.5px; font-weight: 700; line-height: 1.3; text-shadow: 0 0 6px var(--t), 0 0 2px var(--t); }
+  .bienvenida .perfil .datos li::before { content: "✦"; position: absolute; left: 0; top: -1px; color: var(--m); -webkit-text-stroke: .8px var(--ink); font-size: 13px; }
+  @media (min-width: 521px) { .bienvenida .perfil .ficha { left: 26px; } .bienvenida .perfil .nom { font-size: 52px; } }
+  .bienvenida .pausa { position: absolute; top: 10px; right: 10px; z-index: 5; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border-radius: 50%;
+    background: #fff; color: var(--ink); border: 2.5px solid var(--ink); box-shadow: 2px 3px 0 var(--ink); cursor: pointer; }
+  .bienvenida .pausa svg { width: 14px; height: 14px; } .bienvenida .pausa .reanudar { display: none; }
+  .bienvenida .pausa[aria-pressed="true"] .reanudar { display: block; } .bienvenida .pausa[aria-pressed="true"] .detener { display: none; }
+  .bienvenida .pausa:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  /* Las barras de colores de abajo: con cada maid, la suya se llena en lo que dura su presentación; las otras se apagan */
+  .bienvenida:not([data-actual="intro"]) .nombres > *::before { opacity: .3; }
+  .bienvenida[data-actual="miso"] .nombres > [data-k="miso"]::before, .bienvenida[data-actual="dango"] .nombres > [data-k="dango"]::before,
+  .bienvenida[data-actual="imo"] .nombres > [data-k="imo"]::before { opacity: 1; animation: pres-llenar var(--dur, 4s) linear both; }
+  .bienvenida.quieta .nombres > *::before { animation-play-state: paused; }
+  .bienvenida.quieta .escena, .bienvenida.quieta .escena * { animation-play-state: paused; }
+  @keyframes pres-llenar { from { transform: scaleX(.05); } to { transform: none; } }
+  @keyframes pres-barrer { from { clip-path: polygon(0 0, 0 0, -30% 100%, -30% 100%); } to { clip-path: polygon(0 0, 130% 0, 100% 100%, -30% 100%); } }
+  @keyframes pres-llegar { from { opacity: 0; transform: translateX(28px) scale(1.06); } to { opacity: 1; transform: none; } }
+  @keyframes pres-pop { 0% { opacity: 0; transform: scale(.55) rotate(-5deg); } 60% { opacity: 1; transform: scale(1.08) rotate(1deg); } 100% { opacity: 1; transform: none; } }
+  @keyframes pres-subir { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+  @keyframes pres-sello { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.3) rotate(-12deg); } 65% { opacity: 1; transform: translate(-50%, -50%) scale(1.08) rotate(2deg); }
+    100% { opacity: 1; transform: translate(-50%, -50%); } }
+  .bienvenida .escena.on { animation: pres-barrer .7s cubic-bezier(.65, 0, .25, 1) both; }
+  .bienvenida .intro.on .sello { animation: pres-sello .7s .35s cubic-bezier(.3, 1.4, .5, 1) both; }
+  .bienvenida .intro.on .press { animation: pres-press 1s 1.3s infinite; }
+  @keyframes pres-press { 0%, 62% { opacity: 1; } 63%, 100% { opacity: 0; } }
+  .bienvenida .perfil.on .cerca { animation: pres-llegar .8s .25s cubic-bezier(.2, .8, .2, 1) both; }
+  .bienvenida .perfil.on .rol { animation: pres-subir .4s .4s both; }
+  .bienvenida .perfil.on .nom { animation: pres-pop .6s .45s both; }
+  .bienvenida .perfil.on .kj { animation: pres-subir .4s .6s both; }
+  .bienvenida .perfil.on .stats { animation: pres-subir .4s .7s both; }
+  .bienvenida .perfil.on .datos li { animation: pres-subir .4s .8s both; }
+  .bienvenida .perfil.on .datos li:nth-child(2) { animation-delay: .9s; } .bienvenida .perfil.on .datos li:nth-child(3) { animation-delay: 1s; }
+  /* La primera vez (al abrir la carta) las tres ya están ahí, sin barrido */
+  .bienvenida .escena.on.ya { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .bienvenida .escena.on, .bienvenida .escena.on *, .bienvenida .nombres > *::before { animation: none !important; }
+    .bienvenida .press { opacity: 1; }
+  }
   .dish { display: flex; gap: 14px; padding: 16px; border-top: 2px dashed var(--line); }
   .dish:first-of-type { border-top: 0; }
   /* La foto, en un platito del color de la maid (el blanco de la foto toma ese color) */
@@ -254,6 +327,47 @@
     padding: 10px 18px; border-radius: 999px; font-weight: 700; font-size: 15px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap;
     border: 2px solid #fff; box-shadow: 0 0 0 2px var(--ink); }
   .toast.show { opacity: 1; }
+  /* ---------------------------------------------------------------- Modo oscuro («Noche»): cuando el teléfono o la PC están en oscuro.
+     Fondo azul noche, tarjetas azul profundo y los mismos stickers y colores de las maids. Los platitos de las fotos siguen claros
+     (las fotos tienen fondo blanco). Como la carta trae su propio oscuro, el navegador ya no la oscurece a la fuerza (eso dejaba
+     las fotos negras y la letra blanca sobre el amarillo de los precios). */
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #070C26; --bg: #0E1530; --card: #18234D; --card2: #212E62; --text: #F3F0FF; --muted: #AEB6DA; --line: rgba(255,255,255,.13);
+      --off: #646C96; --pink-txt: #FF8CC8; }
+    body { background: var(--bg) radial-gradient(rgba(234,91,166,.24) 1.4px, transparent 1.8px) 0 0 / 20px 20px; }
+    header { color: var(--text);
+      background:
+        linear-gradient(rgba(255,255,255,.05) 1.5px, transparent 1.5px) 0 0 / 24px 24px,
+        linear-gradient(90deg, rgba(255,255,255,.05) 1.5px, transparent 1.5px) 0 0 / 24px 24px,
+        linear-gradient(118deg, rgba(236,110,160,.30) 0 34%, rgba(245,190,20,.20) 34% 66%, rgba(243,140,50,.26) 66% 100%), #19234F; }
+    header .kana { color: rgba(255,255,255,.08); }
+    header p { color: var(--muted); }
+    nav { background: #121B40; }
+    nav a { background: var(--card); color: var(--text); }
+    nav a.active { color: var(--ink); }
+    .bienvenida .nombres a { color: var(--text); }
+    .dish h3, .sheet h2, .line .what b { color: var(--text); }
+    .jp, .sheet h4, .promobar b { color: var(--pink-txt); }
+    .dish p { color: #C9CFEA; }
+    .pbs { color: var(--text); }
+    .price s { color: #56628C; }
+    .dish.off .plate { opacity: .45; }
+    .search input { background-color: var(--card2); color: var(--text);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23AEB6DA' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E"); }
+    .search input::placeholder { color: #8F98C2; }
+    .promobar div { background: var(--card); color: var(--text); }
+    dialog.sheet::backdrop { background: rgba(0,0,0,.62); }
+    .pills span { background: var(--card2); color: var(--text); }
+    .pills input:checked + span { color: var(--ink); }
+    .note, .mesa input { background: var(--card2); color: var(--text); }
+    .note::placeholder { color: #8F98C2; }
+    .stepper { background: var(--card2); }
+    .stepper span { color: var(--text); }
+    .sum { border-top-color: rgba(255,255,255,.3); }
+    .warn { color: #FF8A80; }
+    .waiter ol { background: var(--card); }
+  }
 </style>
 <script src="config.js"></script>
 </head>
@@ -404,20 +518,86 @@
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
   function platoBlanco(name) { return /postre|bebida/.test(norm(name)); } // postres y bebidas: platito blanco
-  // Bienvenida con las maids: cada una lleva a la primera sección de su color (Miso el ramen; Dango postres y bebidas; Imo lo demás)
+  // Bienvenida con las maids: debajo, su nombre y su kanji; cada una lleva a la primera sección de su color
+  // (Miso el ramen; Dango postres y bebidas; Imo lo demás). Lo que lleva cada una queda para los lectores de pantalla.
+  // Arriba, una presentación que rota (Edgar, 25/11): las tres con el logo y después cada una de cerca con su ficha
+  // (de la ficha de personajes: edad y estatura; los tres datos los eligió Edgar).
+  var MAIDS = [
+    { k: "miso", nombre: "Miso", kanji: "味噌", que: "ramen", rol: "Maid atleta", edad: 19, altura: "1,62 m", img: "miso", w: 396,
+      datos: ["Maid capitana", "La número 1 de su clase", "Le gusta el ajedrez"] },
+    { k: "dango", nombre: "Dango", kanji: "団子", que: "postres y bebidas", rol: "Maid cantante", edad: 18, altura: "1,75 m", img: "dango-moto", w: 454,
+      datos: ["Ama los dulces", "Tiene una moto", "Comer es su pasión"] },
+    { k: "imo", nombre: "Imo", kanji: "芋", que: "entradas, sushi y especiales", rol: "Maid streamer", edad: 19, altura: "1,61 m", img: "imo", w: 390,
+      datos: ["Fan n.º 1 del PlayStation 1", "Ama el café", "Odia el calor"] }
+  ];
   function bienvenida(firstOf) {
     if (!firstOf.miso && !firstOf.dango && !firstOf.imo) return "";
-    var link = function (maid, nombre, que, color) {
-      return firstOf[maid] ? '<a href="#' + firstOf[maid] + '" style="--c:' + color + '">' + nombre + "<small>" + que + "</small></a>" : '<span style="--c:' + color + '">' + nombre + "<small>" + que + "</small></span>";
+    var link = function (m) {
+      var dentro = m.nombre + '<small lang="ja">' + m.kanji + "</small>", etc = ' data-k="' + m.k + '" aria-label="' + m.nombre + ": " + m.que + '" style="--c:var(--' + m.k + ')"';
+      return firstOf[m.k] ? '<a href="#' + firstOf[m.k] + '"' + etc + ">" + dentro + "</a>" : "<span" + etc + ">" + dentro + "</span>";
     };
-    return '<div class="bienvenida" aria-label="Las maids de Ichiraku"><div class="fondo">' +
+    var perfil = function (m) {
+      return '<div class="escena perfil" data-maid="' + m.k + '" aria-hidden="true">' +
+        '<span class="kjfondo" lang="ja">' + m.kanji + "</span>" +
+        '<img class="cerca" src="assets/maids/' + m.img + '.webp" alt="" width="' + m.w + '" height="800" decoding="async">' +
+        '<div class="ficha"><span class="rol">' + m.rol + '</span><strong class="nom">' + m.nombre + '</strong><span class="kj" lang="ja">' + m.kanji + "</span>" +
+        '<ul class="stats"><li><b>Edad</b>' + m.edad + " años</li><li><b>Estatura</b>" + m.altura + "</li></ul>" +
+        '<ul class="datos">' + m.datos.map(function (d) { return "<li>" + d + "</li>"; }).join("") + "</ul></div></div>";
+    };
+    return '<div class="bienvenida" aria-label="Las maids de Ichiraku" data-actual="intro"><div class="fondo">' +
+      '<div class="escena intro on ya">' +
       '<img class="m1" src="assets/maids/miso.webp" alt="" width="396" height="800" decoding="async">' +
       '<img class="m3" src="assets/maids/imo.webp" alt="" width="390" height="800" decoding="async">' +
       '<img class="m2" src="assets/maids/dango-moto.webp" alt="" width="454" height="800" decoding="async">' +
+      '<span class="sello"><img src="assets/logo-ichiraku.webp" alt="Ichiraku Ramen" width="640" height="325"><span class="press" aria-hidden="true">Ichiraku Ramen</span></span>' +
       '<p class="burbuja" lang="ja">¡Okaerinasai! <small lang="es">Bienvenido a casa</small></p></div>' +
-      '<div class="nombres">' + link("miso", "Miso", "Ramen", "var(--miso)") + link("dango", "Dango", "Postres y bebidas", "var(--dango)") +
-      link("imo", "Imo", "Entradas, sushi y especiales", "var(--imo)") + "</div></div>";
+      MAIDS.map(perfil).join("") +
+      '<button type="button" class="pausa" aria-pressed="false" aria-label="Pausar la presentación de las maids">' +
+      '<svg class="detener" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="currentColor"/><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="currentColor"/></svg>' +
+      '<svg class="reanudar" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9.5-5.5z" fill="currentColor"/></svg></button></div>' +
+      '<div class="nombres">' + MAIDS.map(link).join("") + "</div></div>";
   }
+  // La presentación: 4 s las tres con el logo y 4 s cada una (vuelta de 16 s). Se detiene con el botón, cuando no se ve
+  // (más abajo en la carta o en otra pestaña) y mientras se busca; al volver, sigue donde iba.
+  var PRES = { t: 0, paso: 0, quieta: false, visible: true, queda: 0, desde: 0, el: null, obs: null };
+  var PASOS = [{ k: "intro", ms: 4000 }, { k: "miso", ms: 4000 }, { k: "dango", ms: 4000 }, { k: "imo", ms: 4000 }];
+  function presPaso(i) {
+    var el = PRES.el, esc = el.querySelectorAll(".escena"), antes = esc[PRES.paso];
+    PRES.paso = i;
+    esc.forEach(function (e, j) { e.classList.remove("ya"); if (j !== i && e !== antes) e.classList.remove("on", "sale"); });
+    if (antes && antes !== esc[i]) { antes.classList.remove("on"); antes.classList.add("sale"); antes.setAttribute("aria-hidden", "true");
+      setTimeout(function () { if (antes !== esc[PRES.paso]) antes.classList.remove("sale"); }, 750); }
+    esc[i].classList.add("on"); esc[i].removeAttribute("aria-hidden");
+    el.setAttribute("data-actual", PASOS[i].k); el.style.setProperty("--dur", PASOS[i].ms + "ms");
+    PRES.queda = PASOS[i].ms; PRES.desde = Date.now();
+  }
+  function presSeguir() {
+    clearTimeout(PRES.t);
+    var el = PRES.el; if (!el || !el.isConnected) return;
+    var parar = PRES.quieta || !PRES.visible || document.hidden || el.hidden;
+    if (parar !== el.classList.contains("quieta")) {
+      if (parar) PRES.queda = Math.max(0, PRES.queda - (Date.now() - PRES.desde)); else PRES.desde = Date.now();
+      el.classList.toggle("quieta", parar);
+    }
+    if (parar) return;
+    PRES.t = setTimeout(function () { presPaso((PRES.paso + 1) % PASOS.length); presSeguir(); }, Math.max(0, PRES.queda - (Date.now() - PRES.desde)));
+  }
+  function presentacion() {
+    clearTimeout(PRES.t); if (PRES.obs) PRES.obs.disconnect();
+    var el = document.querySelector(".bienvenida"); PRES.el = el; PRES.paso = 0; PRES.queda = PASOS[0].ms; PRES.desde = Date.now();
+    if (!el) return;
+    var b = el.querySelector(".pausa");
+    b.addEventListener("click", function () {
+      PRES.quieta = !PRES.quieta; b.setAttribute("aria-pressed", String(PRES.quieta));
+      b.setAttribute("aria-label", PRES.quieta ? "Seguir la presentación de las maids" : "Pausar la presentación de las maids"); presSeguir();
+    });
+    if ("IntersectionObserver" in window) {
+      PRES.obs = new IntersectionObserver(function (e) { PRES.visible = e[e.length - 1].isIntersecting; presSeguir(); }, { threshold: .25 });
+      PRES.obs.observe(el);
+    }
+    presSeguir();
+  }
+  document.addEventListener("visibilitychange", presSeguir);
   // El dibujo de cada sección (assets/secciones/<nombre>.svg); las secciones nuevas salen sin dibujo
   var DIBUJO = { entradas: "gyoza", ramen: "ramen", sushi: "sushi", especiales: "especial", postres: "dorayaki", bebidas: "boba" };
   var CATNAME = {};
@@ -508,6 +688,7 @@
     fotosListas();
     watchSections();
     applySearch();
+    presentacion();
     cleanOrder();
     refreshOrder();
   }
@@ -559,7 +740,7 @@
       sec.hidden = !shown; if (shown) any = true;
     });
     var nr = $("noresults"); if (nr) nr.hidden = any || !words.length;
-    var bv = document.querySelector(".bienvenida"); if (bv) bv.hidden = words.length > 0;   // al buscar, la bienvenida se aparta
+    var bv = document.querySelector(".bienvenida"); if (bv) { bv.hidden = words.length > 0; presSeguir(); }   // al buscar, la bienvenida se aparta (y se detiene)
   }
   $("q").addEventListener("input", function () {
     applySearch();
