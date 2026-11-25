@@ -60,6 +60,33 @@ function chime() {
     });
   } catch (e) { /* sin sonido: queda el aviso en pantalla */ }
 }
+// Campanita (Edgar, 25/11, página «Animaciones y sonidos», sonido D): suena cuando un pedido sale a cocina, en caja y en sala
+function campanita() {
+  if (!AUDIO) return;
+  try {
+    [[880, 0.36, 1.3], [2429, 0.14, 0.7], [4752, 0.07, 0.35]].forEach(function (p) {
+      var o = AUDIO.createOscillator(), g = AUDIO.createGain(), t = AUDIO.currentTime;
+      o.type = "sine"; o.frequency.value = p[0]; o.connect(g); g.connect(AUDIO.destination);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(p[1], t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + p[2]);
+      o.start(t); o.stop(t + p[2] + 0.03);
+    });
+  } catch (e) { /* sin sonido: queda el aviso en pantalla */ }
+}
+// Brillo al tocar un botón (Edgar, 25/11, opción 5: «solo ese»). Se dibuja encima del botón, en su mismo lugar y con sus
+// mismas esquinas, sin cambiar su estilo; dentro de una ventana (dialog) va en la ventana para quedar por encima.
+var BRILLO_QUIETO = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+document.addEventListener("pointerdown", function (ev) {
+  if (BRILLO_QUIETO) return;
+  var b = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+  if (!b || b.disabled || b.hasAttribute("data-sin-brillo")) return;
+  var r = b.getBoundingClientRect(); if (r.width < 8 || r.height < 8) return;
+  var fx = document.createElement("span"), cs = getComputedStyle(b);
+  fx.className = "brillo-fx"; fx.setAttribute("aria-hidden", "true");
+  fx.style.cssText = "left:" + r.left + "px;top:" + r.top + "px;width:" + r.width + "px;height:" + r.height + "px;border-radius:" + cs.borderRadius;
+  fx.appendChild(document.createElement("i"));
+  (b.closest("dialog[open]") || document.body).appendChild(fx);
+  setTimeout(function () { fx.remove(); }, 700);
+}, true);
 function toast(msg, err) { if (err) { notice(msg, "err"); return; } var t = $("toast"); t.textContent = msg; t.classList.toggle("err", !!err); t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, err ? 4000 : 2200); }
 function errMsg(e) { return (e && (e.message || e.error_description)) || String(e); }
 function fail(e) { console.error(e); toast(errMsg(e), true); if (/PIN incorrecto/.test(errMsg(e))) lock(); }
