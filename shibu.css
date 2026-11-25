@@ -140,8 +140,40 @@
 .premio-entrega img { width:100%; height:100%; object-fit:cover; display:block; }
 @keyframes entregaCae { from { transform:translateY(-40px) scale(.6); opacity:0; } to { transform:none; opacity:1; } }
 
+/* ---- Top maid del mes: podio con taiyakis de oro, plata y bronce */
+.taiyaki { width:70px; height:44px; overflow:visible; flex:none; }
+.taiyaki.grande { width:104px; height:65px; }
+.taiyaki path, .taiyaki circle { stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
+.taiyaki .t-cuerpo, .taiyaki .t-cola { fill:var(--t-base); }
+.taiyaki .t-esc, .taiyaki .t-agalla { fill:none; stroke:var(--t-osc); stroke-width:1.6; }
+.taiyaki .t-brillo { fill:none; stroke:rgba(255,255,255,.75); stroke-width:2.2; }
+.taiyaki .t-ojo { fill:var(--ink); stroke:none; }
+.taiyaki.oro { --t-base:#FFC928; --t-osc:#B8860B; animation:oroBrilla 2.6s ease-in-out infinite; }
+.taiyaki.plata { --t-base:#DCE1EA; --t-osc:#8A93A6; }
+.taiyaki.bronce { --t-base:#E2A46E; --t-osc:#9C5A2A; }
+@keyframes oroBrilla { 0%, 100% { filter:drop-shadow(0 0 0 rgba(255,201,40,0)); } 50% { filter:drop-shadow(0 0 7px rgba(255,201,40,.95)); } }
+.top-podio { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; align-items:end; margin:16px 0 6px; }
+.top-lugar { position:relative; display:grid; justify-items:center; align-content:end; gap:2px; text-align:center; min-width:0;
+  padding:12px 8px 10px; border:2px solid var(--line); border-radius:14px; background:var(--surface); min-height:132px; }
+.top-lugar.p1 { border-color:var(--ink); background:var(--imo-t); box-shadow:0 4px 0 var(--ink); min-height:168px; padding-top:20px; }
+.top-lugar.p2 { min-height:148px; }
+.top-lugar b { font-weight:800; font-size:15px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.top-lugar b small, .top-resto b small { font-weight:600; color:var(--muted); }
+.top-pts { font-size:13px; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
+.top-lugar em { font-style:normal; font-weight:900; font-size:12px; color:var(--muted); }
+.top-lugar.yo { outline:3px solid var(--accent); outline-offset:2px; }
+.top-cinta { position:absolute; top:-12px; left:50%; transform:translateX(-50%); white-space:nowrap; background:var(--accent); color:#fff;
+  border:2px solid var(--ink); border-radius:999px; padding:1px 10px; font-size:11px; font-weight:800; letter-spacing:.03em; }
+.top-resto { list-style:none; margin:10px 0 0; padding:0; display:grid; gap:6px; }
+.top-resto li { display:grid; grid-template-columns:44px minmax(0, 1fr) auto; align-items:center; gap:8px; padding:6px 12px;
+  border:1.5px solid var(--line); border-radius:10px; background:var(--surface); }
+.top-resto li em { font-style:normal; font-weight:900; color:var(--muted); }
+.top-resto li b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.top-resto li.yo { border-color:var(--accent); background:var(--accent-soft); }
+.top-nota { font-size:12px; margin:8px 0 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .entra, .salta, .mis-card, .premio-card.alcanza, .shibu-confeti i, .mis-sello.cae, .mis-sello.cae::after, .fiesta-premio,
-  .shibu-aviso, .premio-entrega, #btnShibu.recibe { animation:none !important; }
+  .shibu-aviso, .premio-entrega, #btnShibu.recibe, .taiyaki.oro { animation:none !important; }
   .mis-barra i, .sa-barra i { transition:none !important; }
 }

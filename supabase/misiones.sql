@@ -497,6 +497,22 @@ create trigger mis_tras_cierre after update of status on public.pos_sessions
 
 -- ---------------------------------------------------------------- Para la tablet
 -- Todo lo que la tablet muestra: misiones con su avance, puntos, fichas, tienda y misiones recién cumplidas (para celebrar).
+-- Top maid del mes (pedido de Edgar, 24/11): las meseras que juegan, ordenadas por los puntos que ganaron con misiones
+-- en el mes (por el día de la misión). No cuentan los juegos (son suerte) ni se resta lo que gastaron en la tienda.
+-- Las cajeras no entran. Con empate, el mismo puesto. «yo» marca a quien pregunta.
+create or replace function public.mis_ranking(p_fecha date, p_emp bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('puesto', r.puesto, 'nombre', r.nombre, 'puntos', r.pts, 'yo', r.id = p_emp)
+                            order by r.puesto, r.nombre), '[]'::jsonb)
+  from (select e.id, public.pos_emp_name(e.id) as nombre, sum(l.puntos)::int as pts,
+               rank() over (order by sum(l.puntos) desc)::int as puesto
+        from public.mis_logros l join public.employees e on e.id = l.employee_id
+        where l.fecha >= date_trunc('month', p_fecha)::date and l.fecha < (date_trunc('month', p_fecha) + interval '1 month')::date
+          and public.mis_juega(e.id) and public.mis_grupo(e.id) = 'meseras'
+        group by e.id
+        having sum(l.puntos) > 0) r
+$$;
+
 create or replace function public.mis_estado(p_emp bigint, p_pin text) returns jsonb
 language plpgsql volatile security definer set search_path = public as $$
 declare f date := public.mis_hoy(); aj jsonb := public.mis_ajustes(); juega boolean;
@@ -527,6 +543,7 @@ begin
                 from public.tienda_items t where t.activo), '[]'::jsonb),
     'canjes', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'nombre', c.nombre, 'puntos', c.puntos, 'estado', c.estado, 'at', c.at) order by c.at desc)
                 from (select * from public.tienda_canjes where employee_id = p_emp order by at desc limit 10) c), '[]'::jsonb),
+    'ranking', public.mis_ranking(f, p_emp),
     'juegos', jsonb_build_object('activo', coalesce((aj ->> 'juegos')::boolean, true), 'tope_dia', coalesce((aj ->> 'tope_juegos')::int, 3),
                                  'ganado_hoy', public.jgo_ganado_hoy(p_emp)));
 end $$;
@@ -838,7 +855,7 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
   public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
-  public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date)
+  public.mis_grupo(bigint), public.mis_azar(date, bigint), public.mis_hay_promo(date), public.mis_ranking(date, bigint)
   from anon, public, authenticated;
 
 -- Las de la tablet y Gestión: solo con sesión (adentro verifican el PIN o el permiso de Gestión)

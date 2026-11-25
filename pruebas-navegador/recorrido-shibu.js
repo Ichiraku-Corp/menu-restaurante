@@ -18,7 +18,8 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
-    canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0}}; };
+    canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0},grupo:'meseras',
+    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false},{puesto:2,nombre:e.name,puntos:20,yo:true},{puesto:3,nombre:'Hana',puntos:18,yo:false},{puesto:4,nombre:'Yumi',puntos:9,yo:false}]}; };
   R.mis_marcar=function(a){ var e=quien(a); M.marcar.push({emp:e.id,saludo:a.p_saludo,logros:a.p_logros}); if(a.p_saludo) M.saludo[e.id]=true;
     if(a.p_logros) M.nuevos[e.id]=(M.nuevos[e.id]||[]).filter(function(x){return a.p_logros.indexOf(x.id)<0;}); return null; };
   // Compra directa: el premio queda entregado (en la base sale a cocina en Ref 0 y queda en el cierre de caja)
@@ -80,6 +81,16 @@ await p.click("#btnShibu");await p.waitForSelector("#perfilDlg[open]");await p.w
 const cards=p.locator("#perfilBody .premio-card");
 ok(await cards.count()===3&&await p.isEnabled('#perfilBody [data-canje="2"]')&&await p.isDisabled('#perfilBody [data-canje="3"]')&&/Te faltan 1/.test(await p.textContent('#perfilBody [data-canje="3"]')),
   "en la tienda se canjea lo que le alcanza (9 puntos: Taiyaki sí, Amaterasu le faltan 1)");
+ok(/Top maid de noviembre/.test(await p.textContent("#perfilBody"))&&await p.evaluate(()=>{
+    const l=[...document.querySelectorAll("#perfilBody .top-podio .top-lugar")];
+    return l.length===3&&l[0].classList.contains("p2")&&l[1].classList.contains("p1")&&l[2].classList.contains("p3")
+      &&!!l[1].querySelector(".taiyaki.oro.grande")&&!!l[0].querySelector(".taiyaki.plata")&&!!l[2].querySelector(".taiyaki.bronce")
+      &&/Top 1 del mes/.test(l[1].textContent)&&/Sakura/.test(l[1].textContent)&&/34 pts/.test(l[1].textContent)
+      &&l[0].classList.contains("yo")&&/Mesera\s*\(tú\)/.test(l[0].textContent);}),
+  "en el perfil está el Top maid del mes: podio con taiyaki de oro (Top 1), plata y bronce, y su puesto marcado");
+ok(/4\.º\s*Yumi\s*9 pts/.test(await p.textContent("#perfilBody .top-resto")),"desde el 4.º puesto, el ranking sigue en lista");
+await p.evaluate(()=>document.querySelector("#perfilBody .top-podio").scrollIntoView({block:"center"}));await p.waitForTimeout(300);
+await foto("top-maid.png");
 ok(await p.locator('#perfilBody .premio-card img[src="assets/dishes/taiyaki.webp"]').count()===1&&await p.locator("#perfilBody .premio-foto img").count()===3,
   "cada premio sale con la foto de su plato del menú");
 await foto("perfil.png");

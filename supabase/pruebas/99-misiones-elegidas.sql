@@ -184,6 +184,34 @@ select prueba.ok(:'em'::jsonb ->> 'grupo' = 'meseras' and :'ec'::jsonb ->> 'grup
   and not exists (select 1 from jsonb_array_elements(:'em'::jsonb -> 'misiones') x
                   where x ->> 'texto' in (select texto from public.mis_catalogo where para = 'cajeras')),
   'la tablet de la maid muestra sus 3 misiones y la extra de la tienda al final, sin las de caja');
+
+-- 7) Top maid del mes: las meseras por los puntos de misiones del mes (sin juegos, sin el mes pasado y sin cajeras)
+delete from public.mis_logros where employee_id in (:maid, :caja);
+insert into public.employees (name, job_title, pos_can_charge, pos_pin_hash) values
+  ('Hana Prueba', 'Maid · Hana', false, extensions.crypt('7373', extensions.gen_salt('bf')));
+select (select id from public.employees where name = 'Hana Prueba') hana, date_trunc('month', :'hoy'::date)::date ini \gset
+insert into public.mis_logros (employee_id, fecha, nivel, texto, puntos) values
+  (:maid, :'ini', 1, 'Fácil', 1), (:maid, :'ini', 3, 'Difícil', 3),
+  (:hana, :'ini', 2, 'Media', 2), (:hana, :'ini'::date - 1, 3, 'Del mes pasado', 3),
+  (:caja, :'ini', 3, 'Difícil de caja', 3);
+insert into public.mis_puntos (employee_id, delta, motivo) values (:hana, 3, 'juego:ruleta');
+create function pg_temp.del_top(p_rk jsonb, p_nombre text) returns jsonb language sql immutable as $$
+  select x from jsonb_array_elements(p_rk) x where x ->> 'nombre' = p_nombre $$;
+select public.mis_ranking(:'hoy', :hana) as rk \gset
+select prueba.ok((pg_temp.del_top(:'rk', 'Sakura') ->> 'puntos')::int = 4 and (pg_temp.del_top(:'rk', 'Hana') ->> 'puntos')::int = 2
+  and (pg_temp.del_top(:'rk', 'Sakura') ->> 'puesto')::int < (pg_temp.del_top(:'rk', 'Hana') ->> 'puesto')::int
+  and (pg_temp.del_top(:'rk', 'Hana') ->> 'yo')::boolean and not (pg_temp.del_top(:'rk', 'Sakura') ->> 'yo')::boolean
+  and pg_temp.del_top(:'rk', 'Caja') is null,
+  'el Top maid ordena a las meseras por los puntos de misiones del mes; no cuentan los juegos, el mes pasado ni la cajera');
+insert into public.mis_logros (employee_id, fecha, nivel, texto, puntos) values (:hana, :'hoy', 1, 'Fácil de hoy', 2);
+select public.mis_ranking(:'hoy', :hana) as rk \gset
+select prueba.ok((pg_temp.del_top(:'rk', 'Hana') ->> 'puesto')::int = (pg_temp.del_top(:'rk', 'Sakura') ->> 'puesto')::int,
+  'con los mismos puntos, las dos comparten el puesto');
+set role authenticated;
+select public.mis_estado(:hana, '7373') as eh \gset
+reset role;
+select prueba.ok((pg_temp.del_top(:'eh'::jsonb -> 'ranking', 'Hana') ->> 'yo')::boolean,
+  'la tablet recibe el Top maid con su puesto marcado');
 select set_config('request.jwt.claims', '', false);
 rollback;
 \echo TODAS LAS PRUEBAS DE LAS MISIONES ELEGIDAS PASARON

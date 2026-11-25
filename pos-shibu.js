@@ -5,6 +5,7 @@
 // Todo lo decide la base (mis_estado, tienda_canjear): la tablet solo muestra. Las frases salen de data/shibu.json.
 // Mejoras que eligió Edgar: el sello de Shibu cae sobre la misión cumplida, los puntos vuelan a la chapita de arriba,
 // un aviso chico cuando avanza una misión y la tienda con la foto del plato («mantén presionado para comprar»).
+// En Mi perfil, el «Top maid» del mes: el ranking de puntos de las meseras, con taiyakis de oro, plata y bronce.
 var SHIBU = { frases: null, est: null, timer: null, vistos: {}, desde: {}, chipPts: null, retener: false, avisos: [], avisosT: 0,
   pronto: 0, rectFiesta: null, premioAntes: null };
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
@@ -327,7 +328,7 @@ function shibuPerfilDibuja() {
     '<div class="perfil-top">' + shibuCara("media") + '<div class="perfil-quien"><b>' + esc(e.nombre || U.name) + '</b><div class="perfil-saldos">' +
       '<span class="pts"><b>' + pts + "</b> punto" + (pts === 1 ? "" : "s") + '</span><span class="fch"><b>' + (e.fichas || 0) + "</b> ficha" + (e.fichas === 1 ? "" : "s") + "</span></div></div>" +
       (hayJuegos ? '<button type="button" class="primary" id="perfilJugar">Jugar</button>' : "") + "</div>" +
-    "<h3>Misiones de hoy</h3>" + shibuTarjetas(e.misiones || []) +
+    "<h3>Misiones de hoy</h3>" + shibuTarjetas(e.misiones || []) + shibuTop(e) +
     "<h3>Tienda de premios</h3>" + ((e.tienda || []).length ? '<div class="tienda-list">' + e.tienda.map(function (t) {
       var alcanza = pts >= t.puntos;
       return '<div class="premio-card' + (alcanza ? " alcanza" : "") + '"><div class="premio-foto">' + shibuFoto(t) + "</div><b>" + esc(t.nombre) + '</b><span class="premio-pts">' + t.puntos + " puntos</span>" +
@@ -340,6 +341,41 @@ function shibuPerfilDibuja() {
   if (hayJuegos) $("perfilJugar").addEventListener("click", function () { $("perfilDlg").close(); abrirJuegos(); });
 }
 $("perfilClose").addEventListener("click", function () { $("perfilDlg").close(); });
+// ---- Top maid del mes: las meseras por los puntos que ganaron con misiones en el mes (lo calcula la base: mis_ranking)
+var SHIBU_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+var SHIBU_METAL = { 1: "oro", 2: "plata", 3: "bronce" };
+// Un taiyaki (el pescadito dulce de la carta) como medalla: de oro, de plata o de bronce
+function shibuTaiyaki(metal, cls) {
+  return '<svg class="taiyaki ' + metal + (cls ? " " + cls : "") + '" viewBox="0 0 64 40" role="img" aria-label="Taiyaki de ' + metal + '">' +
+    '<path class="t-cola" d="M50 15 L62 7 C59.5 14 59.5 26 62 33 L50 25 Z"/>' +
+    '<path class="t-cuerpo" d="M5 20 C5 10 15 4.5 29 4.5 C39 4.5 46 9 51 15 L51 25 C46 31 39 35.5 29 35.5 C15 35.5 5 30 5 20 Z"/>' +
+    '<path class="t-esc" d="M26 13 a4 4 0 0 0 8 0 M34 13 a4 4 0 0 0 8 0 M22 20.5 a4 4 0 0 0 8 0 M30 20.5 a4 4 0 0 0 8 0 M38 20.5 a4 4 0 0 0 8 0 M26 28 a4 4 0 0 0 8 0 M34 28 a4 4 0 0 0 8 0"/>' +
+    '<path class="t-agalla" d="M19 11 C22.5 15.5 22.5 24.5 19 29"/>' +
+    '<path class="t-brillo" d="M11 11.5 C16 7.8 23 6.8 30 7.2"/>' +
+    '<circle class="t-ojo" cx="12.5" cy="17" r="2.6"/></svg>';
+}
+function shibuTop(e) {
+  var r = e.ranking;
+  if (!r) return "";   // una base que todavía no manda el ranking
+  var mes = SHIBU_MESES[Number(String(e.fecha || "").slice(5, 7)) - 1] || "este mes";
+  var h = '<h3 class="top-tit">Top maid de ' + esc(mes) + "</h3>";
+  if (!r.length) return h + '<p class="muted top-nota">Todavía nadie suma puntos de misiones este mes: la primera se lleva el taiyaki de oro.</p>';
+  function nombre(x) { return esc(x.nombre) + (x.yo ? " <small>(tú)</small>" : ""); }
+  // El podio: la 2.ª a la izquierda, la 1.ª al centro y la 3.ª a la derecha
+  var top = r.slice(0, 3), podio = [top[1], top[0], top[2]].filter(Boolean);
+  h += '<div class="top-podio">' + podio.map(function (x) {
+    return '<div class="top-lugar p' + x.puesto + (x.yo ? " yo" : "") + '">' + (x.puesto === 1 ? '<span class="top-cinta">Top 1 del mes</span>' : "") +
+      shibuTaiyaki(SHIBU_METAL[x.puesto] || "bronce", x.puesto === 1 ? "grande" : "") +
+      '<b>' + nombre(x) + '</b><span class="top-pts">' + x.puntos + " pts</span><em>" + x.puesto + ".º</em></div>";
+  }).join("") + "</div>";
+  var resto = r.slice(3);
+  if (resto.length) h += '<ol class="top-resto">' + resto.map(function (x) {
+    return '<li class="' + (x.yo ? "yo" : "") + '"><em>' + x.puesto + ".º</em><b>" + nombre(x) + '</b><span class="top-pts">' + x.puntos + " pts</span></li>";
+  }).join("") + "</ol>";
+  var yo = r.filter(function (x) { return x.yo; })[0];
+  if (!yo && e.grupo === "meseras") h += '<p class="muted top-nota">Tú todavía no sumas puntos de misiones este mes.</p>';
+  return h + '<p class="muted top-nota">Cuentan los puntos ganados con misiones en el mes (no los de los juegos).</p>';
+}
 // Comprar no tiene vuelta atrás (el premio sale a cocina de una vez): se mantiene presionado hasta que el botón se llena
 function shibuMantener(b) {
   if (!b || b._t || b.disabled) return;
