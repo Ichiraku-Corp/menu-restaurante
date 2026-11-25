@@ -8,7 +8,7 @@
 -- Se ejecuta después de pos.sql y alertas.sql. Se puede volver a ejecutar.
 -- ============================================================================
 
--- Lo que ve el cliente al abrir el enlace (sin su teléfono: el recibo puede quedar en la mesa)
+-- Lo que ve el cliente al abrir el enlace (sin su teléfono: el recibo puede quedar en la mesa) y quién lo atendió
 create or replace function public.opinion_ver(p_token text) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare op record; cerrada timestamptz;
@@ -21,6 +21,8 @@ begin
     'fecha', to_char(coalesce(cerrada, op.created_at) at time zone 'America/Caracas', 'DD/MM/YYYY'),
     'rating', op.rating, 'comment', op.comment, 'contacto', op.name <> '' or op.phone <> '',
     'cambios', greatest(0, 3 - op.edits),
+    -- quién atendió (como en el recibo): la página pregunta «¿Cómo te atendió Mei?»
+    'atendio', to_jsonb(public.opinion_atendio(op.order_id)),
     'google', case when op.rating is not null then nullif(trim((select opinion_google from public.gestion_settings limit 1)), '') end);
 end $$;
 

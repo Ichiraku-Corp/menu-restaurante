@@ -1054,7 +1054,7 @@ begin
   -- Las mesas de Edo (arriba) imprimen la precuenta en su propia impresora.
   perform public.pos_print(case when exists (select 1 from public.pos_orders o join public.pos_tables t on t.id = o.table_id where o.id = p_order and t.area = 'Edo')
                                 then 'edo' else 'caja' end,
-                           E'@logo\n' || public.pos_bill_text(p_order, 'PRECUENTA - no es factura') || E'\n\n~Gracias por tu visita!');
+                           E'@logo\n' || public.pos_bill_text(p_order, 'PRECUENTA - no es factura'));
   insert into public.pos_log (employee_id, action, order_id) values (p_emp, 'precuenta', p_order);
 end $$;
 
@@ -1126,11 +1126,26 @@ create index if not exists opiniones_created_idx on public.opiniones (created_at
 alter table public.opiniones enable row level security;   -- sin políticas: solo se usa a través de las funciones
 revoke all on public.opiniones from anon, authenticated;
 
+-- Quién atendió el pedido, para el recibo y la página de opinión: quienes anotaron platos que no se anularon (como en las
+-- misiones), primero quien abrió la mesa y después quien anotó más; hasta 3 nombres, como salen en la tablet (pos_emp_name)
+create or replace function public.opinion_atendio(p_order bigint) returns text[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(b.nombre order by b.orden) filter (where b.orden <= 3), '{}') from (
+    select a.nombre, row_number() over (order by a.abrio desc, a.n desc, a.primero) as orden from (
+      select replace(public.pos_emp_name(i.created_by), '|', '/') as nombre, bool_or(i.created_by = o.opened_by) as abrio, count(*) as n, min(i.id) as primero
+      from public.pos_items i join public.pos_orders o on o.id = i.order_id
+      where i.order_id = p_order and i.status <> 'anulado' and i.created_by is not null
+      group by i.created_by) a
+    where coalesce(a.nombre, '') <> '') b $$;
+revoke execute on function public.opinion_atendio(bigint) from anon, public, authenticated;
+
 -- Las líneas del QR para el final del recibo ('' si está apagado en Gestión, si el puente aún no sabe imprimir QR
 -- —el enlace saldría como texto— o si fue consumo de un empleado a su cuenta).
+-- Con el puente nuevo (resena) va el bloque «¿Te gusta Ichiraku?» con quién atendió, las estrellas y el QR (Edgar, 25/11):
+-- «@resena enlace nombre|nombre». Con el viejo, el texto y el QR solos, como antes.
 create or replace function public.opinion_qr(p_order bigint) returns text
 language plpgsql security definer set search_path = public as $$
-declare tk text;
+declare tk text; enlace text;
 begin
   -- Privacidad (privacidad.html): el nombre y WhatsApp que dejaron para que los contacten se borran a los 12 meses
   update public.opiniones set name = '', phone = '' where answered_at < now() - interval '12 months' and (name <> '' or phone <> '');
@@ -1140,7 +1155,11 @@ begin
   insert into public.opiniones (order_id, token) values (p_order, translate(encode(extensions.gen_random_bytes(9), 'base64'), '+/', '-_'))
   on conflict (order_id) do nothing;
   select token into tk from public.opiniones where order_id = p_order;
-  return E'\n\n~Como te fue? Cuentanos en 1 minuto\n@qr https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || tk;
+  enlace := 'https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || tk;
+  if coalesce((select value ->> 'resena' from public.pos_kv where key = 'bridge_status'), '') = 'true' then
+    return E'\n\n@resena ' || enlace || coalesce(' ' || nullif(array_to_string(public.opinion_atendio(p_order), '|'), ''), '');
+  end if;
+  return E'\n\n~Como te fue? Cuentanos en 1 minuto\n@qr ' || enlace;
 end $$;
 revoke execute on function public.opinion_qr(bigint) from anon, public, authenticated;
 
@@ -1261,7 +1280,7 @@ begin
                when 'pago_movil' then 'Pago movil' when 'punto_debito' then 'Punto debito' when 'punto_credito' then 'Punto credito'
                else initcap(p2.method) end || case when p2.reference = 'vuelto' then ' (vuelto)' else '' end,
              case when p2.currency = 'BS' then 'Bs ' else 'Ref ' end || public.pos_money(p2.amount)), E'\n' order by p2.id)
-     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina'), public.pos_line('Sin pago', 'Ref 0,00')) || E'\n\n~Gracias por tu visita!' || public.opinion_qr(p_order));
+     from public.pos_payments p2 where p2.order_id = p_order and p2.reference <> 'vuelto>propina'), public.pos_line('Sin pago', 'Ref 0,00')) || public.opinion_qr(p_order));
   end if;
   insert into public.pos_log (employee_id, action, order_id, detail) values (p_emp, case when p_offline then 'cobrar_sin_internet' else 'cobrar' end, p_order, jsonb_build_object('total', t.total));
   return jsonb_build_object('total', t.total, 'paid', paid, 'rest', 0, 'change', chg, 'closed', true);

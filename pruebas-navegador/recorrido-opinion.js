@@ -139,6 +139,22 @@ const CAP = process.env.CAPTURAS;
     await abrir("Raro12345678");
     ok(!(await visible("google")), "un enlace de Google que no es https:// no se muestra");
 
+    // Quién atendió (25/11): la pregunta lleva su nombre, como el recibo
+    ok((await p.evaluate(() => document.getElementById("titulo").textContent)) !== "" , "la pregunta de arriba siempre tiene texto");
+    ver.Una12345678a = { estado: "nueva", fecha: "24/11/2026", rating: null, comment: "", contacto: false, cambios: 3, google: null, atendio: ["Mei"] };
+    await abrir("Una12345678a");
+    ok((await texto("titulo")) === "¿Cómo te atendió Mei?", "si la atendió una persona: «¿Cómo te atendió Mei?»");
+    await foto("4-opinion-con-nombre");
+    ver.Dos12345678a = { estado: "nueva", fecha: "24/11/2026", rating: null, comment: "", contacto: false, cambios: 3, google: null, atendio: ["Mei", "Nami"] };
+    await abrir("Dos12345678a");
+    ok((await texto("titulo")) === "¿Cómo te atendieron Mei y Nami?", "si fueron dos: «¿Cómo te atendieron Mei y Nami?»");
+    ver.Sin12345678a = { estado: "nueva", fecha: "24/11/2026", rating: null, comment: "", contacto: false, cambios: 3, google: null, atendio: [] };
+    await abrir("Sin12345678a");
+    ok((await texto("titulo")) === "¿Cómo te fue?", "sin nombres (o con un recibo viejo) sigue «¿Cómo te fue?»");
+    ver.Mal12345678a = { estado: "nueva", fecha: "24/11/2026", rating: null, comment: "", contacto: false, cambios: 3, google: null, atendio: "<b>x</b>" };
+    await abrir("Mal12345678a");
+    ok((await texto("titulo")) === "¿Cómo te fue?" && (await p.$$eval("#titulo b", (x) => x.length)) === 0, "un dato raro no se pinta como HTML");
+
     ok(err.length === 0, "sin errores en la página" + (err.length ? ": " + err.join(" | ") : ""));
     ok(csp.length === 0, "nada bloqueado por la política de seguridad" + (csp.length ? ": " + csp.join(" | ") : ""));
   } catch (e) { fallos++; console.log("FALLÓ: " + e.message); }

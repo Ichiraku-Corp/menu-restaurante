@@ -49,8 +49,47 @@ select prueba.ok(:'recibo' like E'@logo\n~^ICHIRAKU RAMEN\n~RECIBO%', 'el recibo
 select prueba.ok(not exists (select 1 from public.pos_print_jobs where printer <> 'caja' and body like '%@logo%')
                  and not exists (select 1 from public.pos_print_jobs where body like '%@logo%' and body not like '%PRECUENTA%' and body not like '%RECIBO%'),
   'el shiba solo sale en la precuenta y el recibo: nunca en las comandas');
-select prueba.ok(:'recibo' like '%~Gracias por tu visita!' || E'\n\n' || '~Como te fue? Cuentanos en 1 minuto' || E'\n' || '@qr https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || :'tk',
-  'el recibo termina con «Como te fue?» y el QR con el enlace del pedido');
+select prueba.ok(:'recibo' like '%' || E'\n\n' || '~Como te fue? Cuentanos en 1 minuto' || E'\n' || '@qr https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || :'tk'
+                 and :'recibo' not like '%Gracias por tu visita%',
+  'con un puente que solo sabe el QR, el recibo termina con «Como te fue?» y el QR con el enlace del pedido (ya sin «Gracias por tu visita»)');
+select prueba.ok((select body from public.pos_print_jobs where printer = 'caja' and body like '%PRECUENTA%' order by id desc limit 1) not like '%Gracias%',
+  'la precuenta tampoco lleva «Gracias por tu visita» (Edgar, 25/11)');
+-- 2b) Con el puente que sabe el bloque de reseña (25/11): «¿Te gusta Ichiraku?», quién atendió, las estrellas y el QR
+insert into public.pos_kv (key, value) values ('bridge_status', '{"version": 54, "qr": true, "resena": true}'::jsonb)
+on conflict (key) do update set value = excluded.value;
+select prueba.ok(public.opinion_qr(:o2) = E'\n\n@resena https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || :'tk' || ' ' || public.pos_emp_name(:mesera),
+  'con el puente nuevo, el recibo lleva «@resena enlace» y el nombre de quien atendió, con el mismo enlace');
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"tablet@prueba.test"}', false);
+select public.pos_open(:mesera, '2222', null, 'Opinión 3') as o3 \gset
+select public.pos_add(:mesera, '2222', :o3, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select public.pos_add(:caja, '1111', :o3, jsonb_build_array(jsonb_build_object('dish_id', :plato, 'qty', 1), jsonb_build_object('dish_id', :plato, 'qty', 1)));
+select public.pos_send(:mesera, '2222', :o3);
+select (public.pos_order(:o3) -> 'totals' ->> 'total')::numeric as t3 \gset
+select public.pos_pay(:caja, '1111', :o3, jsonb_build_array(jsonb_build_object('method', 'efectivo_usd', 'amount', :t3)));
+reset role;
+select token as tk3 from public.opiniones where order_id = :o3 \gset
+select body as recibo3 from public.pos_print_jobs where printer = 'caja' and body like '%RECIBO%' order by id desc limit 1 \gset
+select prueba.ok(public.opinion_atendio(:o3) = array[public.pos_emp_name(:mesera), public.pos_emp_name(:caja)]
+                 and :'recibo3' like '%' || E'\n\n' || '@resena https://ichiraku-corp.github.io/menu-restaurante/opinion.html?t=' || :'tk3' || ' '
+                                     || public.pos_emp_name(:mesera) || '|' || public.pos_emp_name(:caja)
+                 and :'recibo3' not like '%Gracias por tu visita%' and :'recibo3' not like '%Como te fue%',
+  'si atendieron dos, salen las dos: primero quien abrió la mesa (aunque anotó menos), y sin «Gracias por tu visita»');
+update public.pos_items set status = 'anulado' where order_id = :o3 and created_by = :caja;
+delete from public.pos_reports where data ->> 'clave' like 'anulados-%';  -- esas anulaciones de prueba avisan al correo; no son de esta prueba
+select prueba.ok(public.opinion_atendio(:o3) = array[public.pos_emp_name(:mesera)], 'quien solo anotó platos anulados no sale como que atendió');
+create temp table cargo_antes as select id, job_title from public.employees where id = :mesera;
+update public.employees set job_title = 'Mesonera · Ana|Bea' where id = :mesera;
+select prueba.ok(public.opinion_atendio(:o3) = array['Ana/Bea'], 'un nombre con «|» no rompe la marca del recibo');
+update public.employees e set job_title = c.job_title from cargo_antes c where e.id = c.id;
+select public.pos_emp_name(:mesera) as nom_mesera \gset
+set role anon;
+select set_config('request.jwt.claims', '{"role":"anon"}', false);
+select prueba.ok(public.opinion_ver(:'tk3') -> 'atendio' = jsonb_build_array(:'nom_mesera'::text),
+  'la página sabe quién atendió, para preguntar «¿Cómo te atendió …?»');
+select prueba.falla('select public.opinion_atendio(1)', 'permission denied', 'el público no puede averiguar quién atendió otros pedidos');
+reset role;
+update public.pos_kv set value = '{"version": 39, "qr": true}'::jsonb where key = 'bridge_status';
 -- Volver a pasar por el recibo del mismo pedido no cambia el enlace
 select prueba.ok(public.opinion_qr(:o2) like '%t=' || :'tk' and (select count(*) from public.opiniones where order_id = :o2) = 1, 'el enlace de un pedido no cambia');
 -- Apagado en Gestión, o consumo de un empleado a su cuenta: sin QR
