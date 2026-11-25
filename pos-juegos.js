@@ -569,7 +569,8 @@ function jgoBjFin(r) {
     if (p > 0) jgoFiesta($("jgoBj"));
   } else {
     jgoRes("jgoBjRes", "");
-    jgoDice(r.mensaje || "Tienes " + r.total + ". ¿Pides otra carta o te plantas?");
+    // Carta bajo la manga (comodín): ve la carta tapada del crupier
+    jgoDice((r.espia ? "🃏 Con tu carta bajo la manga ves la del crupier. " : "") + (r.mensaje || "Tienes " + r.total + ". ¿Pides otra carta o te plantas?"));
   }
   jgoOcupado(null);
 }

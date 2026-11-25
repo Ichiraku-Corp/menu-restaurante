@@ -206,7 +206,9 @@
 .hub-shibu { margin-top:auto; padding-top:8px; display:flex; justify-content:center; pointer-events:none; }
 .hub-shibu .shibu-pose { width:96px; height:170px; }
 .hub-shibu .shibu-pose img { filter:drop-shadow(0 6px 0 rgba(0,0,0,.28)); }
-@media (max-height: 760px) { .hub-shibu { display:none; } }
+/* El carnet (con sus estrellas e insignias) nunca se recorta: si no cabe todo, el lado se desliza y Shibu se esconde */
+.hub-lado > * { flex-shrink:0; }
+@media (max-height: 900px) { .hub-shibu { display:none; } }
 
 /* Hoy: misiones, atajos y premios */
 .hub-panel.hoy > *, .hub-panel.top > * { max-width:860px; }
@@ -410,3 +412,31 @@
 .shibu-estrellas { display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 10px; }
 .shibu-estrellas span { padding:3px 10px; border-radius:999px; background:#fff; border:2px solid var(--ink); font-size:12.5px; font-weight:700; }
 @media (prefers-reduced-motion: reduce) { .carnet.marco-leyenda { animation:none; } }
+
+/* Comodines (Edgar, 25/11): en las misiones, de dónde salió (pergamino, sorpresa, cambiada, del mapa) y lo que suman
+   los comodines (×2, +1, la Campanita); el Mapa para elegir la misión media; sus comodines de hoy; las insignias y el
+   regalo de Leyenda en el carnet */
+.mis-card.propia { border-style:dashed; }
+.mis-org { font-style:normal; background:#FFF1C9; color:#7A5600; border-radius:8px; padding:0 6px; margin-left:4px; white-space:nowrap; }
+.mis-com { font-style:normal; background:#FCE4F1; color:#B22C77; border-radius:8px; padding:0 6px; margin-left:4px; font-weight:800; white-space:nowrap; }
+.fiesta-com { display:block; font-size:13px; font-weight:700; color:#B22C77; }
+.mapa-box { margin:12px 0 0; padding:12px 14px; border:2px solid var(--ink); border-radius:14px; background:#FFF6D8; display:grid; gap:6px; }
+.mapa-box > b { font:900 15px/1.2 "Poppins", sans-serif; }
+.mapa-box > small { color:var(--muted); font-weight:700; }
+.mapa-ops { display:grid; gap:6px; }
+.mapa-op { margin:0; padding:9px 12px; border:2px solid var(--ink); border-radius:11px; background:#fff; color:var(--ink); font:700 14px/1.25 inherit; text-align:left; cursor:pointer; }
+.mapa-op:hover { background:#FCE4F1; }
+.mapa-op.queda { background:transparent; border-style:dashed; color:var(--muted); }
+.mapa-box.ocupado { opacity:.6; pointer-events:none; }
+.hub-com { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.hub-com li { display:grid; grid-template-columns:auto minmax(0, 1fr); column-gap:10px; align-items:center; padding:8px 12px; border:2px solid var(--ink);
+  border-radius:12px; background:#fff; }
+.hub-com .cm-ico { grid-row:span 2; font-size:24px; line-height:1; }
+.hub-com b { font-size:14px; }
+.hub-com small { color:var(--muted); font-weight:600; font-size:12.5px; }
+.hub-atajo.comodines { background:#FCE4F1; }
+.carnet-insignias { position:relative; z-index:1; display:flex; gap:6px; justify-content:center; margin:-4px 12px 10px; font-size:22px; }
+.carnet-insignias span { display:grid; place-items:center; width:36px; height:36px; border-radius:50%; background:#fff; border:2px solid var(--ink); box-shadow:2px 2px 0 var(--ink); }
+.carnet-regalo { position:relative; z-index:1; margin:0 12px 12px; padding:6px 10px; border-radius:12px; background:#FFF6D8; border:2px dashed #B8860B;
+  font-size:12px; font-weight:700; color:#5A4300; }
+.shibu-aviso.com { border-left-color:#EA5BA6; }

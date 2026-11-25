@@ -1,7 +1,7 @@
 /* Tienda de Shibu: la máquina expendedora de Mi perfil › Expendedora (pos-tienda.js) */
 
 /* La sala: pared con puntitos, luz desde arriba y piso */
-.vm-sala { position:relative; width:100%; height:100%; display:grid; place-items:center; padding:14px 18px 22px; overflow:hidden;
+.vm-sala { position:relative; width:100%; height:100%; display:grid; grid-template-rows:minmax(0, 1fr); place-items:center; padding:14px 18px 22px; overflow:hidden;
   background:
     radial-gradient(ellipse 60% 45% at 50% 0%, rgba(255,233,166,.55), transparent 70%),
     linear-gradient(transparent 84%, #E8DCCB 84%, #D9CBB6),
@@ -71,7 +71,7 @@ button.vm-slot:active { transform:scale(.98); }
 .vm-cayendo img { max-width:86%; max-height:100%; object-fit:contain; background:#fff; border:2.5px solid var(--ink); border-radius:14px; filter:drop-shadow(0 8px 5px rgba(0,0,0,.45)); }
 
 /* El panel: pantalla, teclado, botón grande, Shibu y el recibo */
-.vm-panel { position:relative; min-height:0; display:flex; flex-direction:column; gap:10px; padding:16px 14px 12px; overflow:hidden;
+.vm-panel { position:relative; min-height:0; display:flex; flex-direction:column; gap:10px; padding:16px 14px 12px; overflow:hidden auto; scrollbar-width:thin;
   border:3px solid var(--ink); border-radius:18px; background:linear-gradient(160deg, #F7F9FC, #D3D9E5); box-shadow:inset 0 3px 0 #fff; }
 .vm-tornillo { position:absolute; width:9px; height:9px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #8E97A8); border:1.5px solid #5A6587; }
 .vm-tornillo::after { content:""; position:absolute; left:1px; right:1px; top:3px; height:1.5px; background:#5A6587; transform:rotate(35deg); }
@@ -147,12 +147,15 @@ button.vm-slot:active { transform:scale(.98); }
   background:linear-gradient(rgba(255,255,255,.28), rgba(255,255,255,.08)); transform-origin:50% 0; pointer-events:none; }
 .vm-tapa.golpe { animation:vmTapa .7s ease-out; }
 @keyframes vmTapa { 0% { transform:perspective(260px) rotateX(-55deg); } 40% { transform:perspective(260px) rotateX(18deg); } 70% { transform:perspective(260px) rotateX(-6deg); } }
+/* Nada del panel se aplasta (la pantalla verde siempre se lee); mientras elige a quién o qué, el recibo se esconde */
+.vm-panel > * { flex-shrink:0; }
+.vm-elige:not([hidden]) ~ .vm-recibo { display:none; }
 .vm-patas { position:absolute; left:48px; right:48px; bottom:-15px; display:flex; justify-content:space-between; pointer-events:none; }
 .vm-patas i { width:76px; height:13px; border:3px solid var(--ink); border-top:0; border-radius:0 0 10px 10px; background:#2B3B78; }
 
 /* Teléfono: el vidrio arriba con 2 columnas y el panel abajo; la sala se puede deslizar */
 @media (max-width: 760px) {
-  .vm-sala { place-items:start center; padding:12px 10px 26px; overflow:visible; height:auto; }
+  .vm-sala { grid-template-rows:auto; place-items:start center; padding:12px 10px 26px; overflow:visible; height:auto; }
   .vm { width:100%; height:auto; padding:10px; border-radius:24px; box-shadow:6px 8px 0 var(--ink); }
   .vm-bandeja { grid-template-columns:minmax(0, 1fr); height:80px; }
   .vm-bandeja .vm-hueco { grid-column:1; width:86%; }
@@ -186,3 +189,35 @@ button.vm-slot:active { transform:scale(.98); }
 .vm-slot.b-nivel .vm-bloq { background:#FFC928; color:var(--ink); border-color:var(--ink); }
 .vm-slot.bloq .vm-etiqueta span { background:#E3E7EF; color:#5A6587; }
 @media (prefers-reduced-motion: reduce) { .vm-quedan.poco { animation:none; } }
+
+/* Comodines (Edgar, 25/11): la segunda vitrina de la máquina. Las pestañas van arriba del vidrio; los comodines, en
+   cápsulas con su ícono; el vidrio de los comodines se desliza (son 25). */
+.vm-vidrio { display:grid; grid-template-rows:auto minmax(0, 1fr); gap:8px; }
+.vm-modos { display:flex; gap:6px; justify-content:center; }
+.vm-modos[hidden] { display:none; }
+.vm-modos button { min-width:132px; padding:6px 14px; border:2px solid #FFE066; border-radius:999px; background:rgba(14,24,64,.55); color:#FFE9A6;
+  font:800 13px/1.1 inherit; letter-spacing:.08em; cursor:pointer; }
+.vm-modos button[aria-selected="true"] { background:#FFE066; color:var(--ink); box-shadow:0 0 14px rgba(255,224,102,.6); }
+.vm-vidrio.com .vm-estantes { height:auto; max-height:100%; overflow-y:auto; grid-auto-rows:164px; padding-right:4px; scrollbar-width:thin; }
+/* El nombre del comodín en dos líneas (no hay foto que lo diga): «Regalo para una compañera», «Ficha de cambio» */
+.vm-slot.com .vm-nombre { white-space:normal; text-align:center; line-height:1.15; min-height:2.3em; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.vm-capsula { position:relative; display:grid; place-items:center; width:78px; height:78px; border-radius:50%; border:3px solid var(--ink);
+  background:radial-gradient(circle at 34% 30%, #fff 0 14%, transparent 15%), linear-gradient(180deg, #FFB8DC 0 50%, #FFFFFF 50% 100%);
+  box-shadow:inset 0 -6px 0 rgba(27,45,107,.12), 0 7px 6px rgba(0,0,0,.35); }
+.vm-capsula::after { content:""; position:absolute; left:6px; right:6px; top:50%; height:3px; margin-top:-1.5px; background:var(--ink); border-radius:2px; }
+.vm-capsula i { position:relative; z-index:1; font-style:normal; font-size:34px; line-height:1; filter:drop-shadow(0 2px 0 rgba(255,255,255,.8)); }
+.vm-slot.com.falta .vm-capsula { filter:grayscale(.55) brightness(.8); }
+.vm-slot.com.bloq .vm-capsula { filter:grayscale(1) brightness(.6); }
+.vm-premio .vm-capsula, .vm-cayendo .vm-capsula { width:64px; height:64px; }
+.vm-premio .vm-capsula i, .vm-cayendo .vm-capsula i { font-size:28px; }
+.vm-cinta-premium.extra { background:#2FB2E8; color:#fff; }
+.vm-etiqueta s { opacity:.6; margin-right:2px; }
+.vm-elige { padding:8px 10px; border:2px solid var(--ink); border-radius:12px; background:#FFF6D8; color:var(--ink); }
+.vm-elige[hidden] { display:none; }
+.vm-elige b { display:block; font-size:13px; font-weight:900; margin-bottom:6px; }
+.vm-ops { display:flex; flex-wrap:wrap; gap:6px; }
+.vm-ops button { min-height:36px; padding:4px 10px; border:2px solid var(--ink); border-radius:10px; background:#fff; color:var(--ink); font:700 12.5px/1.2 inherit;
+  text-align:left; cursor:pointer; }
+.vm-ops button.on { background:#EA5BA6; color:#fff; box-shadow:0 0 0 2px #fff inset; }
+.vm-ops button:disabled { opacity:.45; cursor:default; text-decoration:line-through; }
+@media (max-width: 760px) { .vm-vidrio.com .vm-estantes { grid-auto-rows:176px; } }

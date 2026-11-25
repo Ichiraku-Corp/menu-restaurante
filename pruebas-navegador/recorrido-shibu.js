@@ -17,15 +17,31 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
               {nivel:0,extra:true,texto:'Vende 3 artículos de la tienda del menú',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false}],
     tienda:[{id:1,nombre:'Refresco',puntos:6,dish_id:29,ventana:'fija'},{id:2,nombre:'Taiyaki',puntos:7,dish_id:24,ventana:'fija'},{id:3,nombre:'Amaterasu',puntos:10,dish_id:7,ventana:'rota',quedan:4},
             {id:4,nombre:'Dorayaki',puntos:6,dish_id:25,ventana:'rota',quedan:2},{id:5,nombre:'Milk Tea',puntos:10,dish_id:32,ventana:'premium',bloqueo:'nivel'}],
-    estrellas:{total:7,mes:3,nivel:1,nombre:'Debut',siguiente:15,siguiente_nombre:'Idol del local',falta:8,niveles:[5,15,30,60,100],nombres:['Debut','Idol del local','Estrella','Superestrella','Leyenda']}};
+    estrellas:{total:7,mes:3,nivel:1,nombre:'Debut',siguiente:15,siguiente_nombre:'Idol del local',falta:8,niveles:[5,15,30,60,100],nombres:['Debut','Idol del local','Estrella','Superestrella','Leyenda']},
+    mejoras:{bronce:1,nombre:1,ventana:2,plata:3,oro:4,canje:4,gratis:4,animado:5,llavero:5,corona:5,premium:2},compras:[],elegidos:[],vistosCom:[],coronaSakura:false,
+    comodines:{reglas:{activos:2,semana:3,suman:true},semana:0,ocupados:0,activos:[],insignias:[],avisos:[],mapa:null,bandera:null,duelos:[],hora_feliz:0,
+      companeras:[{id:2,nombre:'Nami'},{id:3,nombre:'Luz'}],
+      catalogo:[{id:2,nombre:'Taza de Shibu',texto:'Duplica los puntos de tus misiones de hoy',icono:'☕',efecto:'x2_hoy',nivel:0,puntos:3,dias:1,bloqueo:null,elige:null},
+                {id:1,nombre:'Diadema dorada',texto:'Duplica los puntos de tus misiones',icono:'👑',efecto:'x2_todo',nivel:3,puntos:20,dias:7,bloqueo:'nivel',elige:null},
+                {id:22,nombre:'Regalo para una compañera',texto:'Le regalas 3 puntos a otra maid',icono:'🎁',efecto:'regalo',nivel:0,puntos:4,dias:null,bloqueo:null,elige:'companera'},
+                {id:11,nombre:'Ficha de cambio',texto:'Cambia una misión de hoy por otra del mismo nivel',icono:'🔄',efecto:'cambio',nivel:0,puntos:2,dias:null,bloqueo:null,elige:'mision'},
+                {id:16,nombre:'Bolsa de fichas',texto:'3 fichas para jugar',icono:'🪙',efecto:'fichas3',nivel:0,puntos:3,dias:null,bloqueo:'semana',elige:null}]}};
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
     canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0},grupo:'meseras',
-    estrellas:M.estrellas,regalo:false,canjes_hoy:M.canjes.filter(function(c){return c.emp===e.id;}).length,canjes_dia:2,premium_nivel:2,
-    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false,estrellas:12},{puesto:2,nombre:e.name,puntos:20,yo:true,estrellas:7},{puesto:3,nombre:'Hana',puntos:18,yo:false,estrellas:3},{puesto:4,nombre:'Yumi',puntos:9,yo:false,estrellas:1}],
+    estrellas:M.estrellas,regalo:false,canjes_hoy:M.canjes.filter(function(c){return c.emp===e.id;}).length,canjes_dia:2,premium_nivel:2,mejoras:M.mejoras,comodines:M.comodines,
+    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false,estrellas:12,corona:M.coronaSakura},{puesto:2,nombre:e.name,puntos:20,yo:true,estrellas:7},{puesto:3,nombre:'Hana',puntos:18,yo:false,estrellas:3},{puesto:4,nombre:'Yumi',puntos:9,yo:false,estrellas:1}],
     premios_top:[10,6,3],campeona:{mes:'2026-10-01',nombre:'Sakura'},top_premio:M.top&&M.topVisto.indexOf(M.top.id)<0?M.top:null}; };
   R.mis_top_visto=function(a){ quien(a); M.topVisto.push(a.p_id); return null; };
+  // Comodines: comprar (se descuenta y queda activo), elegir el Mapa y marcar los avisos vistos
+  R.com_comprar=function(a){ var e=quien(a), k=M.comodines.catalogo.find(function(x){return x.id===a.p_comodin;});
+    if((M.puntos[e.id]||0)<k.puntos) throw {message:'Te faltan puntos'}; M.puntos[e.id]-=k.puntos; M.compras.push({id:k.id,datos:a.p_datos});
+    if(k.efecto==='x2_hoy'){ M.comodines.activos.push({id:900,comodin:2,nombre:k.nombre,icono:k.icono,efecto:k.efecto,dias:1,empieza:false,ocupa:true}); k.bloqueo='activo'; }
+    return {id:900+M.compras.length,nombre:k.nombre,mensaje:k.efecto==='regalo'?'Le regalaste 3 puntos a Nami':'Vale hoy',puntos:M.puntos[e.id]}; };
+  R.com_elegir_mapa=function(a){ quien(a); M.elegidos.push(a.p_catalogo); var o=M.comodines.mapa.opciones.find(function(x){return x.id===a.p_catalogo;});
+    M.misiones[1].texto=o.texto; M.misiones[1].origen='mapa'; M.comodines.mapa=null; return {texto:o.texto}; };
+  R.com_visto=function(a){ quien(a); M.vistosCom=M.vistosCom.concat(a.p_ids); M.comodines.avisos=M.comodines.avisos.filter(function(x){return a.p_ids.indexOf(x.id)<0;}); return null; };
   var MONTOS=[0,12,30,0,18,0,45,22,0,15,60,0,8,25], CANT=[0,1,3,0,2,0,4,2,0,1,5,0,1,2];
   R.mis_ventas=function(a){ quien(a); M.ventasPedidas=(M.ventasPedidas||0)+1;
     if(M.ventasFalla){ M.ventasFalla=false; throw {message:'Sin conexión'}; }
@@ -61,7 +77,8 @@ ok(await p.evaluate(()=>{const c=[...document.querySelectorAll("#shibuBody .mis-
   "la extra del día (la tienda del menú) va al final, con su punto y su avance");
 const frase=await p.textContent("#shibuTxt");
 const fr=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8"));
-ok(frase.length>5&&fr.manana.concat(fr.manana_fuerte).indexOf(frase)>=0,"la frase sale de data/shibu.json, letra por letra («"+frase+"»)");
+ok(frase.length>5&&fr.manana.concat(fr.manana_fuerte).map(x=>x.replace(/\bnovata\b/gi,"Mesera")).indexOf(frase)>=0&&!/novata/i.test(frase),
+  "la frase sale de data/shibu.json, letra por letra, y con el nivel 1 Shibu le dice su nombre en vez de «novata» («"+frase+"»)");
 ok(/Ref 14,50 de Ref 18,00/.test(await p.textContent("#shibuBody"))&&/1 de 3/.test(await p.textContent("#shibuBody"))&&/Equipo/.test(await p.textContent("#shibuBody")),
   "cada misión muestra su avance (en Ref cuando es plata) y cuáles son de equipo");
 ok(await p.evaluate(()=>document.querySelector("#shibuBody .mis-card .mis-barra i").style.width)==="33%","las barras de la bienvenida se llenan hasta su avance (1 de 3 = 33 %)");
@@ -82,7 +99,9 @@ ok(await p.isVisible("#btnShibu")&&/Mi perfil/.test(await p.textContent("#btnShi
 await p.evaluate(()=>{window.__MIS.misiones[0].hecha=true;window.__MIS.misiones[0].actual=3;window.__MIS.nuevos[1]=[{id:9,nivel:1,texto:'Vende 3 postres',puntos:1}];window.__MIS.puntos[1]=9;window.__MIS.fichas[1]=2;});
 await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1600);
 ok(/¡Misión cumplida!/.test(await p.textContent("#shibuBody"))&&/\+1\s*punto · \+1\s*ficha/.test(await p.textContent(".fiesta-premio")),"al cumplir una misión sale Shibu celebrando con sus puntos y su ficha");
-ok(fr.mision.indexOf(await p.textContent("#shibuTxt"))>=0,"la frase de la celebración también sale del archivo de frases");
+const misionOk=fr.mision.map(x=>x.replace(/\bnovata\b/gi,"Mesera"));
+await p.waitForFunction(l=>l.indexOf(document.getElementById("shibuTxt").textContent)>=0,misionOk,{timeout:5000}).catch(()=>{});   // la escribe letra por letra
+ok(misionOk.indexOf(await p.textContent("#shibuTxt"))>=0,"la frase de la celebración también sale del archivo de frases");
 ok(await p.locator("#shibuBody .mis-card.fiesta .mis-sello.cae").count()===1&&/シブ\s*CUMPLIDA/.test(await p.textContent("#shibuBody .mis-sello"))&&/Vende 3 postres/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
   "en la celebración cae el sello de Shibu («シブ CUMPLIDA») sobre la tarjeta de la misión");
 ok(/8 pts/.test(await p.textContent("#btnShibu")),"mientras celebra, la chapita sigue en 8 puntos (los nuevos llegan volando)");
@@ -191,8 +210,9 @@ ok(dialogos===0&&(await M()).canjes.length===1&&(await M()).canjes[0].estado==="
 ok(await p.locator('#vmHueco .vm-premio img[src="assets/dishes/taiyaki.webp"]').count()===1&&/¡LISTO! TAIYAKI VA A COCINA/.test(await p.textContent("#vmMsg"))
   &&/2/.test(await p.textContent("#vmSaldo"))&&/Taiyaki/.test(await p.textContent("#vmRecibo")),
   "el Taiyaki cae a la bandeja, la pantalla dice que va a cocina, el saldo baja a 2 y sale en el recibo");
-await p.waitForFunction(l=>l.indexOf(document.getElementById("vmGlobo").textContent)>=0,fr.canje_aprobado,{timeout:5000}).catch(()=>{});   // la escribe letra por letra
-ok(fr.canje_aprobado.indexOf(await p.textContent("#vmGlobo"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#vmGlobo"))+"»");
+const canjeOk=fr.canje_aprobado.map(x=>x.replace(/\bnovata\b/gi,"Mesera"));
+await p.waitForFunction(l=>l.indexOf(document.getElementById("vmGlobo").textContent)>=0,canjeOk,{timeout:5000}).catch(()=>{});   // la escribe letra por letra
+ok(canjeOk.indexOf(await p.textContent("#vmGlobo"))>=0,"Shibu lo entrega con una frase de data/shibu.json: «"+(await p.textContent("#vmGlobo"))+"»");
 ok(/2\s*puntos/.test(await p.textContent("#perfilLado .perfil-saldos"))&&/2 puntos/.test(await p.textContent('#perfilLado [data-hub="tienda"]')),"el carnet se pone al día: le quedan 2 puntos");
 await foto("premio.png");
 await p.click('#perfilLado [data-hub="hoy"]');await p.waitForTimeout(300);
@@ -209,6 +229,83 @@ await p.click("#shibuOk");await p.waitForTimeout(2600);
 ok((await M()).topVisto.indexOf(77)>=0&&/12 pts/.test(await p.textContent("#btnShibu")),"al seguir, el premio queda visto y la chapita sube contando hasta 12 puntos");
 await p.evaluate(()=>shibuPoll(false));await p.waitForTimeout(500);
 ok(!(await p.isVisible("#shibuDlg")),"el premio del mes no se vuelve a celebrar");
+// 6) Comodines (Edgar, 25/11): misiones de pergamino y sorpresa, lo que suman, el Mapa, los avisos, la máquina de comodines
+await p.evaluate(()=>{const M=window.__MIS;
+  M.misiones.splice(3,0,{nivel:1,slot:11,origen:'extra_facil',texto:'Vende 2 bebidas',puntos:1,tipo:'unidades',actual:0,meta:2,hecha:false,efecto:{mult:2,mas:0,campanita:false}},
+                        {nivel:2,slot:15,origen:'sorpresa',sorpresa:true,texto:'Vende 3 postres',puntos:4,tipo:'unidades',actual:1,meta:3,hecha:false,efecto:{mult:1,mas:0,campanita:true}});
+  M.misiones.forEach(function(x,i){ if(x.slot==null) x.slot=x.extra?0:x.nivel; });
+  M.misiones[1].efecto={mult:2,mas:1,campanita:false};
+  M.comodines.activos=[{id:801,comodin:1,nombre:'Diadema dorada',icono:'👑',efecto:'x2_todo',dias:5,empieza:false,ocupa:true}];
+  M.comodines.insignias=['ramen'];M.coronaSakura=true;
+  M.comodines.mapa={compra:77,actual:'Comanda promedio de $18 o más (mínimo 8 comandas)',hecha:false,
+    opciones:[{id:301,texto:'Vende 6 Gyozas'},{id:302,texto:'Vende 4 postres en una comanda'},{id:303,texto:'Registra 3 clientes nuevos'}]};
+  M.comodines.avisos=[{id:501,icono:'🎁',texto:'Nami te regaló 3 puntos'}];});
+await p.evaluate(()=>shibuPoll(false));await p.waitForSelector(".shibu-aviso.com",{timeout:4000});await p.waitForTimeout(400);
+ok(/Nami te regaló 3 puntos/.test(await p.textContent(".shibu-aviso.com"))&&(await M()).vistosCom.indexOf(501)>=0,"le llega el aviso del regalo de una compañera (una vez) y queda visto");
+await p.click("#btnShibu");await p.waitForSelector("#perfilDlg[open]");await p.waitForTimeout(700);
+ok(await p.evaluate(()=>{const c=[...document.querySelectorAll("#perfilBody .mis-card")];const per=c.find(x=>/Vende 2 bebidas/.test(x.textContent)),sor=c.find(x=>/🎲/.test(x.textContent));
+    return c.length===6&&per&&/📜 Pergamino/.test(per.textContent)&&per.classList.contains("propia")&&/×2/.test(per.querySelector(".mis-com").textContent)
+      &&sor&&/\? puntos/.test(sor.textContent)&&/🎲 Sorpresa/.test(sor.textContent)&&/🔔 ×3 a la próxima/.test(sor.textContent)
+      &&/×2 \+1/.test(c[1].querySelector(".mis-com").textContent);}),
+  "en «Hoy» salen sus misiones de pergamino y la sorpresa (con «? puntos»), y lo que suman sus comodines: ×2, +1 y la Campanita");
+ok(/Tus comodines/.test(await p.textContent("#perfilBody"))&&/Diadema dorada\s*Quedan 5 días/.test(await p.textContent("#perfilBody .hub-com"))
+  &&await p.isVisible('#perfilBody .hub-atajo.comodines'),"«Tus comodines» dice cuánto le queda a cada uno y hay un atajo a los comodines de la máquina");
+ok(await p.locator("#perfilBody .mapa-box .mapa-op").count()===4&&/La de hoy: Comanda promedio/.test(await p.textContent("#perfilBody .mapa-box")),
+  "con el Mapa de Shibu elige su misión media entre 3 (o se queda con la suya)");
+await foto("comodines-hoy.png");
+await p.click('#perfilBody .mapa-op[data-mapa="302"]');await p.waitForTimeout(900);
+ok((await M()).elegidos[0]===302&&await p.locator("#perfilBody .mapa-box").count()===0&&/Vende 4 postres en una comanda/.test(await p.textContent("#perfilBody .mis-card:nth-child(2)"))
+  &&/🗺️ Del mapa/.test(await p.textContent("#perfilBody .mis-card:nth-child(2)")),"al elegir, esa es su misión media de hoy y el mapa se va");
+ok(/🍜/.test(await p.textContent("#perfilLado .carnet-insignias")),"el carnet muestra su insignia de honor");
+await p.click('#perfilLado [data-hub="top"]');await p.waitForTimeout(500);
+ok(/👑 SAKURA/.test(await p.evaluate(()=>[...document.querySelectorAll("#perfilBody svg.olimpo .ol-nombre")].map(x=>x.textContent).join(","))),"en el Top maid, la de nivel Leyenda lleva corona");
+await foto("comodines-corona.png");
+// La máquina de comodines
+await p.click('#perfilLado [data-hub="hoy"]');await p.waitForTimeout(300);
+await p.click('#perfilBody .hub-atajo.comodines');await p.waitForSelector("#perfilBody .vm");await p.waitForTimeout(600);
+ok(await p.evaluate(()=>VM.modo==="comodines"&&document.querySelector('#vmModos [data-vmodo="comodines"]').getAttribute("aria-selected")==="true")
+  &&await p.locator("#vmSlots .vm-slot.com").count()===5&&/🔒 Nivel 3/.test(await p.textContent('#vmSlots .vm-slot[data-i="1"] .vm-bloq'))
+  &&/3 por semana/.test(await p.textContent('#vmSlots .vm-slot[data-i="4"] .vm-bloq'))&&/MIS COMODINES/.test(await p.textContent("#vmRecibo")),
+  "el atajo abre la máquina en la vitrina de comodines: cápsulas con su precio y por qué no se pueden comprar (nivel 3, 3 por semana)");
+await p.click('#vmSlots .vm-slot[data-i="0"]');await p.waitForTimeout(250);
+ok(/A1 · TAZA DE SHIBU · 3 PTS/.test(await p.textContent("#vmMsg"))&&await p.isEnabled("#vmComprar")&&await p.isHidden("#vmElige"),"al elegir la Taza la pantalla dice su precio y el botón se prende");
+await p.waitForFunction(()=>/Vale hoy\./.test(document.getElementById("vmGlobo").textContent),null,{timeout:6000}).catch(()=>{});
+ok(/Duplica los puntos de tus misiones de hoy\. Vale hoy\./.test(await p.textContent("#vmGlobo")),"Shibu explica qué hace y cuánto dura");
+await foto("comodines-maquina.png");
+await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(1500);await p.mouse.up();
+await p.waitForSelector("#vmHueco .vm-premio .vm-capsula",{timeout:6000});await p.waitForTimeout(800);
+ok((await M()).compras[0].id===2&&JSON.stringify((await M()).compras[0].datos)==="{}"&&/¡LISTO! TAZA DE SHIBU/.test(await p.textContent("#vmMsg"))
+  &&/Taza de Shibu/.test(await p.textContent("#vmRecibo")),"manteniendo el botón compra la Taza: la cápsula cae a la bandeja y queda en «Mis comodines»");
+await p.click('#vmSlots .vm-slot[data-i="2"]');await p.waitForTimeout(250);
+ok(await p.isVisible("#vmElige")&&/¿A quién le regalas\?/.test(await p.textContent("#vmElige"))&&await p.locator("#vmElige button").count()===2&&await p.isDisabled("#vmComprar"),
+  "el Regalo pregunta a quién (sus compañeras) y el botón espera la respuesta");
+await p.click('#vmElige button[data-v="2"]');await p.waitForTimeout(150);
+ok(await p.isEnabled("#vmComprar")&&await p.evaluate(()=>document.querySelector('#vmElige button[data-v="2"]').classList.contains("on")),"al elegir a Nami se prende el botón");
+await p.waitForFunction(()=>/no ocupa lugar\./.test(document.getElementById("vmGlobo").textContent),null,{timeout:6000}).catch(()=>{});
+await foto("comodines-regalo.png");
+await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(1500);await p.mouse.up();await p.waitForTimeout(2500);
+ok((await M()).compras[1].id===22&&(await M()).compras[1].datos.para===2,"el Regalo se compra para Nami");
+await p.click('#vmModos [data-vmodo="premios"]');await p.waitForTimeout(300);
+ok(await p.locator("#vmSlots .vm-slot.com").count()===0&&await p.locator('#vmSlots .vm-slot img[src="assets/dishes/taiyaki.webp"]').count()===1,"la pestaña «Premios» vuelve a los premios");
+await p.click('#vmModos [data-vmodo="comodines"]');await p.waitForTimeout(200);
+await p.click('#perfilLado [data-hub="hoy"]');await p.waitForTimeout(300);
+await p.click('#perfilBody .hub-atajo.tienda');await p.waitForSelector("#perfilBody .vm");await p.waitForTimeout(400);
+ok(await p.evaluate(()=>VM.modo==="premios"&&document.querySelector('#vmModos [data-vmodo="premios"]').getAttribute("aria-selected")==="true"),
+  "el atajo «Expendedora» de «Hoy» abre siempre la vitrina de premios");
+await p.click("#perfilClose");await p.waitForTimeout(200);
+// Celebración con lo que sumaron los comodines
+await p.evaluate(()=>{const M=window.__MIS;M.nuevos[1]=[{id:12,nivel:1,slot:11,texto:'Vende 2 bebidas',puntos:1,comodin:1,origen:'extra_facil'}];M.misiones[3].hecha=true;M.misiones[3].comodin=1;M.puntos[1]+=2;
+  M.comodines.avisos=[{id:502,icono:'⚔️',texto:'Luz te retó a un duelo de ventas hoy: ¡que gane la mejor!'}];});
+await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1600);
+ok(/\+2\s*puntos/.test(await p.textContent(".fiesta-premio"))&&/\(\+1 de tus comodines\)/.test(await p.textContent(".fiesta-premio"))&&/📜 Pergamino/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
+  "al cumplir la del pergamino con el ×2, la celebración suma los puntos de la misión y los del comodín");
+await foto("comodines-celebracion.png");
+ok((await M()).vistosCom.indexOf(502)<0,"el aviso del duelo espera a que se cierre la celebración (no se pierde detrás)");
+await p.click("#shibuOk");
+await p.waitForFunction(()=>[...document.querySelectorAll(".shibu-aviso.com")].some(x=>/Luz te retó/.test(x.textContent)),null,{timeout:6000}).catch(()=>{});
+ok([...await p.$$eval(".shibu-aviso.com",l=>l.map(x=>x.textContent))].some(t=>/Luz te retó/.test(t))&&(await M()).vistosCom.indexOf(502)>=0,
+  "al cerrar la celebración sale el aviso del duelo y queda visto");
+await p.waitForTimeout(2600);
 // La pestaña «Maids» va junto a Edo; la maid ve su día con Shibu
 const tabs=await p.$$eval("#areas [data-area]",l=>l.map(x=>x.dataset.area));
 ok(tabs.indexOf("Maids")===tabs.indexOf("Edo")+1,"la pestaña «Maids» está junto a Edo ("+tabs.join(", ")+")");

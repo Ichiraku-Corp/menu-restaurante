@@ -8,8 +8,12 @@
 // un aviso chico cuando avanza una misión, el carnet de Mi perfil y el «Top maid» del mes en un podio olímpico griego.
 // La expendedora es una máquina de premios dentro de Mi perfil (pos-tienda.js).
 var SHIBU = { frases: null, est: null, timer: null, vistos: {}, desde: {}, chipPts: null, retener: false, avisos: [], avisosT: 0,
-  pronto: 0, rectFiesta: null, topVisto: {} };
+  pronto: 0, rectFiesta: null, topVisto: {}, comVistos: {} };
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
+// Comodines (Edgar, 25/11): de dónde salió una misión propia de la maid
+var ORIGEN_TXT = { extra_facil: "📜 Pergamino", extra_dificil: "📜 Pergamino", doble_media: "📜 Pergamino", sorpresa: "🎲 Sorpresa",
+                   cambio: "🔄 Cambiada", mapa: "🗺️ Del mapa" };
+var INSIGNIA_IC = { estrella: "⭐", ramen: "🍜", taiyaki: "🐟" };
 var MIS_PLATA = ["ventas", "promedio", "primera", "vs_ayer", "vs_semana", "top_ventas", "equipo_meta"];
 var SHIBU_REVISA_MS = 30000;
 
@@ -21,7 +25,14 @@ function shibuFrases() {
 }
 function shibuFrase(tipo) {
   var l = (SHIBU.frases && SHIBU.frases[tipo]) || [];
-  return l.length ? l[Math.floor(Math.random() * l.length)] : "";
+  return l.length ? shibuNovata(l[Math.floor(Math.random() * l.length)]) : "";
+}
+// Mejora de nivel (Edgar, 25/11): desde el nivel 1 de estrellas, Shibu la llama por su nombre en vez de «novata»
+function shibuNovata(t) {
+  var e = SHIBU.est, mj = e && e.mejoras, n = e && e.estrellas ? e.estrellas.nivel || 0 : 0;
+  if (!t || !mj || mj.nombre == null || n < mj.nombre) return t;
+  var nom = String(e.nombre || (typeof U !== "undefined" && U && U.name) || "").split(" ")[0];
+  return nom ? t.replace(/\bnovata\b/gi, nom) : t;
 }
 // La cara de Shibu: su PNG cuando esté (data/shibu.json → "imagen"); mientras, un círculo naranja con su nombre
 function shibuCara(cls) {
@@ -53,7 +64,8 @@ function shibuEntrar() {
 function shibuSalir() {
   clearInterval(SHIBU.timer); clearTimeout(SHIBU.pronto); clearTimeout(SHIBU.avisosT);
   SHIBU.timer = null; SHIBU.est = null; SHIBU.vistos = {}; SHIBU.desde = {}; SHIBU.chipPts = null; SHIBU.retener = false;
-  SHIBU.avisos = []; SHIBU.rectFiesta = null; SHIBU.topVisto = {};
+  SHIBU.avisos = []; SHIBU.rectFiesta = null; SHIBU.topVisto = {}; SHIBU.comVistos = {};
+  if (typeof VM !== "undefined") VM.modo = "premios";
   show("btnShibu", false);
   var box = $("shibuAvisos"); if (box) box.innerHTML = "";
   // Lo de una maid no lo ve la siguiente que entra
@@ -77,15 +89,17 @@ function shibuPoll(alEntrar) {
     if (e && e.juega) {
       var nuevos = e.nuevos || [], top = shibuTopPendiente(e);
       // Los puntos nuevos no se suman de golpe: llegan volando a la chapita cuando se cierra la celebración
-      if (SHIBU.chipPts == null) SHIBU.chipPts = (e.puntos || 0) - nuevos.reduce(function (s, x) { return s + (x.puntos || 0); }, 0) - (top ? top.puntos || 0 : 0);
+      if (SHIBU.chipPts == null) SHIBU.chipPts = (e.puntos || 0) - nuevos.reduce(function (s, x) { return s + (x.puntos || 0) + (x.comodin || 0); }, 0) - (top ? top.puntos || 0 : 0);
       if (nuevos.length || top) SHIBU.retener = true;
       nuevos.forEach(function (n) {
         if (SHIBU.desde[n.id] != null) return;
-        var v = SHIBU.vistos[e.fecha + "|" + n.nivel];
+        var v = SHIBU.vistos[e.fecha + "|" + (n.slot != null ? n.slot : n.nivel)];
         SHIBU.desde[n.id] = v && v.pct < 100 ? v.pct : 60;
       });
       if (!alEntrar) shibuAvanzo(e);
       shibuRecuerda(e);
+      // Si va a salir la bienvenida o una celebración, los avisos de comodines esperan a que se cierre
+      shibuComAvisos(e, (alEntrar && !e.saludo_hoy) || nuevos.length > 0 || !!top);
     }
     shibuChip(); shibuBadge();
     if (!e || !e.juega) return;
@@ -167,7 +181,9 @@ function shibuVuela(r0, pts, fichas) {
 }
 
 // ---- Avisos de avance: un cartelito que entra por la derecha y se va solo (no abre ventanas)
-function shibuClave(x) { return x.extra ? 0 : x.nivel; }
+function shibuNiv(x) { return x.extra ? 0 : x.nivel; }
+// Cada misión se reconoce por su lugar: las del día van de 0 a 3; las propias de los pergaminos, de 11 en adelante
+function shibuClave(x) { return x.slot != null ? x.slot : shibuNiv(x); }
 function shibuPct(x) {
   if (x.hecha) return 100;
   if (x.al_cierre) return 0;
@@ -201,12 +217,13 @@ function shibuAvisosSigue() {
   var box = shibuAvisosBox();
   while (SHIBU.avisos.length) {
     var a = SHIBU.avisos.shift();
-    if (Date.now() - a.at < 120000) shibuAvisoPinta(box, a);
+    if (a.com || Date.now() - a.at < 120000) shibuAvisoPinta(box, a);
   }
 }
 function shibuAvisoPinta(box, a) {
+  if (a.com) { shibuAvisoCom(box, a.com); return; }
   var x = a.x, el = document.createElement("button");
-  el.type = "button"; el.className = "shibu-aviso n" + shibuClave(x);
+  el.type = "button"; el.className = "shibu-aviso n" + shibuNiv(x);
   el.innerHTML = shibuCara("mini") + '<span class="sa-txt"><span class="sa-nivel">' + (x.extra ? "＋" : "★".repeat(x.nivel)) + " Avanzaste</span><b>" + esc(x.texto) +
     '</b><span class="sa-barra"><i style="width:' + (shibuQuieto() ? shibuPct(x) : a.desde) + '%" data-pct="' + shibuPct(x) + '"></i></span><small>' + esc(shibuAvance(x)) + "</small></span>";
   box.appendChild(el);
@@ -214,6 +231,24 @@ function shibuAvisoPinta(box, a) {
   shibuLlena(el);
   el.addEventListener("click", function () { el.remove(); shibuPerfil("hoy"); });
   setTimeout(function () { el.classList.add("sale"); setTimeout(function () { el.remove(); }, 400); }, 5200);
+}
+
+// Comodines: lo que le llegó (un regalo, un duelo, la bandera del equipo). Se muestra una vez y se marca visto.
+// «espera»: va a salir una ventana de Shibu; los avisos quedan en la fila y salen cuando se cierre.
+function shibuComAvisos(e, espera) {
+  var l = ((e && e.comodines) || {}).avisos || [];
+  l.forEach(function (a) { if (!SHIBU.comVistos[a.id]) { SHIBU.comVistos[a.id] = true; SHIBU.avisos.push({ com: a, at: Date.now() }); } });
+  if (l.length && !espera) shibuAvisosSigue();
+}
+function shibuAvisoCom(box, c) {
+  var el = document.createElement("button");
+  el.type = "button"; el.className = "shibu-aviso com";
+  el.innerHTML = shibuCara("mini") + '<span class="sa-txt"><span class="sa-nivel">' + esc(c.icono || "✨") + " Comodines</span><b>" + esc(c.texto) + "</b></span>";
+  box.appendChild(el);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+  el.addEventListener("click", function () { el.remove(); shibuPerfil("hoy"); });
+  setTimeout(function () { el.classList.add("sale"); setTimeout(function () { el.remove(); }, 400); }, 6500);
+  rpc("com_visto", { p_ids: [c.id] }).catch(function () {});
 }
 
 // ---- Tarjetas de misión
@@ -239,14 +274,75 @@ function shibuTarjetas(lista, op) {
   if (!lista.length) return '<p class="muted">Hoy Shibu no dejó misiones.</p>';
   return '<div class="mis-list">' + lista.map(function (x, i) {
     var pct = shibuPct(x), desde = op.desde && !shibuQuieto() ? op.desde(x) : pct, cae = !!(op.sellar && x.hecha), d = (op.sello0 || 0) + i * 0.45;
-    return '<div class="mis-card n' + shibuClave(x) + (x.hecha ? " hecha" : "") + (cae ? " fiesta" : "") +
+    var oculto = x.sorpresa && !x.hecha;
+    return '<div class="mis-card n' + shibuNiv(x) + (x.hecha ? " hecha" : "") + (cae ? " fiesta" : "") + (x.origen && x.origen !== "dia" ? " propia" : "") +
       '" style="animation-delay:' + (cae ? d + 0.28 : i * 0.18).toFixed(2) + 's">' +
-      '<div class="mis-nivel"><span>' + (x.extra ? "＋" : "★".repeat(x.nivel)) + "</span> " + esc(NIVEL_TXT[shibuClave(x)] || "") + " · " + x.puntos + " punto" + (x.puntos === 1 ? "" : "s") +
-      (x.equipo ? ' <em class="mis-eq">Equipo</em>' : "") + "</div>" +
+      '<div class="mis-nivel"><span>' + (x.extra ? "＋" : "★".repeat(x.nivel)) + "</span> " + esc(NIVEL_TXT[shibuNiv(x)] || "") + " · " +
+      (oculto ? "? puntos" : x.puntos + " punto" + (x.puntos === 1 ? "" : "s")) +
+      (x.equipo ? ' <em class="mis-eq">Equipo</em>' : "") + (ORIGEN_TXT[x.origen] ? ' <em class="mis-org">' + ORIGEN_TXT[x.origen] + "</em>" : "") +
+      shibuComBadge(x) + "</div>" +
       '<div class="mis-texto">' + esc(x.texto) + "</div>" +
       '<div class="mis-barra"><i style="width:' + desde + '%" data-pct="' + pct + '"></i></div><div class="mis-avance">' + esc(shibuAvance(x)) + "</div>" +
       (x.hecha ? shibuSello(cae, d) : "") + "</div>";
   }).join("") + "</div>";
+}
+// Lo que le suman sus comodines: ×2, ×4, +1 y la Campanita (×3 a la próxima); en la cumplida, lo que ya sumaron
+function shibuComBadge(x) {
+  if (x.hecha) return x.comodin > 0 ? '<em class="mis-com">+' + x.comodin + " de comodines</em>" : "";
+  var f = x.efecto, t = [];
+  if (!f) return "";
+  if (f.mult > 1) t.push("×" + f.mult);
+  if (f.mas > 0) t.push("+" + f.mas);
+  if (f.campanita) t.push("🔔 ×3 a la próxima");
+  return t.length ? '<em class="mis-com" title="Lo que suman tus comodines">' + esc(t.join(" ")) + "</em>" : "";
+}
+// Mapa de Shibu (comodín): el día que vale, la maid elige su misión media entre 3 (o se queda con la suya)
+function shibuMapaHtml(e) {
+  var m = e && e.comodines && e.comodines.mapa;
+  if (!m || m.hecha || !(m.opciones || []).length) return "";
+  return '<div class="mapa-box" data-compra="' + Number(m.compra) + '"><b>🗺️ Mapa de Shibu: elige tu misión media de hoy</b>' +
+    "<small>La de hoy: " + esc(m.actual || "") + "</small>" +
+    '<div class="mapa-ops">' + m.opciones.map(function (o) {
+      return '<button type="button" class="mapa-op" data-mapa="' + Number(o.id) + '">' + esc(o.texto) + "</button>";
+    }).join("") + '<button type="button" class="mapa-op queda" data-mapa="0">Me quedo con la mía</button></div></div>';
+}
+document.addEventListener("click", function (ev) {
+  var b = ev.target.closest && ev.target.closest("[data-mapa]"); if (!b) return;
+  var box = b.closest(".mapa-box"); if (!box || box.classList.contains("ocupado")) return;
+  box.classList.add("ocupado");
+  var cat = Number(b.dataset.mapa) || null;
+  rpc("com_elegir_mapa", { p_compra: Number(box.dataset.compra), p_catalogo: cat }).then(function (r) {
+    toast(cat ? "Tu misión media de hoy: " + ((r && r.texto) || "la nueva") : "Te quedas con tu misión media de hoy");
+    return rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); }, function () {});
+  }).then(function () {
+    var e = SHIBU.est, mis = $("shibuMis");
+    if (mis && $("shibuDlg").open) { mis.innerHTML = shibuTarjetas((e && e.misiones) || []) + shibuMapaHtml(e); shibuLlena(mis); }
+    if ($("perfilDlg").open && HUB.tab === "hoy") shibuHubPanel(false);
+  }).catch(function (err) { box.classList.remove("ocupado"); toast(errMsg(err) || "No se pudo elegir"); });
+});
+// Sus comodines de hoy: los activos, la bandera del equipo, los duelos y la hora feliz
+function shibuComCuando(x) {
+  if (x.efecto === "reloj") return "Cuida tu racha hasta el " + shibuDiaCorto(x.hasta);
+  if (x.empieza) return "Empieza el " + shibuDiaCorto(x.desde);
+  if (x.efecto === "x3_proxima") return "En tu próxima misión";
+  if (x.efecto === "ficha_dorada") return "En tu próxima jugada";
+  if (x.efecto === "carta") return "En tu próxima mano de blackjack";
+  if (x.efecto === "cupon") return "En tu próximo premio · " + (x.dias <= 1 ? "vence hoy" : "vale " + x.dias + " días");
+  if (x.efecto === "duelo") return "Hoy con " + (x.con || "tu compañera") + ": si vendes más, +4";
+  if (x.efecto === "mapa") return "Hoy eliges tu misión media";
+  return x.dias <= 1 ? "Hoy" : "Quedan " + x.dias + " días";
+}
+function shibuComodinesHoy(e) {
+  var c = (e && e.comodines) || {}, filas = [];
+  function fila(ic, nom, txt) { return '<li><span class="cm-ico" aria-hidden="true">' + esc(ic) + "</span><b>" + esc(nom) + "</b><small>" + esc(txt) + "</small></li>"; }
+  (c.activos || []).forEach(function (x) { if (x.efecto !== "duelo") filas.push(fila(x.icono || "✨", x.nombre, shibuComCuando(x))); });
+  if (c.bandera) filas.push(fila("🚩", "Bandera del equipo", (c.bandera.mia ? "La compraste tú" : "La compró " + (c.bandera.de || "una compañera")) +
+    (c.bandera.cumplida ? " · ¡ya ganaste +1!" : " · si el local llega a la meta, +1 para todas")));
+  (c.duelos || []).forEach(function (d) { filas.push(fila("⚔️", d.reta ? "Duelo con " + (d.con || "") : "Duelo de " + (d.con || ""),
+    d.reta ? "Si hoy vendes más que ella, ganas 4 puntos" : "Te retó hoy: ¡que gane la mejor!")); });
+  if (c.hora_feliz) filas.push(fila("🕒", "Hora feliz", "+" + c.hora_feliz + " hoy"));
+  if (!filas.length) return "";
+  return '<h3 class="hub-sub">Tus comodines</h3><ul class="hub-com">' + filas.join("") + "</ul>";
 }
 // Después de dibujar, cada barra se llena hasta su avance
 function shibuLlena(box) {
@@ -268,7 +364,7 @@ function shibuBienvenida() {
     (e.estrellas ? '<p class="shibu-estrellas"><span>⭐ <b>' + (e.estrellas.total || 0) + "</b> " + ((e.estrellas.total || 0) === 1 ? "estrella" : "estrellas") +
       "</span><span>este mes " + ((e.estrellas.mes || 0) > 0 ? "+" : "") + (e.estrellas.mes || 0) + "</span>" +
       (e.estrellas.nivel ? "<span>Nivel " + e.estrellas.nivel + " · " + esc(e.estrellas.nombre || "") + "</span>" : "") + "</p>" : "") +
-    shibuTarjetas(e.misiones || [], { desde: function () { return 0; } }) +
+    '<div id="shibuMis">' + shibuTarjetas(e.misiones || [], { desde: function () { return 0; } }) + shibuMapaHtml(e) + "</div>" +
     '<p class="muted shibu-pie">Cada misión da sus puntos para la tienda y 1 ficha para jugar.</p>';
   $("shibuOk").textContent = "¡A trabajar!";
   $("shibuDlg").dataset.modo = "saludo";
@@ -280,15 +376,18 @@ function shibuBienvenida() {
 // ---- Celebración (una o varias misiones recién cumplidas): la barra se llena, cae el sello y aparece el premio
 function shibuCelebra() {
   var e = SHIBU.est; if (!e || !(e.nuevos || []).length) return;
-  var nuevos = e.nuevos, pts = nuevos.reduce(function (s, x) { return s + (x.puntos || 0); }, 0);
+  var nuevos = e.nuevos, pts = nuevos.reduce(function (s, x) { return s + (x.puntos || 0) + (x.comodin || 0); }, 0);
+  var com = nuevos.reduce(function (s, x) { return s + (x.comodin || 0); }, 0);
   // Los avisos de avance que quedaban ya no hacen falta: ahora celebra
-  SHIBU.avisos = []; var avisos = $("shibuAvisos"); if (avisos) avisos.innerHTML = "";
+  SHIBU.avisos = SHIBU.avisos.filter(function (a) { return a.com; }); var avisos = $("shibuAvisos"); if (avisos) avisos.innerHTML = "";
   // «Las tres»: el día completo son las 3 del día (fácil, media y difícil); la extra suma aparte
-  var regulares = (e.misiones || []).filter(function (x) { return !x.extra; });
-  var todas = nuevos.some(function (x) { return x.nivel > 0; }) && regulares.length > 0 && regulares.every(function (x) { return x.hecha; });
+  var regulares = (e.misiones || []).filter(function (x) { return !x.extra && (x.slot == null || x.slot <= 3); });
+  var todas = nuevos.some(function (x) { return x.nivel > 0 && (x.slot == null || x.slot <= 3); }) && regulares.length > 0 && regulares.every(function (x) { return x.hecha; });
   var lista = nuevos.map(function (n) {
-    var x = (e.misiones || []).find(function (m) { return shibuClave(m) === n.nivel && m.texto === n.texto; });
-    return Object.assign(x ? Object.assign({}, x) : { nivel: n.nivel, extra: n.nivel === 0, texto: n.texto, puntos: n.puntos, tipo: "", actual: 1, meta: 1 }, { hecha: true, _id: n.id });
+    var k = n.slot != null ? n.slot : n.nivel;
+    var x = (e.misiones || []).find(function (m) { return shibuClave(m) === k && m.texto === n.texto; });
+    return Object.assign(x ? Object.assign({}, x) : { nivel: n.nivel, slot: k, extra: k === 0, texto: n.texto, puntos: n.puntos, tipo: "", actual: 1, meta: 1, origen: n.origen },
+                         { hecha: true, _id: n.id, comodin: n.comodin || 0, sorpresa: false });
   });
   var quieto = shibuQuieto(), sello0 = quieto ? 0 : 0.95, tPremio = quieto ? 0 : sello0 + (lista.length - 1) * 0.45 + 0.55;
   var confeti = "";
@@ -298,7 +397,8 @@ function shibuCelebra() {
     '<div class="shibu-fiesta"><div class="fiesta-titulo">' + (todas ? "¡Las 3 misiones de hoy!" : nuevos.length > 1 ? "¡Misiones cumplidas!" : "¡Misión cumplida!") + "</div>" +
     shibuTarjetas(lista, { sellar: true, sello0: sello0, desde: function (x) { var d = SHIBU.desde[x._id]; return d == null ? 60 : d; } }) +
     '<div class="fiesta-premio" style="animation-delay:' + tPremio.toFixed(2) + 's"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") +
-    " · <b>+" + nuevos.length + "</b> ficha" + (nuevos.length === 1 ? "" : "s") + "</div></div>";
+    " · <b>+" + nuevos.length + "</b> ficha" + (nuevos.length === 1 ? "" : "s") +
+    (com ? ' <small class="fiesta-com">(+' + com + " de tus comodines)</small>" : "") + "</div></div>";
   $("shibuOk").textContent = "Seguir";
   var d = $("shibuDlg");
   d.dataset.modo = "fiesta";
@@ -412,7 +512,8 @@ function shibuHubLado() {
                tienda: shibuS(pts, "punto", "puntos") };
   // Cada 30 s llega lo nuevo de la base: el carnet solo se redibuja si algo cambió (no parpadea ni se come un toque)
   var es = e.estrellas || { total: 0, mes: 0, nivel: 0 };
-  var firma = JSON.stringify([nombre, e.grupo, mio && mio.puesto, pts, fch, info, HUB.tab, hayJuegos, es.total, es.mes, es.nivel]);
+  var firma = JSON.stringify([nombre, e.grupo, mio && mio.puesto, pts, fch, info, HUB.tab, hayJuegos, es.total, es.mes, es.nivel, e.mejoras,
+                              (e.comodines || {}).insignias]);
   if (firma === HUB.firmaLado && $("perfilLado").firstChild) return;
   HUB.firmaLado = firma;
   $("perfilLado").innerHTML =
@@ -423,7 +524,7 @@ function shibuHubLado() {
           (mio ? " · " + mio.puesto + ".º del Top maid" : "") + "</span></div></div>" +
       '<div class="perfil-saldos"><span class="pts"><i class="carnet-ico" aria-hidden="true">★</i><b id="hubPts">' + pts + "</b> punto" + (pts === 1 ? "" : "s") + "</span>" +
         '<span class="fch"><i class="jgo-moneda" aria-hidden="true"></i><b>' + fch + "</b> ficha" + (fch === 1 ? "" : "s") + "</span></div>" +
-      shibuEstrellasCarnet(es) +
+      shibuEstrellasCarnet(es) + shibuInsigniasHtml(e) +
     "</div>" +
     '<nav class="hub-nav" aria-label="Secciones de mi perfil">' + HUB_TABS.map(function (t) {
       var on = HUB.tab === t.id;
@@ -440,7 +541,20 @@ function shibuHubLado() {
 }
 // Estrellas de los clientes (Edgar, 25/11): cada opinión de 4 o 5 suma 1 y las de 1 o 2 restan 1. Niveles a las 5, 15, 30,
 // 60 y 100; el carnet cambia de marco con el nivel (bronce, plata, oro y el de Leyenda, que brilla)
-function shibuMarco(n) { return n >= 5 ? "leyenda" : n >= 4 ? "oro" : n >= 3 ? "plata" : n >= 1 ? "bronce" : "base"; }
+function shibuMarco(n) {
+  var mj = (SHIBU.est && SHIBU.est.mejoras) || { bronce: 1, plata: 3, oro: 4, animado: 5 };
+  function ok(k) { return mj[k] != null && n >= mj[k]; }
+  return ok("animado") ? "leyenda" : ok("oro") ? "oro" : ok("plata") ? "plata" : ok("bronce") ? "bronce" : "base";
+}
+// Las insignias que compró (comodín de nivel 4) y el regalo de Leyenda (mejora de nivel 5: un llavero o una pulsera)
+function shibuInsigniasHtml(e) {
+  var l = ((e && e.comodines) || {}).insignias || [], mj = (e && e.mejoras) || {}, n = ((e && e.estrellas) || {}).nivel || 0, h = "";
+  if (l.length) h += '<div class="carnet-insignias" aria-label="Sus insignias">' + l.map(function (k) {
+    return '<span title="Insignia ' + esc(k) + '">' + (INSIGNIA_IC[k] || "🏅") + "</span>";
+  }).join("") + "</div>";
+  if (mj.llavero != null && n >= mj.llavero) h += '<p class="carnet-regalo">🎁 Regalo de Leyenda: un llavero o una pulsera de Ichiraku. Pídeselo al encargado.</p>';
+  return h;
+}
 function shibuEstrellasCarnet(es) {
   es = es || {}; var total = es.total || 0, mes = es.mes || 0, n = es.nivel || 0, niv = es.niveles || [5, 15, 30, 60, 100];
   var antes = n > 0 ? niv[n - 1] : 0, sig = es.siguiente, pct = sig ? Math.max(0, Math.min(100, Math.round((total - antes) / (sig - antes) * 100))) : 100;
@@ -456,7 +570,7 @@ function shibuEstrellasCarnet(es) {
 function shibuHubPanel(soloSiCambio) {
   var e = SHIBU.est, p = $("perfilBody"); if (!e || !p) return;
   var tab = HUB.tab;
-  var firma = tab + "|" + (tab === "hoy" ? JSON.stringify([e.misiones, e.canjes, e.puntos, e.fichas, (e.juegos || {}).activo])
+  var firma = tab + "|" + (tab === "hoy" ? JSON.stringify([e.misiones, e.canjes, e.puntos, e.fichas, (e.juegos || {}).activo, e.comodines])
     : tab === "top" ? JSON.stringify([e.ranking, e.campeona, e.premios_top])
     : tab === "ventas" ? HUB.ventasAt + "|" + HUB.ventasErr + "|" + !!HUB.ventas : "");
   if (soloSiCambio && firma === HUB.firma) return;
@@ -483,10 +597,12 @@ function shibuHubHoy(e) {
   var hayJuegos = typeof abrirJuegos === "function" && (e.juegos || {}).activo !== false;
   var est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
   return shibuHubCab("Hoy", m.length ? "Llevas " + hechas + " de " + m.length + " misiones. Cada una da sus puntos y 1 ficha." : "") +
-    shibuTarjetas(m) +
+    shibuTarjetas(m) + shibuMapaHtml(e) + shibuComodinesHoy(e) +
     '<div class="hub-atajos">' +
-      '<button type="button" class="hub-atajo tienda" data-hub="tienda">' + shibuIc(HUB_IC.tienda) +
+      '<button type="button" class="hub-atajo tienda" data-hub="tienda" data-vmodo="premios">' + shibuIc(HUB_IC.tienda) +
         "<span><b>Expendedora</b><small>Tienes " + shibuS(pts, "punto", "puntos") + " para premios</small></span></button>" +
+      ((e.comodines || {}).catalogo ? '<button type="button" class="hub-atajo comodines" data-hub="tienda" data-vmodo="comodines">' + shibuIc(HUB_IC.tienda) +
+        "<span><b>Comodines</b><small>" + shibuS(((e.comodines || {}).activos || []).length, "activo", "activos") + "</small></span></button>" : "") +
       (hayJuegos ? '<button type="button" class="hub-atajo jugar" id="perfilJugar2">' + shibuIc(HUB_IC.jugar) +
         "<span><b>Jugar</b><small>Tienes " + shibuS(fch, "ficha", "fichas") + "</small></span></button>" : "") +
     "</div>" +
@@ -577,7 +693,7 @@ function shibuVtTip(b) {
 
 $("perfilDlg").addEventListener("click", function (ev) {
   var t = ev.target.closest("[data-hub]");
-  if (t) { shibuHubVe(t.dataset.hub); return; }
+  if (t) { if (t.dataset.vmodo && typeof VM !== "undefined") VM.modo = t.dataset.vmodo; shibuHubVe(t.dataset.hub); return; }
   if (ev.target.closest("#perfilClose")) { if (!shibuMaquinaOcupada()) $("perfilDlg").close(); return; }
   if (ev.target.closest("#perfilJugar, #perfilJugar2")) { if (shibuMaquinaOcupada()) return; $("perfilDlg").close(); abrirJuegos(); return; }
   if (ev.target.closest("#hubReintentar")) { shibuVentasPide(true); return; }
@@ -728,7 +844,7 @@ function shibuOlimpo(e) {
       '<line x1="' + x + '" y1="' + (top + 20) + '" x2="' + (x + w) + '" y2="' + (top + 20) + '" stroke="' + t + '" stroke-width="1.5"/>' +
       '<rect x="' + (x - 6) + '" y="' + top + '" width="' + (w + 12) + '" height="9" rx="2" fill="url(#marmol' + k + ')" stroke="' + t + '" stroke-width="2.5"/>' +
       '<text class="ol-num" x="' + cx + '" y="' + b.num[0] + '" text-anchor="middle" style="font-size:' + b.num[1] + 'px">' + SHIBU_ROMANO[p] + "</text>" +
-      '<text class="ol-nombre" x="' + cx + '" y="' + b.nom[0] + '" text-anchor="middle" style="font-size:' + b.nom[1] + 'px">' + esc(q ? shibuCorto(q.nombre, 11).toUpperCase() : "—") + "</text>" +
+      '<text class="ol-nombre" x="' + cx + '" y="' + b.nom[0] + '" text-anchor="middle" style="font-size:' + b.nom[1] + 'px">' + esc(q ? (q.corona ? "👑 " : "") + shibuCorto(q.nombre, 11).toUpperCase() : "—") + "</text>" +
       (q ? '<text class="ol-pts" x="' + cx + '" y="' + b.pts[0] + '" text-anchor="middle" style="font-size:' + b.pts[1] + 'px">' + q.puntos + " PTS" +
         (q.estrellas != null ? " · ⭐" + q.estrellas : "") + "</text>" : "") +
       (p === 1 && premios[0] ? '<text class="ol-premio" x="' + cx + '" y="388" text-anchor="middle">+' + premios[0] + " AL CERRAR EL MES</text>" : "");
@@ -748,7 +864,7 @@ function shibuOlimpo(e) {
   var resto = r.slice(3), h = '<section class="olimpo-caja" aria-label="Top maid de ' + esc(mes) + '"><h3 class="olimpo-tit">Top maid de ' + esc(mes) + "</h3>" + s;
   if (!r.length) h += '<p class="olimpo-nota">Todavía nadie suma puntos de misiones este mes: la primera se lleva el taiyaki de oro.</p>';
   if (resto.length) h += '<ol class="olimpo-resto">' + resto.map(function (x) {
-    return '<li class="' + (x.yo ? "yo" : "") + '"><em>' + x.puesto + ".º</em><b>" + esc(x.nombre) + (x.yo ? " <small>(tú)</small>" : "") + "</b><span>" + x.puntos + " pts" +
+    return '<li class="' + (x.yo ? "yo" : "") + '"><em>' + x.puesto + ".º</em><b>" + (x.corona ? "👑 " : "") + esc(x.nombre) + (x.yo ? " <small>(tú)</small>" : "") + "</b><span>" + x.puntos + " pts" +
       (x.estrellas != null ? " · ⭐" + x.estrellas : "") + "</span></li>";
   }).join("") + "</ol>";
   var yo = r.filter(function (x) { return x.yo; })[0];
@@ -771,7 +887,7 @@ function shibuEstatua(puesto) {
 // El premio del Top maid del mes pasado: se celebra una sola vez y los puntos vuelan a la chapita
 function shibuTopPremio() {
   var e = SHIBU.est, p = shibuTopPendiente(e); if (!p) return;
-  SHIBU.avisos = []; var avisos = $("shibuAvisos"); if (avisos) avisos.innerHTML = "";
+  SHIBU.avisos = SHIBU.avisos.filter(function (a) { return a.com; }); var avisos = $("shibuAvisos"); if (avisos) avisos.innerHTML = "";
   var mes = shibuMes(p.mes), frase = shibuFrase("top_maid"), confeti = "";
   if (!shibuQuieto()) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" + shibuEstatua(p.puesto) +
