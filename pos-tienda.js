@@ -67,15 +67,15 @@ function vmBloqueoLcd(t) {
   var p = vmNivelAbre(t), r = vmComInfo().reglas || {};
   return { recarga: "RECARGANDO · VUELVE EL DÍA 1", hoy: "YA PEDISTE TUS PREMIOS DE HOY · VUELVE MAÑANA", grande: "1 PREMIO GRANDE POR SEMANA · VUELVE EL LUNES",
            nivel: "SE ABRE CON EL NIVEL " + p.n + " DE ESTRELLAS (" + p.estrellas + " ⭐)", agotado: "AGOTADO ESTA SEMANA · VUELVE EL LUNES",
-           semana: "YA COMPRASTE " + (r.semana || 3) + " COMODINES ESTA SEMANA · VUELVE EL LUNES", uno_semana: "ES UNO POR SEMANA · VUELVE EL LUNES",
-           activo: "YA LO TIENES ACTIVO", activos: "YA TIENES " + (r.activos || 2) + " COMODINES ACTIVOS · ESPERA A QUE SE ACABE UNO",
+           semana: "YA COMPRASTE " + (r.semana || 3) + " CARTAS ESTA SEMANA · VUELVE EL LUNES", uno_semana: "ES UNA POR SEMANA · VUELVE EL LUNES",
+           activo: "YA LA TIENES ACTIVA", activos: "YA TIENES " + (r.activos || 2) + " CARTAS ACTIVAS · ESPERA A QUE SE ACABE UNA",
            bandera: "HOY YA HAY BANDERA DEL EQUIPO", insignias: "YA TIENES LAS 3 INSIGNIAS", sin_misiones: "NO TE QUEDAN MISIONES POR CAMBIAR HOY",
            comprado: "YA LO COMPRASTE HOY · MAÑANA SALEN OTROS", sorteo: "NO TE SALIÓ HOY" }[t.bloqueo] || "";
 }
 function vmBloqueoCorto(t) {
   var r = vmComInfo().reglas || {};
   return { recarga: "Recargando", hoy: "Mañana", grande: "1 por semana", nivel: "Nivel " + vmNivelAbre(t).n, agotado: "Agotado",
-           semana: (r.semana || 3) + " por semana", uno_semana: "1 por semana", activo: "Activo", activos: (r.activos || 2) + " activos",
+           semana: (r.semana || 3) + " por semana", uno_semana: "1 por semana", activo: "Activa", activos: (r.activos || 2) + " activas",
            bandera: "Ya hay hoy", insignias: "Completas", sin_misiones: "Sin misiones", comprado: "Comprado", sorteo: "Mañana" }[t.bloqueo] || "";
 }
 // Cuánto dura un comodín, en palabras (para el globo de Shibu)
@@ -96,9 +96,9 @@ function vmMensajeInicial() {
   var it = vmItems(), e = SHIBU.est || {};
   if (vmCom()) {
     var c = vmComInfo(), r = c.reglas || {};
-    vmMensaje("ELIGE UN COMODÍN");
-    vmGlobo((c.vitrina > 0 ? "Hoy te salieron estos " + (c.catalogo || []).length + " comodines; mañana salen otros. " : "Los comodines mejoran tu día: más puntos, misiones extra y ayudas. ") +
-      "Puedes tener " + (r.activos || 2) + " activos y comprar " + (r.semana || 3) + " por semana (llevas " + (c.semana || 0) + ").");
+    vmMensaje("ELIGE UNA CARTA");
+    vmGlobo((c.vitrina > 0 ? "Hoy te salieron estas " + (c.catalogo || []).length + " cartas; mañana salen otras. " : "Las cartas mejoran tu día: más puntos, misiones extra y ayudas. ") +
+      "Puedes tener " + (r.activos || 2) + " activas y comprar " + (r.semana || 3) + " por semana (llevas " + (c.semana || 0) + ").");
     return;
   }
   if (it.length && it.every(function (x) { return x.bloqueo === "recarga"; })) {
@@ -178,7 +178,7 @@ function vmModos() {
   var hay = !!vmComInfo().catalogo, com = vmCom();
   m.hidden = !hay;
   m.innerHTML = hay ? '<button type="button" role="tab" data-vmodo="premios" aria-selected="' + !com + '">PREMIOS</button>' +
-    '<button type="button" role="tab" data-vmodo="comodines" aria-selected="' + com + '">COMODINES</button>' : "";
+    '<button type="button" role="tab" data-vmodo="comodines" aria-selected="' + com + '">CARTAS</button>' : "";
   $("vmVidrio").classList.toggle("com", com);
 }
 function vmCambiaModo(m) {
@@ -213,7 +213,7 @@ function vmPintaSlots() {
       (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
       '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + precio + "</span></span></button>";
   }
-  if (sorteo) h += '<p class="vm-sorteo-nota">🎲 Tus comodines de hoy. Mañana salen otros.</p>';
+  if (sorteo) h += '<p class="vm-sorteo-nota">🎲 Tus cartas de hoy. Mañana salen otras.</p>';
   $("vmSlots").innerHTML = h;
   vmBoton();
 }
@@ -254,9 +254,9 @@ function vmRecibo() {
   if (!$("vmRecibo")) return;
   if (vmCom()) {
     var a = vmComInfo().activos || [];
-    $("vmRecibo").innerHTML = '<b class="rec-tit">MIS COMODINES</b>' + (a.length ? "<ol>" + a.slice(0, 5).map(function (x) {
+    $("vmRecibo").innerHTML = '<b class="rec-tit">MIS CARTAS</b>' + (a.length ? "<ol>" + a.slice(0, 5).map(function (x) {
       return "<li><span>" + esc((x.icono || "") + " " + x.nombre) + "</span><span>" + esc(typeof shibuComCuando === "function" ? shibuComCuando(x) : "") + "</span></li>";
-    }).join("") + "</ol>" : "<p>Todavía no tienes comodines.</p>");
+    }).join("") + "</ol>" : "<p>Todavía no tienes cartas.</p>");
     return;
   }
   var c = ((SHIBU.est && SHIBU.est.canjes) || []).slice(0, 4), est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
@@ -412,7 +412,7 @@ function vmComprar() {
 function vmComprarCom(i, t) {
   var antes = vmPuntos(), datos = VM.datos || {}, quien = U.id, huella = vmHuella();
   VM.ocupada = true; vmBoton();
-  vmMensaje("SACANDO TU COMODÍN…");
+  vmMensaje("SACANDO TU CARTA…");
   vmEspera(Promise.resolve().then(function () { return rpc("com_comprar", { p_comodin: t.id, p_datos: datos }); })).then(function (r) {
     vmDeQuien(quien);
     return vmEspera(rpc("mis_estado")).then(function (e) { vmDeQuien(quien); SHIBU.est = e; shibuChip(); }, function (e) { if (e && e.otraMaid) throw e; })

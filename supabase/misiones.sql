@@ -1390,22 +1390,22 @@ declare f date := public.mis_hoy(); k record; est jsonb; niv int; b text; cid bi
   v_datos jsonb := coalesce(p_datos, '{}'::jsonb); nv int;
 begin
   perform public.pos_auth(p_emp, p_pin);
-  if not public.mis_juega(p_emp) then raise exception 'Los comodines son para las meseras y cajeras'; end if;
+  if not public.mis_juega(p_emp) then raise exception 'Las cartas son para las meseras y cajeras'; end if;
   select * into k from public.com_catalogo where id = p_comodin;
-  if k.id is null then raise exception 'Ese comodín no está en la máquina'; end if;
+  if k.id is null then raise exception 'Esa carta no está en la máquina'; end if;
   perform pg_advisory_xact_lock(hashtext('puntos'), p_emp::int);   -- sus puntos se gastan de a uno (tienda y comodines)
   perform pg_advisory_xact_lock(hashtext('comodines'), p_emp::int);
   if k.efecto = 'bandera' then perform pg_advisory_xact_lock(hashtext('comodines'), 0); end if;
   est := public.mis_estrellas(p_emp, f); niv := coalesce((est ->> 'nivel')::int, 0);
   b := public.com_bloqueo(p_emp, f, k.id, niv);
-  if b = 'no' then raise exception 'Ese comodín no está en la máquina'; end if;
-  if b = 'sorteo' then raise exception 'Ese comodín no te salió hoy en la máquina'; end if;
+  if b = 'no' then raise exception 'Esa carta no está en la máquina'; end if;
+  if b = 'sorteo' then raise exception 'Esa carta no te salió hoy en la máquina'; end if;
   if b = 'comprado' then raise exception 'Ya lo compraste hoy: mañana salen otros'; end if;
-  if b = 'nivel' then raise exception 'Este comodín se abre con el nivel % de estrellas (% ⭐)', k.nivel, (est -> 'niveles') ->> (k.nivel - 1); end if;
-  if b = 'semana' then raise exception 'Ya compraste % comodines esta semana: vuelve el lunes', public.com_reglas() ->> 'semana'; end if;
-  if b = 'uno_semana' then raise exception 'Este comodín es uno por semana: vuelve el lunes'; end if;
-  if b = 'activo' then raise exception 'Ya tienes este comodín activo'; end if;
-  if b = 'activos' then raise exception 'Ya tienes % comodines activos: espera a que se acabe uno', public.com_reglas() ->> 'activos'; end if;
+  if b = 'nivel' then raise exception 'Esta carta se abre con el nivel % de estrellas (% ⭐)', k.nivel, (est -> 'niveles') ->> (k.nivel - 1); end if;
+  if b = 'semana' then raise exception 'Ya compraste % cartas esta semana: vuelve el lunes', public.com_reglas() ->> 'semana'; end if;
+  if b = 'uno_semana' then raise exception 'Esta carta es una por semana: vuelve el lunes'; end if;
+  if b = 'activo' then raise exception 'Ya tienes esta carta activa'; end if;
+  if b = 'activos' then raise exception 'Ya tienes % cartas activas: espera a que se acabe una', public.com_reglas() ->> 'activos'; end if;
   if b = 'bandera' then raise exception 'Hoy ya hay bandera del equipo: otra compañera la compró'; end if;
   if b = 'insignias' then raise exception 'Ya tienes las 3 insignias'; end if;
   if b = 'sin_misiones' then raise exception 'No te quedan misiones por cambiar hoy'; end if;

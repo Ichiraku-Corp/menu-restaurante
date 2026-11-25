@@ -14,7 +14,7 @@ function shibuVigente(ses) { return !!U && ses === SHIBU.sesion; }
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
 // Comodines (Edgar, 25/11): de dónde salió una misión propia de la maid
 var ORIGEN_TXT = { extra_facil: "📜 Pergamino", extra_dificil: "📜 Pergamino", doble_media: "📜 Pergamino", sorpresa: "🎲 Sorpresa",
-                   cambio: "🔄 Cambiada", mapa: "🗺️ Del mapa" };
+                   cambio: "🔄 Cambiada", mapa: "📋 De la carta del menú" };
 var INSIGNIA_IC = { estrella: "⭐", ramen: "🍜", taiyaki: "🐟" };
 var MIS_PLATA = ["ventas", "promedio", "primera", "vs_ayer", "vs_semana", "top_ventas", "equipo_meta"];
 var SHIBU_REVISA_MS = 30000;
@@ -271,7 +271,7 @@ function shibuComAvisos(e, espera) {
 function shibuAvisoCom(box, c) {
   var el = document.createElement("button");
   el.type = "button"; el.className = "shibu-aviso com";
-  el.innerHTML = shibuCara("mini") + '<span class="sa-txt"><span class="sa-nivel">' + esc(c.icono || "✨") + " Comodines</span><b>" + esc(c.texto) + "</b></span>";
+  el.innerHTML = shibuCara("mini") + '<span class="sa-txt"><span class="sa-nivel">' + esc(c.icono || "✨") + " Cartas</span><b>" + esc(c.texto) + "</b></span>";
   box.appendChild(el);
   while (box.children.length > 3) box.removeChild(box.firstChild);
   el.addEventListener("click", function () { el.remove(); shibuPerfil("hoy"); });
@@ -316,19 +316,19 @@ function shibuTarjetas(lista, op) {
 }
 // Lo que le suman sus comodines: ×2, ×4, +1 y la Campanita (×3 a la próxima); en la cumplida, lo que ya sumaron
 function shibuComBadge(x) {
-  if (x.hecha) return x.comodin > 0 ? '<em class="mis-com">+' + x.comodin + " de comodines</em>" : "";
+  if (x.hecha) return x.comodin > 0 ? '<em class="mis-com">+' + x.comodin + " de cartas</em>" : "";
   var f = x.efecto, t = [];
   if (!f) return "";
   if (f.mult > 1) t.push("×" + f.mult);
   if (f.mas > 0) t.push("+" + f.mas);
   if (f.campanita) t.push("🔔 ×3 a la próxima");
-  return t.length ? '<em class="mis-com" title="Lo que suman tus comodines">' + esc(t.join(" ")) + "</em>" : "";
+  return t.length ? '<em class="mis-com" title="Lo que suman tus cartas">' + esc(t.join(" ")) + "</em>" : "";
 }
 // Mapa de Shibu (comodín): el día que vale, la maid elige su misión media entre 3 (o se queda con la suya)
 function shibuMapaHtml(e) {
   var m = e && e.comodines && e.comodines.mapa;
   if (!m || m.hecha || !(m.opciones || []).length) return "";
-  return '<div class="mapa-box" data-compra="' + Number(m.compra) + '"><b>🗺️ Mapa de Shibu: elige tu misión media de hoy</b>' +
+  return '<div class="mapa-box" data-compra="' + Number(m.compra) + '"><b>📋 Carta del menú: elige tu misión media de hoy</b>' +
     "<small>La de hoy: " + esc(m.actual || "") + "</small>" +
     '<div class="mapa-ops">' + m.opciones.map(function (o) {
       return '<button type="button" class="mapa-op" data-mapa="' + Number(o.id) + '">' + esc(o.texto) + "</button>";
@@ -366,13 +366,13 @@ function shibuComodinesHoy(e) {
   var c = (e && e.comodines) || {}, filas = [];
   function fila(ic, nom, txt) { return '<li><span class="cm-ico" aria-hidden="true">' + esc(ic) + "</span><b>" + esc(nom) + "</b><small>" + esc(txt) + "</small></li>"; }
   (c.activos || []).forEach(function (x) { if (x.efecto !== "duelo") filas.push(fila(x.icono || "✨", x.nombre, shibuComCuando(x))); });
-  if (c.bandera) filas.push(fila("🚩", "Bandera del equipo", (c.bandera.mia ? "La compraste tú" : "La compró " + (c.bandera.de || "una compañera")) +
+  if (c.bandera) filas.push(fila("📸", "Foto de equipo", (c.bandera.mia ? "La compraste tú" : "La compró " + (c.bandera.de || "una compañera")) +
     (c.bandera.cumplida ? " · ¡ya ganaste +1!" : " · si el local llega a la meta, +1 para todas")));
   (c.duelos || []).forEach(function (d) { filas.push(fila("⚔️", d.reta ? "Duelo con " + (d.con || "") : "Duelo de " + (d.con || ""),
     d.reta ? "Si hoy vendes más que ella, ganas 4 puntos" : "Te retó hoy: ¡que gane la mejor!")); });
   if (c.hora_feliz) filas.push(fila("🕒", "Hora feliz", "+" + c.hora_feliz + " hoy"));
   if (!filas.length) return "";
-  return '<h3 class="hub-sub">Tus comodines</h3><ul class="hub-com">' + filas.join("") + "</ul>";
+  return '<h3 class="hub-sub">Tus cartas</h3><ul class="hub-com">' + filas.join("") + "</ul>";
 }
 // Después de dibujar, cada barra se llena hasta su avance
 function shibuLlena(box) {
@@ -432,7 +432,7 @@ function shibuCelebra() {
     shibuTarjetas(lista, { sellar: true, sello0: sello0, desde: function (x) { var d = SHIBU.desde[x._id]; return d == null ? 60 : d; } }) +
     '<div class="fiesta-premio" style="animation-delay:' + tPremio.toFixed(2) + 's"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") +
     " · <b>+" + nuevos.length + "</b> ficha" + (nuevos.length === 1 ? "" : "s") +
-    (com ? ' <small class="fiesta-com">(+' + com + " de tus comodines)</small>" : "") + "</div></div>";
+    (com ? ' <small class="fiesta-com">(+' + com + " de tus cartas)</small>" : "") + "</div></div>";
   $("shibuOk").textContent = "Seguir";
   var d = $("shibuDlg");
   d.dataset.modo = "fiesta";
@@ -636,7 +636,7 @@ function shibuHubHoy(e) {
       '<button type="button" class="hub-atajo tienda" data-hub="tienda" data-vmodo="premios">' + shibuIc(HUB_IC.tienda) +
         "<span><b>Expendedora</b><small>Tienes " + shibuS(pts, "punto", "puntos") + " para premios</small></span></button>" +
       ((e.comodines || {}).catalogo ? '<button type="button" class="hub-atajo comodines" data-hub="tienda" data-vmodo="comodines">' + shibuIc(HUB_IC.tienda) +
-        "<span><b>Comodines</b><small>" + shibuS(((e.comodines || {}).activos || []).length, "activo", "activos") + "</small></span></button>" : "") +
+        "<span><b>Cartas</b><small>" + shibuS(((e.comodines || {}).activos || []).length, "activa", "activas") + "</small></span></button>" : "") +
       (hayJuegos ? '<button type="button" class="hub-atajo jugar" id="perfilJugar2">' + shibuIc(HUB_IC.jugar) +
         "<span><b>Jugar</b><small>Tienes " + shibuS(fch, "ficha", "fichas") + "</small></span></button>" : "") +
     "</div>" +

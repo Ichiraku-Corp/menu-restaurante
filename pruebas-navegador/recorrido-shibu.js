@@ -254,14 +254,14 @@ ok(await p.evaluate(()=>{const c=[...document.querySelectorAll("#perfilBody .mis
       &&sor&&/\? puntos/.test(sor.textContent)&&/🎲 Sorpresa/.test(sor.textContent)&&/🔔 ×3 a la próxima/.test(sor.textContent)
       &&/×2 \+1/.test(c[1].querySelector(".mis-com").textContent);}),
   "en «Hoy» salen sus misiones de pergamino y la sorpresa (con «? puntos»), y lo que suman sus comodines: ×2, +1 y la Campanita");
-ok(/Tus comodines/.test(await p.textContent("#perfilBody"))&&/Diadema dorada\s*Quedan 5 días/.test(await p.textContent("#perfilBody .hub-com"))
+ok(/Tus cartas/.test(await p.textContent("#perfilBody"))&&/Diadema dorada\s*Quedan 5 días/.test(await p.textContent("#perfilBody .hub-com"))
   &&await p.isVisible('#perfilBody .hub-atajo.comodines'),"«Tus comodines» dice cuánto le queda a cada uno y hay un atajo a los comodines de la máquina");
 ok(await p.locator("#perfilBody .mapa-box .mapa-op").count()===4&&/La de hoy: Comanda promedio/.test(await p.textContent("#perfilBody .mapa-box")),
   "con el Mapa de Shibu elige su misión media entre 3 (o se queda con la suya)");
 await foto("comodines-hoy.png");
 await p.click('#perfilBody .mapa-op[data-mapa="302"]');await p.waitForTimeout(900);
 ok((await M()).elegidos[0]===302&&await p.locator("#perfilBody .mapa-box").count()===0&&/Vende 4 postres en una comanda/.test(await p.textContent("#perfilBody .mis-card:nth-child(2)"))
-  &&/🗺️ Del mapa/.test(await p.textContent("#perfilBody .mis-card:nth-child(2)")),"al elegir, esa es su misión media de hoy y el mapa se va");
+  &&/📋 De la carta del menú/.test(await p.textContent("#perfilBody .mis-card:nth-child(2)")),"al elegir, esa es su misión media de hoy y el mapa se va");
 ok(/🍜/.test(await p.textContent("#perfilLado .carnet-insignias")),"el carnet muestra su insignia de honor");
 await p.click('#perfilLado [data-hub="top"]');await p.waitForTimeout(500);
 ok(/👑 SAKURA/.test(await p.evaluate(()=>[...document.querySelectorAll("#perfilBody svg.olimpo .ol-nombre")].map(x=>x.textContent).join(","))),"en el Top maid, la de nivel Leyenda lleva corona");
@@ -271,11 +271,11 @@ await p.click('#perfilLado [data-hub="hoy"]');await p.waitForTimeout(300);
 await p.click('#perfilBody .hub-atajo.comodines');await p.waitForSelector("#perfilBody .vm");await p.waitForTimeout(600);
 ok(await p.evaluate(()=>VM.modo==="comodines"&&document.querySelector('#vmModos [data-vmodo="comodines"]').getAttribute("aria-selected")==="true")
   &&await p.locator("#vmSlots .vm-slot.com").count()===3&&/🔒 Nivel 3/.test(await p.textContent('#vmSlots .vm-slot[data-i="1"] .vm-bloq'))
-  &&await p.evaluate(()=>document.getElementById("vmVidrio").classList.contains("sorteo"))&&/Mañana salen otros/.test(await p.textContent("#vmSlots .vm-sorteo-nota"))
-  &&/MIS COMODINES/.test(await p.textContent("#vmRecibo"))&&await p.locator("#vmTeclado [data-k]").count()===6,
+  &&await p.evaluate(()=>document.getElementById("vmVidrio").classList.contains("sorteo"))&&/Mañana salen otras/.test(await p.textContent("#vmSlots .vm-sorteo-nota"))
+  &&/MIS CARTAS/.test(await p.textContent("#vmRecibo"))&&await p.locator("#vmTeclado [data-k]").count()===6,
   "el atajo abre la máquina en sus 3 comodines del día (grandes, con el de nivel 3 con candado) y dice que mañana salen otros");
 await p.waitForFunction(()=>/\(llevas 0\)\.$/.test(document.getElementById("vmGlobo").textContent),null,{timeout:8000}).catch(()=>{});   // la escribe letra por letra
-ok(/Hoy te salieron estos 3 comodines; mañana salen otros\. Puedes tener 2 activos y comprar 3 por semana \(llevas 0\)\./.test(await p.textContent("#vmGlobo")),
+ok(/Hoy te salieron estas 3 cartas; mañana salen otras\. Puedes tener 2 activas y comprar 3 por semana \(llevas 0\)\./.test(await p.textContent("#vmGlobo")),
   "Shibu explica el sorteo del día y las reglas");
 await p.click('#vmSlots .vm-slot[data-i="0"]');await p.waitForTimeout(250);
 ok(/A1 · TAZA DE SHIBU · 3 PTS/.test(await p.textContent("#vmMsg"))&&await p.isEnabled("#vmComprar")&&await p.isHidden("#vmElige"),"al elegir la Taza la pantalla dice su precio y el botón se prende");
@@ -312,7 +312,7 @@ await p.click("#perfilClose");await p.waitForTimeout(200);
 await p.evaluate(()=>{const M=window.__MIS;M.nuevos[1]=[{id:12,nivel:1,slot:11,texto:'Vende 2 bebidas',puntos:1,comodin:1,origen:'extra_facil'}];M.misiones[3].hecha=true;M.misiones[3].comodin=1;M.puntos[1]+=2;
   M.comodines.avisos=[{id:502,icono:'⚔️',texto:'Luz te retó a un duelo de ventas hoy: ¡que gane la mejor!'}];});
 await p.evaluate(()=>shibuPoll(false));await p.waitForSelector("#shibuDlg[open] .shibu-fiesta",{timeout:4000});await p.waitForTimeout(1600);
-ok(/\+2\s*puntos/.test(await p.textContent(".fiesta-premio"))&&/\(\+1 de tus comodines\)/.test(await p.textContent(".fiesta-premio"))&&/📜 Pergamino/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
+ok(/\+2\s*puntos/.test(await p.textContent(".fiesta-premio"))&&/\(\+1 de tus cartas\)/.test(await p.textContent(".fiesta-premio"))&&/📜 Pergamino/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
   "al cumplir la del pergamino con el ×2, la celebración suma los puntos de la misión y los del comodín");
 await foto("comodines-celebracion.png");
 ok((await M()).vistosCom.indexOf(502)<0,"el aviso del duelo espera a que se cierre la celebración (no se pierde detrás)");

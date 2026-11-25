@@ -89,14 +89,14 @@ select prueba.ok((select (m ->> 'comodin')::int from jsonb_array_elements(:'e1':
   'la tablet ve lo que sumaron los comodines, cuánto valdrán las que faltan (×2 y +1) y sus 2 comodines activos');
 
 -- 3) Reglas: 2 activos, no el mismo dos veces, los instantáneos no ocupan lugar, 3 por semana
-select prueba.falla(format('select public.com_comprar(%s, %L, 2)', :mei, '8101'), 'ya tienes este comodín activo', 'la misma Taza no se compra dos veces mientras dura');
-select prueba.falla(format('select public.com_comprar(%s, %L, 3)', :mei, '8101'), 'ya tienes 2 comodines activos', 'con 2 activos no se compra otro (la Campanita)');
+select prueba.falla(format('select public.com_comprar(%s, %L, 2)', :mei, '8101'), 'ya tienes esta carta activa', 'la misma Taza no se compra dos veces mientras dura');
+select prueba.falla(format('select public.com_comprar(%s, %L, 3)', :mei, '8101'), 'ya tienes 2 cartas activas', 'con 2 activos no se compra otro (la Campanita)');
 select public.mis_fichas_saldo(:mei) f0 \gset
 set role authenticated;
 select public.com_comprar(:mei, '8101', 16) as r3 \gset
 reset role;
 select prueba.ok(public.mis_fichas_saldo(:mei) = :f0 + 3, 'la Bolsa de fichas no ocupa lugar: da 3 fichas al momento');
-select prueba.falla(format('select public.com_comprar(%s, %L, 19)', :mei, '8101'), 'ya compraste 3 comodines esta semana', 'el cuarto comodín de la semana no sale');
+select prueba.falla(format('select public.com_comprar(%s, %L, 19)', :mei, '8101'), 'ya compraste 3 cartas esta semana', 'el cuarto comodín de la semana no sale');
 
 -- Desde aquí: todas con el nivel 5 de estrellas y reglas más amplias (las reglas por defecto ya se probaron)
 update public.pos_kv set value = value || '{"estrellas_niveles": [0, 0, 0, 0, 0], "comodines": {"activos": 10, "semana": 20, "suman": true, "uno_semana": [22, 23], "vitrina": 0}}'::jsonb
@@ -281,7 +281,7 @@ select public.com_comprar(:luz, '8103', 22, jsonb_build_object('para', :sol)) as
 reset role;
 select prueba.ok(public.mis_saldo(:sol) = :so0 + 3 and exists (select 1 from public.com_avisos where employee_id = :sol and texto like '%te regaló 3 puntos%'),
   'el Regalo le da 3 puntos a la compañera y le avisa');
-select prueba.falla(format('select public.com_comprar(%s, %L, 22, %L)', :luz, '8103', jsonb_build_object('para', :mei)), 'uno por semana', 'el Regalo es uno por semana');
+select prueba.falla(format('select public.com_comprar(%s, %L, 22, %L)', :luz, '8103', jsonb_build_object('para', :mei)), 'una por semana', 'el Regalo es uno por semana');
 select prueba.falla(format('select public.com_comprar(%s, %L, 23, %L)', :luz, '8103', jsonb_build_object('para', :luz)), 'elige a una compañera', 'no se reta a sí misma');
 set role authenticated;
 select public.com_comprar(:luz, '8103', 23, jsonb_build_object('para', :mei)) as rdue \gset
