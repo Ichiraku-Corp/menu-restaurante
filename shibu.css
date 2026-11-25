@@ -442,3 +442,50 @@
 .shibu-aviso.com { border-left-color:#EA5BA6; }
 /* Los avisos de avance no se tocan (revisión del 25/11): salen arriba a la derecha y nunca tapan un botón del pedido */
 .shibu-avisos, .shibu-avisos * { pointer-events:none !important; }
+
+/* ---- Mi perfil en la tablet acostada (las Fire: 962×601) y el teléfono acostado (Edgar, 25/11): la columna del carnet se
+   vuelve una barra angosta con la inicial, los puntos, las fichas y las secciones con su ícono y su nombre; «Cerrar» va
+   abajo de esa barra. Así la sección (y la máquina) usa casi todo el ancho. */
+@media (min-width: 761px) and (max-width: 1100px), (min-width: 761px) and (max-height: 700px), (orientation: landscape) and (max-height: 480px) and (min-width: 600px) {
+  .hub-marco { grid-template-columns:100px minmax(0, 1fr); grid-template-rows:minmax(0, 1fr); }
+  .hub-lado { gap:8px; overflow:auto; padding:8px 7px calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .hub .carnet { border-radius:14px; margin-right:0; }
+  .hub-nav { display:grid; overflow:visible; margin:0; padding:0; scroll-snap-type:none; }
+  .hub-tab { width:100%; flex:initial; }
+  .hub-panel.tienda { overflow:hidden; }
+  .hub-vm { height:100%; }
+  .carnet-cinta, .carnet-quien, .carnet-estrellas, .carnet-insignias, .carnet-regalo, .carnet::after { display:none; }
+  .carnet-fila { grid-template-columns:minmax(0, 1fr); justify-items:center; padding:8px 4px 4px; }
+  .carnet-ava { width:44px; height:44px; font-size:20px; }
+  .carnet .perfil-saldos { flex-direction:column; align-items:stretch; gap:4px; padding:2px 5px 8px; }
+  .carnet .perfil-saldos span { justify-content:center; padding:2px 6px 2px 3px; font-size:0; gap:3px; }
+  .carnet .perfil-saldos b { font-size:14px; }
+  .carnet-ico, .carnet .jgo-moneda { width:18px; height:18px; font-size:10px; }
+  .hub-nav { gap:6px; }
+  .hub-tab { grid-template-columns:minmax(0, 1fr); justify-items:center; gap:3px; min-height:60px; padding:7px 3px; text-align:center; border-radius:14px; }
+  .hub-tab .ic { width:24px; height:24px; }
+  .ht-txt b { font-size:11px; line-height:1.15; letter-spacing:-.01em; white-space:normal; }
+  .ht-txt small { display:none; }
+  .hub-tab.on { box-shadow:3px 4px 0 rgba(0,0,0,.35); }
+  .hub-tab.jugar { margin-top:2px; }
+  .hub-shibu { display:none; }
+  #perfilDlg .hub-cerrar { top:auto; right:auto; left:8px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); width:84px; padding:10px 0; font-size:14px; text-align:center; }
+  .hub-vm .vm-sala { padding-right:10px; }
+  .hub-cab { padding-right:0; }
+  .hub-panel { padding:16px 18px calc(24px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (min-width: 761px) and (max-height: 480px), (orientation: landscape) and (max-height: 480px) and (min-width: 600px) {
+  .hub .carnet { display:none; }
+  .hub-lado { padding:58px 7px 8px; }
+  #perfilDlg .hub-cerrar { top:8px; bottom:auto; padding:9px 0; }
+  .hub-tab { min-height:46px; padding:5px 3px; }
+  .hub-tab .ic { width:20px; height:20px; }
+}
+/* De pie: el carnet en una sola franja (inicial, nombre y saldos) y las estrellas en una línea, para que la sección se vea */
+@media (max-width: 760px) and (orientation: portrait), (max-width: 599px) {
+  .carnet-cinta { display:none; }
+  .carnet-estrellas { margin:0 10px 8px; padding:5px 8px; }
+  .carnet-estrellas .ce-barra, .carnet-estrellas .ce-falta { display:none; }
+  .carnet-estrellas .ce-fila { gap:8px; }
+  .carnet-insignias { margin:-2px 10px 8px; }
+}

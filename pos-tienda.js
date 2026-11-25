@@ -153,15 +153,17 @@ function vmDibuja(cont) {
           '<span class="vm-tornillo t1"></span><span class="vm-tornillo t2"></span><span class="vm-tornillo t3"></span><span class="vm-tornillo t4"></span>' +
           '<div class="vm-lcd" role="status" aria-live="polite"><div class="lcd-fila"><small>SALDO</small><b><span id="vmSaldo">0</span> PTS</b></div>' +
             '<div class="lcd-msg" id="vmMsg"></div></div>' +
-          '<div class="vm-teclado" id="vmTeclado" aria-label="Teclado de la máquina"></div>' +
+          '<div class="vm-info" id="vmInfo"></div>' +
+          '<div class="vm-elige" id="vmElige" hidden></div>' +
           '<div class="vm-boton-caja"><button type="button" class="vm-comprar" id="vmComprar" disabled aria-label="Mantén presionado para comprar">' +
             '<svg class="vm-anillo" viewBox="0 0 120 120" aria-hidden="true"><circle class="an-fondo" cx="60" cy="60" r="54"/><circle class="an-lleno" cx="60" cy="60" r="54"/></svg>' +
             '<span class="vm-comprar-txt"><b>MANTÉN</b><small>para comprar</small></span></button></div>' +
           '<div class="vm-shibu">' + shibuCara("media") + '<p class="vm-globo" id="vmGlobo" hidden></p>' +
             '<p class="vm-ayuda" id="vmAyuda">Elige un premio en el vidrio y mantén presionado el botón grande.</p></div>' +
-          '<div class="vm-elige" id="vmElige" hidden></div>' +
-          '<div class="vm-recibo" id="vmRecibo"></div>' +
+          '<div class="vm-codigo"><span class="vm-codigo-tit">También puedes teclear su código: letra y número</span>' +
+            '<div class="vm-teclado" id="vmTeclado" aria-label="Teclado de la máquina"></div></div>' +
         "</div>" +
+        '<div class="vm-recibo" id="vmRecibo"></div>' +
       "</div>" +
       '<div class="vm-bandeja"><span class="vm-placa" aria-hidden="true"><img src="assets/logo-gato.png" alt=""><span><b>ICHIRAKU</b><small>RAMEN</small></span></span>' +
         '<div class="vm-hueco" id="vmHueco"><span class="vm-hueco-txt">RETIRA TU PREMIO AQUÍ</span></div><span class="vm-tapa" id="vmTapa" aria-hidden="true"></span>' +
@@ -215,21 +217,32 @@ function vmPintaSlots() {
   $("vmSlots").innerHTML = h;
   vmBoton();
 }
-// Un comodín en su cápsula: el ícono, el nombre, el precio y, si no se puede comprar, por qué
+// Un comodín es una carta (Edgar, 25/11): arriba su código y su precio, el dibujo, el nombre y lo que hace; si no se puede
+// comprar, dice por qué. Los dibujos se ponen en VM_ARTE (id del comodín → imagen) a medida que llegan.
+var VM_ARTE = {};
+function vmArte(t) {
+  var a = VM_ARTE[t.id];
+  return a ? '<img src="' + esc(a) + '" alt="" loading="lazy">' : '<i aria-hidden="true">' + esc(t.icono || "✨") + "</i>";
+}
 function vmSlotCom(t, i, cod, pts) {
   var ok = !t.bloqueo && pts >= t.puntos;
-  return '<button type="button" class="vm-slot com ' + (ok ? "alcanza" : "falta") + (t.bloqueo ? " bloq b-" + esc(t.bloqueo) : "") + (VM.sel === i ? " sel" : "") +
-    '" data-i="' + i + '" aria-label="' + esc(cod + ", " + t.nombre + ", " + t.puntos + " puntos" + (t.bloqueo ? ", " + vmBloqueoCorto(t) : "")) + '">' +
-    '<span class="vm-prod">' + vmCapsula(t) + '</span><span class="vm-espiral"></span>' +
+  return '<button type="button" class="vm-slot com carta-c n' + (Number(t.nivel) || 0) + " " + (ok ? "alcanza" : "falta") + (t.bloqueo ? " bloq b-" + esc(t.bloqueo) : "") +
+    (VM.sel === i ? " sel" : "") + '" data-i="' + i + '" aria-label="' + esc(cod + ", carta " + t.nombre + ", " + t.puntos + " puntos" + (t.bloqueo ? ", " + vmBloqueoCorto(t) : "")) + '">' +
+    '<span class="cc-cab"><b>' + cod + "</b><span>" + t.puntos + (t.puntos === 1 ? " pt" : " pts") + "</span></span>" +
+    '<span class="vm-prod cc-arte">' + vmArte(t) + "</span>" +
     (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : t.bloqueo === "comprado" ? "✓ " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
-    '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + t.puntos + " pts</span></span></button>";
+    '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="cc-texto">' + esc(t.texto || "") + "</span></button>";
+}
+// La carta chiquita que cae a la bandeja
+function vmCartaMini(t) {
+  return '<span class="cc-mini n' + (Number(t.nivel) || 0) + '" aria-hidden="true"><span class="cc-arte">' + vmArte(t) + "</span></span>";
 }
 function vmCapsula(t) { return '<span class="vm-capsula" aria-hidden="true"><i>' + esc(t.icono || "✨") + "</i></span>"; }
 function vmTeclado() {
   var filas = vmCom() ? Math.max(1, Math.ceil(vmItems().length / VM_COLS)) : Math.ceil(Math.max(VM_MIN, vmItems().length) / VM_COLS), k = "";
   // Arriba las letras (filas) y el borrar; abajo los números (columnas)
   for (var f = 0; f < Math.min(filas, 7); f++) k += '<button type="button" data-k="' + String.fromCharCode(65 + f) + '">' + String.fromCharCode(65 + f) + "</button>";
-  k += '<button type="button" class="vm-borrar" data-k="borrar" aria-label="Borrar">⌫</button>';
+  k += '<button type="button" class="vm-borrar" data-k="borrar">Borrar</button>';
   for (var c = 1; c <= VM_COLS; c++) k += '<button type="button" data-k="' + c + '">' + c + "</button>";
   $("vmTeclado").innerHTML = k;
 }
@@ -265,6 +278,31 @@ function vmBoton() {
   var b = $("vmComprar"); if (!b) return;
   var t = VM.sel == null ? null : vmItems()[VM.sel];
   b.disabled = VM.ocupada || VM.revisando || !t || !!t.bloqueo || (vmCom() ? vmPuntos() < t.puntos || (!!t.elige && !VM.datos) : !vmRegalo() && vmPuntos() < vmPrecio(t));
+  vmInfoPinta();
+}
+function vmInfoPinta() {
+  var box = $("vmInfo"); if (!box) return;
+  var t = VM.sel == null ? null : vmItems()[VM.sel], com = vmCom();
+  if (!t) {
+    var c = vmComInfo(), r = c.reglas || {};
+    box.className = "vm-info vacio";
+    box.innerHTML = "<p><b>" + (com ? "Toca una carta para ver qué hace." : "Toca un premio para ver qué es y cuánto cuesta.") + "</b></p>" +
+      (com ? '<p class="vi-cuando">Puedes tener ' + (r.activos || 2) + " activas a la vez y comprar " + (r.semana || 3) + " por semana (llevas " + (c.semana || 0) + ").</p>" :
+        '<p class="vi-cuando">Después mantén presionado el botón rosado hasta que se llene el anillo.</p>');
+    return;
+  }
+  var precio = com ? t.puntos : vmRegalo() ? 0 : vmPrecio(t), falta = precio - vmPuntos();
+  var listo = !t.bloqueo && falta <= 0 && !(com && t.elige && !VM.datos);
+  var estado = VM.ocupada ? "Comprando…" : t.bloqueo ? vmBloqueoLcd(t).charAt(0) + vmBloqueoLcd(t).slice(1).toLowerCase() :
+    falta > 0 ? "Te faltan " + falta + " pts." : com && t.elige && !VM.datos ? "Elige abajo y luego mantén el botón rosado." :
+    "Mantén presionado el botón rosado para " + (com ? "comprarla." : "comprarlo.");
+  box.className = "vm-info " + (listo ? "si" : "no");
+  box.innerHTML = '<div class="vi-cab">' + (com ? '<span class="vi-ico cc-arte">' + vmArte(t) + "</span>" : '<span class="vi-foto">' + shibuFoto(t) + "</span>") +
+      '<span class="vi-tit"><b>' + esc(t.nombre) + "</b><small>" + vmCodigo(VM.sel) + " · " + (precio === 0 ? "Gratis" : precio + (precio === 1 ? " pt" : " pts")) + "</small></span></div>" +
+    (com ? '<p class="vi-que"><b>Qué hace:</b> ' + esc(t.texto || "") + '</p><p class="vi-cuando">' + esc(vmComDura(t)) + "</p>" :
+      t.ventana === "rota" && t.quedan != null && !t.bloqueo ? '<p class="vi-cuando">' + (t.quedan === 1 ? "Queda 1" : "Quedan " + t.quedan) + " esta semana.</p>" :
+      t.ventana === "premium" ? '<p class="vi-cuando">Premio premium.</p>' : "") +
+    '<p class="vi-estado">' + esc(estado) + "</p>";
 }
 
 // ---- Elegir (tocando el vidrio o con el teclado)
@@ -279,8 +317,8 @@ function vmElige(i) {
     var fc = t.puntos - vmPuntos();
     VM.datos = null;
     if (t.bloqueo) vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + vmBloqueoLcd(t), "falta");
-    else vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + (fc > 0 ? "TE FALTAN " + fc + " PTS" : t.puntos + " PTS"), fc > 0 ? "falta" : "");
-    vmGlobo(t.texto + ". " + vmComDura(t));
+    else vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + (fc > 0 ? "TE FALTAN " + fc + (fc === 1 ? " PT" : " PTS") : t.puntos + (t.puntos === 1 ? " PT" : " PTS")), fc > 0 ? "falta" : "");
+    vmGlobo("");
     vmEligeMuestra(t.bloqueo ? null : t);
     vmBoton();
     return;
@@ -394,7 +432,7 @@ function vmComprarCom(i, t) {
 // La espiral gira, el premio (o la cápsula del comodín) sale hacia adelante, cae a la bandeja y rebota; la tapa se mueve.
 // «bandeja»: lo que queda en la bandeja si no es lo mismo que cayó (el premio del Premio sorpresa)
 function vmCae(i, t, fin, bandeja) {
-  var cosa = vmCom() ? vmCapsula(t) : shibuFoto(t);
+  var cosa = vmCom() ? vmCartaMini(t) : shibuFoto(t);
   var slot = document.querySelector('#vmSlots .vm-slot[data-i="' + i + '"]'), sala = document.querySelector("#perfilBody .vm-sala");
   var hueco = $("vmHueco"), prod = slot && slot.querySelector(".vm-prod");
   function enBandeja() {
@@ -404,7 +442,8 @@ function vmCae(i, t, fin, bandeja) {
     $("vmTapa").classList.remove("golpe"); void hueco.offsetWidth; $("vmTapa").classList.add("golpe");
     fin();
   }
-  if (!slot || !prod || !sala || !hueco || shibuQuieto() || !sala.animate) { if (hueco) enBandeja(); else fin(); return; }
+  var seVe = !!hueco && hueco.getClientRects().length > 0;
+  if (!slot || !prod || !sala || !seVe || shibuQuieto() || !sala.animate) { if (seVe) enBandeja(); else fin(); return; }
   slot.classList.add("cae");
   var rs = sala.getBoundingClientRect(), r0 = prod.getBoundingClientRect(), r1 = hueco.getBoundingClientRect();
   var c = document.createElement("span");
@@ -432,6 +471,14 @@ function vmCae(i, t, fin, bandeja) {
 }
 
 // ---- Eventos
+// Al girar la tablet o el teléfono la máquina se acomoda sola (es CSS); lo elegido vuelve a quedar a la vista
+window.addEventListener("resize", function () {
+  clearTimeout(VM.giro);
+  VM.giro = setTimeout(function () {
+    var s = document.querySelector("#vmSlots .vm-slot.sel");
+    if (s && s.scrollIntoView) s.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, 300);
+});
 document.addEventListener("click", function (ev) {
   if (!ev.target.closest(".vm-sala")) return;
   var m = ev.target.closest("[data-vmodo]"); if (m) { vmCambiaModo(m.dataset.vmodo); return; }

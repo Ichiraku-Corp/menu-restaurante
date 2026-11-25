@@ -279,13 +279,16 @@ ok(/Hoy te salieron estos 3 comodines; mañana salen otros\. Puedes tener 2 acti
   "Shibu explica el sorteo del día y las reglas");
 await p.click('#vmSlots .vm-slot[data-i="0"]');await p.waitForTimeout(250);
 ok(/A1 · TAZA DE SHIBU · 3 PTS/.test(await p.textContent("#vmMsg"))&&await p.isEnabled("#vmComprar")&&await p.isHidden("#vmElige"),"al elegir la Taza la pantalla dice su precio y el botón se prende");
-await p.waitForFunction(()=>/Vale hoy\./.test(document.getElementById("vmGlobo").textContent),null,{timeout:6000}).catch(()=>{});
-ok(/Duplica los puntos de tus misiones de hoy\. Vale hoy\./.test(await p.textContent("#vmGlobo")),"Shibu explica qué hace y cuánto dura");
+ok(/Qué hace: Duplica los puntos de tus misiones de hoy/.test(await p.textContent("#vmInfo"))&&/Vale hoy\./.test(await p.textContent("#vmInfo"))
+  &&/Mantén presionado el botón rosado para comprarla/.test(await p.textContent("#vmInfo"))&&await p.isVisible("#vmInfo"),
+  "al tocar la carta, la tarjeta de al lado explica qué hace, cuánto dura y cómo se compra");
+ok(await p.evaluate(()=>{const c=document.querySelector('#vmSlots .vm-slot[data-i="0"]');return c.classList.contains("carta-c")&&!!c.querySelector(".cc-arte")&&/Duplica los puntos/.test(c.querySelector(".cc-texto").textContent);}),
+  "cada comodín es una carta con su dibujo, su nombre y lo que hace");
 await foto("comodines-maquina.png");
 await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(1500);await p.mouse.up();
-await p.waitForSelector("#vmHueco .vm-premio .vm-capsula",{timeout:6000});await p.waitForTimeout(800);
+await p.waitForSelector("#vmHueco .vm-premio .cc-mini",{timeout:6000});await p.waitForTimeout(800);
 ok((await M()).compras[0].id===2&&JSON.stringify((await M()).compras[0].datos)==="{}"&&/¡LISTO! TAZA DE SHIBU/.test(await p.textContent("#vmMsg"))
-  &&/Taza de Shibu/.test(await p.textContent("#vmRecibo")),"manteniendo el botón compra la Taza: la cápsula cae a la bandeja y queda en «Mis comodines»");
+  &&/Taza de Shibu/.test(await p.textContent("#vmRecibo")),"manteniendo el botón compra la Taza: la carta cae a la bandeja y queda en «Mis comodines»");
 ok(/✓ Comprado/.test(await p.textContent('#vmSlots .vm-slot[data-i="0"] .vm-bloq'))&&await p.evaluate(()=>document.querySelector('#vmSlots .vm-slot[data-i="0"]').classList.contains("b-comprado")),
   "la Taza queda «Comprado» en su lugar hasta mañana");
 await p.click('#vmSlots .vm-slot[data-i="2"]');await p.waitForTimeout(250);
@@ -293,7 +296,7 @@ ok(await p.isVisible("#vmElige")&&/¿A quién le regalas\?/.test(await p.textCon
   "el Regalo pregunta a quién (sus compañeras) y el botón espera la respuesta");
 await p.click('#vmElige button[data-v="2"]');await p.waitForTimeout(150);
 ok(await p.isEnabled("#vmComprar")&&await p.evaluate(()=>document.querySelector('#vmElige button[data-v="2"]').classList.contains("on")),"al elegir a Nami se prende el botón");
-await p.waitForFunction(()=>/no ocupa lugar\./.test(document.getElementById("vmGlobo").textContent),null,{timeout:6000}).catch(()=>{});
+ok(/no ocupa lugar\./.test(await p.textContent("#vmInfo"))&&/Mantén presionado/.test(await p.textContent("#vmInfo")),"con Nami elegida, la tarjeta dice que ya se puede comprar");
 await foto("comodines-regalo.png");
 await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(1500);await p.mouse.up();await p.waitForTimeout(2500);
 ok((await M()).compras[1].id===22&&(await M()).compras[1].datos.para===2,"el Regalo se compra para Nami");

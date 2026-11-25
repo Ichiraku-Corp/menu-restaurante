@@ -159,8 +159,10 @@ function shibuChip() {
   var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
   var pts = SHIBU.retener && SHIBU.chipPts != null ? SHIBU.chipPts : (e.puntos || 0);
   if (!SHIBU.retener) SHIBU.chipPts = pts;
-  $("btnShibu").innerHTML = shibuIc(HUB_IC.perfil) + '<span class="pf-txt"><b>Mi perfil</b><small>★ ' + hechas + "/" + m.length +
-    ' · <span class="chip-pts">' + pts + "</span> pts</small></span>";
+  // En pantallas angostas se esconde primero «★ 1/4 ·» y en el teléfono también «Mi perfil» (queda el ícono con los puntos)
+  $("btnShibu").innerHTML = shibuIc(HUB_IC.perfil) + '<span class="pf-txt"><b>Mi perfil</b><small><span class="pf-mis">★ ' + hechas + "/" + m.length +
+    ' · </span><span class="chip-pts">' + pts + "</span> pts</small></span>";
+  $("btnShibu").setAttribute("aria-label", "Mi perfil: " + hechas + " de " + m.length + " misiones, " + pts + " puntos");
 }
 $("btnShibu").addEventListener("click", function () { shibuPerfil("hoy"); });
 // Un número que sube (o baja) contando hasta su valor nuevo

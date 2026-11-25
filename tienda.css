@@ -233,3 +233,145 @@ button.vm-slot:active { transform:scale(.98); }
 .vm-slot.com.b-comprado .vm-capsula { filter:saturate(.35) brightness(.92); }
 @media (max-width: 760px) { .vm-vidrio.com.sorteo .vm-slot { min-height:190px; } .vm-vidrio.com.sorteo .vm-capsula { width:84px; height:84px; }
   .vm-vidrio.com.sorteo .vm-capsula i { font-size:38px; } }
+
+/* ---- Teléfono y tablet (Edgar, 25/11: «que la expendedora se adapte bien a las rotaciones, que cada botón se entienda y
+   que los comodines al presionar expliquen sus efectos»). La tarjeta de la explicación, el teclado con su título y los
+   comodines como cartas valen en todos los tamaños; abajo, cómo se acomoda la máquina acostada y de pie. */
+.vm-info { padding:9px 11px; border:2px solid var(--ink); border-radius:12px; background:#fff; color:var(--ink); font:600 13.5px/1.35 "Poppins", sans-serif; }
+.vm-info.vacio { background:#FFF6D8; border-style:dashed; color:#3B4466; }
+.vm-info p { margin:0; }
+.vi-cab { display:grid; grid-template-columns:auto minmax(0, 1fr); gap:9px; align-items:center; margin-bottom:6px; }
+.vi-ico { width:46px; height:46px; display:grid; place-items:center; border-radius:12px; border:2px solid var(--ink); overflow:hidden;
+  background:linear-gradient(160deg, #FFE3F1, #E3F4FD); }
+.vi-ico i { font-style:normal; font-size:27px; line-height:1; }
+.vi-ico img { width:100%; height:100%; object-fit:cover; }
+.vi-foto { width:46px; height:46px; display:grid; place-items:center; }
+.vi-foto img { width:46px; height:46px; object-fit:contain; background:#fff; border:2px solid var(--ink); border-radius:10px; }
+.vi-foto .premio-sin-foto { font-size:30px; color:#E0A800; }
+.vi-tit { display:grid; min-width:0; }
+.vi-tit b { font-weight:900; font-size:15.5px; line-height:1.2; }
+.vi-tit small { font-weight:800; font-size:12.5px; color:#7C5A00; }
+.vi-que b { font-weight:800; }
+.vi-cuando { margin-top:3px !important; font-size:12.5px; color:#4A5577; }
+.vi-estado { margin-top:7px !important; padding-top:6px; border-top:1.5px dashed #C9CFDD; font-weight:800; font-size:13px; }
+.vm-info.si .vi-estado { color:#2E7D4F; }
+.vm-info.no .vi-estado { color:#B3261E; }
+.vm-codigo { display:grid; gap:5px; }
+.vm-codigo-tit { font:700 11.5px/1.25 "Poppins", sans-serif; color:#4A5577; }
+.vm-teclado .vm-borrar { font-size:12.5px; }
+/* El recibo queda en la columna del panel, debajo (y se esconde mientras elige a quién o qué) */
+.vm-cuerpo { grid-template-rows:minmax(0, 1fr) auto; grid-template-areas:"vidrio panel" "vidrio recibo"; }
+.vm-vidrio { grid-area:vidrio; }
+.vm-panel { grid-area:panel; }
+.vm-recibo { grid-area:recibo; margin-top:0; max-height:150px; overflow:auto; }
+.vm-cuerpo:has(.vm-elige:not([hidden])) .vm-recibo { display:none; }
+
+/* Las cartas de los comodines: marco por nivel, el dibujo, el nombre y lo que hacen */
+.vm-slot.carta-c { display:grid; grid-template-rows:auto auto auto minmax(0, 1fr); align-items:start; justify-items:stretch; gap:0; padding:0; overflow:hidden;
+  border:3px solid #fff; border-radius:16px; background:#FFFDF8; color:var(--ink); box-shadow:0 6px 0 rgba(0,0,0,.35); text-align:center; }
+.carta-c .cc-cab { display:flex; justify-content:space-between; align-items:center; gap:6px; padding:4px 8px; color:#fff; background:#EA5BA6;
+  font:800 12px/1.2 "Poppins", sans-serif; }
+.carta-c.n1 .cc-cab, .cc-mini.n1 { background:#2FB2E8; }
+.carta-c.n2 .cc-cab, .cc-mini.n2 { background:#8A6BD1; }
+.carta-c.n3 .cc-cab, .cc-mini.n3 { background:#1B2D6B; }
+.carta-c.n4 .cc-cab, .cc-mini.n4 { background:#C99200; }
+.carta-c .cc-cab span { background:#FFC928; color:var(--ink); border:1.5px solid var(--ink); border-radius:999px; padding:0 7px; font-weight:900; white-space:nowrap; }
+.cc-arte { display:grid; place-items:center; overflow:hidden; border:2px solid var(--ink); border-radius:12px;
+  background:radial-gradient(rgba(234,91,166,.18) 1.4px, transparent 1.8px) 0 0 / 14px 14px, linear-gradient(160deg, #FFE3F1, #E3F4FD); }
+.carta-c .cc-arte { width:calc(100% - 12px); height:auto; aspect-ratio:4 / 3; margin:6px 6px 0; justify-self:center; }
+.cc-arte i { font-style:normal; font-size:44px; line-height:1; filter:drop-shadow(0 4px 0 rgba(27,45,107,.16)); }
+.carta-c .cc-arte img { width:100%; height:100%; max-width:none; max-height:none; object-fit:cover; border:0; border-radius:0; background:none; filter:none; box-shadow:none; }
+.carta-c .vm-nombre { margin:6px 8px 0; color:var(--ink); text-shadow:none; font:900 13.5px/1.15 "Poppins", sans-serif; white-space:normal; min-height:0;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.carta-c .cc-texto { margin:4px 8px 9px; font:600 11.5px/1.3 "Poppins", sans-serif; color:#4A5577;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
+.vm-slot.carta-c.sel { background:#fff; box-shadow:0 0 0 4px #FFE066, 0 0 24px rgba(255,224,102,.65); }
+.vm-slot.carta-c.falta .cc-arte { filter:grayscale(.45); }
+.vm-slot.carta-c.bloq .cc-arte { filter:grayscale(1) brightness(.85); }
+.vm-slot.carta-c .vm-bloq { top:40%; }
+.vm-vidrio.com .vm-estantes, .vm-vidrio.com.sorteo .vm-estantes { grid-auto-rows:auto; align-items:start; }
+.vm-vidrio.com.sorteo .vm-slot.carta-c { min-height:0; }
+.vm-vidrio.com.sorteo .vm-estantes { align-content:start; }
+.cc-mini { display:grid; width:56px; height:64px; padding:3px; border:2px solid var(--ink); border-radius:9px; background:#EA5BA6; transform:rotate(-6deg); }
+.cc-mini .cc-arte { border-width:1.5px; border-radius:6px; }
+.cc-mini .cc-arte i { font-size:24px; }
+.vm-cayendo .cc-mini { width:72px; height:84px; }
+
+/* Tablet acostada (las Fire: 962×601) y teléfono acostado: sin bandeja, patas ni teclado; el letrero se achica y el panel
+   lleva la pantalla, la explicación y el botón, siempre a la vista */
+@media (min-width: 761px) and (max-width: 1100px), (min-width: 761px) and (max-height: 700px), (orientation: landscape) and (max-height: 480px) and (min-width: 600px) {
+  .hub-vm .vm-sala { height:100%; overflow:hidden; place-items:center; grid-template-rows:minmax(0, 1fr); padding:8px 10px 10px; }
+  .vm { width:100%; height:100%; padding:8px 10px 10px; gap:8px; border-radius:22px; box-shadow:6px 7px 0 var(--ink); }
+  .vm::before, .vm-bandeja, .vm-patas, .vm-codigo, .vm-shibu, .vm-tornillo { display:none; }
+  .vm { grid-template-rows:auto minmax(0, 1fr); }
+  .vm-letrero { height:38px; border-radius:12px; }
+  .vm-marca b { font-size:19px; }
+  .vm-marca small { display:none; }
+  .vm-focos { inset:3px 10px; }
+  .vm-cuerpo { grid-template-columns:minmax(0, 1fr) 262px; gap:8px; }
+  .vm-vidrio { padding:8px 8px 4px; }
+  .vm-panel { gap:8px; padding:10px; }
+  .lcd-fila b { font-size:22px; }
+  .lcd-msg { min-height:0; font-size:12px; }
+  .vm-boton-caja { padding:4px 0 6px; }
+  .vm-comprar { width:96px; height:96px; }
+  .vm-comprar-txt b { font-size:17px; }
+  .vm-estantes { grid-template-columns:repeat(4, minmax(0, 1fr)); grid-auto-rows:minmax(132px, 1fr); gap:6px 8px; }
+  .vm-vidrio:not(.com) .vm-estantes { overflow-y:auto; scrollbar-width:thin; }
+  .vm-prod img { max-width:80%; }
+  .vm-recibo { max-height:110px; }
+  .vm-modos button { min-width:0; padding:5px 12px; font-size:12.5px; }
+}
+@media (min-width: 761px) and (max-height: 480px), (orientation: landscape) and (max-height: 480px) and (min-width: 600px) {
+  .vm-letrero { display:none; }
+  .vm { grid-template-rows:minmax(0, 1fr); }
+  .vm-cuerpo { grid-template-columns:minmax(0, 1fr) 236px; }
+  .vm-recibo { display:none; }
+  .vm-comprar { width:80px; height:80px; }
+  .vm-comprar-txt b { font-size:15px; }
+  .vm-info { font-size:12.5px; padding:7px 9px; }
+  .vi-ico, .vi-foto, .vi-foto img { width:38px; height:38px; }
+  .vm-estantes { grid-auto-rows:minmax(118px, 1fr); }
+  .carta-c .cc-texto { display:none; }
+  /* Teléfono acostado: el botón de comprar siempre se ve; lo que no cabe de la explicación se desliza */
+  .vm-panel { overflow:hidden; gap:6px; padding:8px; }
+  .vm-panel > .vm-info { flex:1 1 auto; min-height:0; overflow:auto; }
+  .lcd-msg { display:none; }
+  .vm-lcd { padding:4px 10px; }
+  .lcd-fila b { font-size:18px; }
+  .vm-boton-caja { padding:2px 0 4px; }
+  .vi-cuando { display:none; }
+}
+
+/* De pie (tablet y teléfono): el vidrio arriba y el panel pegado abajo de la pantalla, con la explicación y el botón, mientras
+   se desliza por los premios; el recibo va al final */
+@media (max-width: 760px) and (orientation: portrait), (max-width: 599px) {
+  .vm-cuerpo { grid-template-columns:minmax(0, 1fr); grid-template-rows:auto auto auto; grid-template-areas:"vidrio" "panel" "recibo"; }
+  .vm-panel { position:sticky; bottom:0; z-index:4; display:grid; grid-template-columns:minmax(0, 1fr) auto; grid-template-areas:"lcd lcd" "info boton" "elige elige";
+    align-items:center; gap:8px; padding:10px; overflow:visible; box-shadow:0 -8px 18px rgba(27,45,107,.25), inset 0 3px 0 #fff; }
+  .vm-panel .vm-lcd { grid-area:lcd; padding:6px 10px 7px; }
+  .vm-panel .vm-info { grid-area:info; }
+  .vm-panel .vm-elige { grid-area:elige; }
+  .vm-panel .vm-boton-caja { grid-area:boton; padding:0 4px 6px; }
+  .vm-panel .vm-codigo, .vm-panel .vm-shibu, .vm-tornillo, .vm-bandeja, .vm-patas { display:none; }
+  .lcd-fila b { font-size:20px; }
+  .lcd-msg { min-height:0; font-size:12px; }
+  .vm-comprar { width:86px; height:86px; }
+  .vm-comprar-txt b { font-size:16px; }
+  .vm-comprar-txt small { font-size:10px; }
+  .vm-info { font-size:13px; padding:8px 10px; }
+  .vi-ico, .vi-foto, .vi-foto img { width:40px; height:40px; }
+  .vm-recibo { max-height:none; margin-top:4px; }
+  .vm-estantes { grid-template-columns:repeat(3, minmax(0, 1fr)); grid-auto-rows:auto; }
+  .vm-slot { min-height:150px; }
+  .vm-slot .vm-prod img { max-height:104px; }
+  .vm-vidrio.com.sorteo .vm-estantes { grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px 8px; }
+  .vm-vidrio.com.sorteo .vm-slot.carta-c { min-height:0; }
+  .vm-slot { scroll-margin:12px 0 190px; }
+}
+@media (max-width: 480px) {
+  .vm-estantes, .vm-vidrio.com.sorteo .vm-estantes { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .carta-c .cc-texto { -webkit-line-clamp:3; }
+  .vm-panel { grid-template-columns:minmax(0, 1fr) auto; }
+  .vm-comprar { width:78px; height:78px; }
+}

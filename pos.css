@@ -704,3 +704,25 @@ dialog h2 { font-weight:900; }
   background:linear-gradient(110deg, transparent 32%, rgba(27,45,107,.12) 42%, rgba(255,255,255,.85) 50%, rgba(27,45,107,.12) 58%, transparent 68%); }
 @keyframes brilloFx { to { transform:translateX(110%); } }
 @media (prefers-reduced-motion: reduce) { .brillo-fx { display:none; } }
+
+/* La barra de arriba nunca es más ancha que la pantalla (Edgar, 25/11: con «Mi perfil» ya no cabía en las tablets ni en
+   los teléfonos y toda la página quedaba corrida). Primero se achica; si igual no cabe, pasa a una segunda fila. */
+header { flex-wrap:wrap; row-gap:6px; }
+@media (max-width: 1100px) { .health b { display:none; } .health { gap:6px; padding:4px 10px; } }
+@media (max-width: 900px) { #btnShibu .pf-mis { display:none; } header .brand h1 small { display:none; } }
+@media (max-width: 760px) {
+  header .brand h1 { display:none; }
+  #btnCaja span { display:none; }
+  #btnCaja { padding:6px; min-width:46px; }
+  #btnUser .salir { display:none; }
+  #btnUser .quien { max-width:9ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  header .rate { font-size:12px; padding:4px 8px; }
+}
+@media (max-width: 560px) {
+  #btnFull { display:none !important; }
+  #btnShibu { gap:5px; padding:4px 10px 4px 5px; }
+  #btnShibu .pf-txt b { display:none; }
+  #btnShibu .ic { width:28px; height:28px; }
+  #btnShibu small { font-size:13px; color:var(--ink); }
+}
+@media (max-width: 430px) { header .rate, header .brand { display:none; } #btnUser .quien { max-width:8ch; } }
