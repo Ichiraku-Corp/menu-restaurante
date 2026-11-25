@@ -119,6 +119,10 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "miso", null, 7000);
   e0 = await est();
   ok(e0.actual === "miso" && e0.on === "miso" && e0.visibles === "miso", "a los 4 segundos entra Miso con su ficha");
+  // La sombra del nombre no se pierde cuando termina de entrar (25/11: con text-shadow el borde la tapaba al segundo y medio)
+  await esperar(p, () => document.querySelector('.perfil[data-maid="miso"] .nom').getAnimations().every((a) => a.playState === "finished"), null, 3000);
+  const sombra = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.perfil[data-maid="miso"] .nom')); return s.filter + "|" + s.textShadow; });
+  ok(/^drop-shadow\(.*3px 4px 0px\)\|none$/.test(sombra), "el nombre de la maid conserva su sombra cuando termina de entrar (" + sombra + ")");
   await p.click(".bienvenida .pausa");
   e0 = await est();
   ok(e0.quieta && e0.pausa === "true" && /Seguir/.test(await p.getAttribute(".bienvenida .pausa", "aria-label")), "el botón de pausa la detiene (y dice que ahora sirve para seguir)");

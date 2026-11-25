@@ -137,7 +137,10 @@
   .bienvenida .perfil[data-maid="imo"] .cerca { --fx: 206px; }
   .bienvenida .perfil .ficha { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); z-index: 2; width: min(52%, 320px); color: var(--ink); }
   .bienvenida .perfil .rol { display: inline-block; padding: 5px 10px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-  .bienvenida .perfil .nom { display: block; margin: 8px 0 0; font-size: 46px; font-weight: 900; line-height: 1; color: #fff; -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill; text-shadow: 3px 4px 0 var(--ink); }
+  /* La sombra va con drop-shadow y no con text-shadow: con el borde por debajo (paint-order) el navegador la dibuja solo
+     mientras el nombre entra animado y después la tapa el borde (se «perdía» al segundo y medio) */
+  .bienvenida .perfil .nom { display: block; margin: 8px 0 0; font-size: 46px; font-weight: 900; line-height: 1; color: #fff; -webkit-text-stroke: 7px var(--ink); paint-order: stroke fill;
+    filter: drop-shadow(3px 4px 0 var(--ink)); }
   .bienvenida .perfil .kj { display: block; margin-top: 6px; font: 900 17px/1.2 "Noto Sans JP", sans-serif; letter-spacing: .22em; }
   .bienvenida .perfil .stats { display: flex; gap: 6px; margin: 10px 0 8px; padding: 0; list-style: none; }
   .bienvenida .perfil .stats li { padding: 4px 9px 5px; border: 2px solid var(--ink); border-radius: 11px; background: #fff; box-shadow: 2px 3px 0 var(--ink); font-size: 14px; font-weight: 900; line-height: 1.1; }
