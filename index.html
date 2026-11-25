@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-+cKaCKxrSn4Z1b2lUMSSl2CwSTUfKGzYkL2UABcoNhc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-rB9mK/rk0IB6jWPLT526wMDAx7z9HJ1uLJyZ4w2eAZM='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -97,7 +97,7 @@
     filter: drop-shadow(2.5px 0 0 #fff) drop-shadow(-2.5px 0 0 #fff) drop-shadow(0 2.5px 0 #fff) drop-shadow(0 -2.5px 0 #fff) drop-shadow(3px 4px 0 rgba(27,45,107,.85)); }
   section.con-dibujo:nth-of-type(even) .dibujo { transform: translateY(-50%) rotate(6deg); }
   /* Bienvenida: las tres maids (Miso, Dango e Imo); al tocar una, la carta baja a su parte.
-     Es una presentación que rota (Edgar, 25/11): las tres con el logo y luego cada una de cerca con su ficha. */
+     Es una presentación que rota (Edgar, 25/11): las tres con el logo y luego cada una de cerca con su ficha (vuelta de 16 s). */
   .bienvenida { position: relative; margin: 18px 0 6px; background: var(--card); border: 2.5px solid var(--ink); border-radius: 26px; box-shadow: 5px 6px 0 var(--ink); overflow: hidden; }
   .bienvenida .fondo { position: relative; isolation: isolate; height: 300px; overflow: hidden; border-bottom: 2.5px solid var(--ink);   /* isolation: sus capas nunca tapan la barra de secciones */
     background: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px), linear-gradient(90deg, var(--miso-t), var(--dango-t) 50%, var(--imo-t)); }
@@ -119,10 +119,14 @@
   .bienvenida .escena.on, .bienvenida .escena.sale { visibility: visible; }
   .bienvenida .escena.on { z-index: 2; } .bienvenida .escena.sale { z-index: 1; }
   .bienvenida .intro { background: repeating-linear-gradient(-45deg, rgba(255,255,255,.35) 0 10px, transparent 10px 20px), linear-gradient(90deg, var(--miso-t), var(--dango-t) 50%, var(--imo-t)); }
-  /* El logo de Ichiraku (イチラク con la corona) en el centro, debajo de la cara de Dango */
-  .bienvenida .sello { position: absolute; left: 50%; top: 54%; z-index: 4; width: min(52%, 250px); transform: translate(-50%, -50%);
-    filter: drop-shadow(0 0 7px rgba(255,255,255,.9)) drop-shadow(2px 4px 0 rgba(27,45,107,.3)); }
-  .bienvenida .sello img { display: block; width: 100%; height: auto; }
+  /* El logo de Ichiraku (イチラク con la corona) en el centro, debajo de la cara de Dango; debajo, «ICHIRAKU RAMEN» en
+     blanco sale de último y parpadea como el «PRESS START» de los juegos */
+  .bienvenida .sello { position: absolute; left: 50%; top: 52%; z-index: 4; width: min(50%, 210px); display: flex; flex-direction: column; align-items: center; gap: 6px;
+    transform: translate(-50%, -50%); }
+  .bienvenida .sello img { display: block; width: 100%; height: auto; filter: drop-shadow(0 0 7px rgba(255,255,255,.9)) drop-shadow(2px 4px 0 rgba(27,45,107,.3)); }
+  .bienvenida .press { opacity: 0; color: #fff; font-size: 19px; font-weight: 900; line-height: 1.1; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+    -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill; text-shadow: 2px 3px 0 var(--ink); }
+  @media (min-width: 521px) { .bienvenida .press { font-size: 23px; } }
   .bienvenida .perfil { overflow: hidden;
     background: repeating-linear-gradient(-45deg, rgba(255,255,255,.32) 0 10px, transparent 10px 20px), linear-gradient(112deg, var(--t) 0 56%, var(--m) 56% 100%); }
   .bienvenida .perfil .kjfondo { position: absolute; right: 8px; top: 10px; writing-mode: vertical-rl; font: 900 70px/1 "Noto Sans JP", sans-serif; color: rgba(255,255,255,.5); letter-spacing: .04em; }
@@ -162,6 +166,8 @@
     100% { opacity: 1; transform: translate(-50%, -50%); } }
   .bienvenida .escena.on { animation: pres-barrer .7s cubic-bezier(.65, 0, .25, 1) both; }
   .bienvenida .intro.on .sello { animation: pres-sello .7s .35s cubic-bezier(.3, 1.4, .5, 1) both; }
+  .bienvenida .intro.on .press { animation: pres-press 1s 1.3s infinite; }
+  @keyframes pres-press { 0%, 62% { opacity: 1; } 63%, 100% { opacity: 0; } }
   .bienvenida .perfil.on .cerca { animation: pres-llegar .8s .25s cubic-bezier(.2, .8, .2, 1) both; }
   .bienvenida .perfil.on .rol { animation: pres-subir .4s .4s both; }
   .bienvenida .perfil.on .nom { animation: pres-pop .6s .45s both; }
@@ -173,6 +179,7 @@
   .bienvenida .escena.on.ya { animation: none; }
   @media (prefers-reduced-motion: reduce) {
     .bienvenida .escena.on, .bienvenida .escena.on *, .bienvenida .nombres > *::before { animation: none !important; }
+    .bienvenida .press { opacity: 1; }
   }
   .dish { display: flex; gap: 14px; padding: 16px; border-top: 2px dashed var(--line); }
   .dish:first-of-type { border-top: 0; }
@@ -542,7 +549,7 @@
       '<img class="m1" src="assets/maids/miso.webp" alt="" width="396" height="800" decoding="async">' +
       '<img class="m3" src="assets/maids/imo.webp" alt="" width="390" height="800" decoding="async">' +
       '<img class="m2" src="assets/maids/dango-moto.webp" alt="" width="454" height="800" decoding="async">' +
-      '<span class="sello"><img src="assets/logo-ichiraku.webp" alt="Ichiraku Ramen" width="640" height="473"></span>' +
+      '<span class="sello"><img src="assets/logo-ichiraku.webp" alt="Ichiraku Ramen" width="640" height="473"><span class="press" aria-hidden="true">Ichiraku Ramen</span></span>' +
       '<p class="burbuja" lang="ja">¡Okaerinasai! <small lang="es">Bienvenido a casa</small></p></div>' +
       MAIDS.map(perfil).join("") +
       '<button type="button" class="pausa" aria-pressed="false" aria-label="Pausar la presentación de las maids">' +
@@ -550,10 +557,10 @@
       '<svg class="reanudar" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 1.5v11l9.5-5.5z" fill="currentColor"/></svg></button></div>' +
       '<div class="nombres">' + MAIDS.map(link).join("") + "</div></div>";
   }
-  // La presentación: 3 s las tres con el logo y 4 s cada una (vuelta de 15 s). Se detiene con el botón, cuando no se ve
+  // La presentación: 4 s las tres con el logo y 4 s cada una (vuelta de 16 s). Se detiene con el botón, cuando no se ve
   // (más abajo en la carta o en otra pestaña) y mientras se busca; al volver, sigue donde iba.
   var PRES = { t: 0, paso: 0, quieta: false, visible: true, queda: 0, desde: 0, el: null, obs: null };
-  var PASOS = [{ k: "intro", ms: 3000 }, { k: "miso", ms: 4000 }, { k: "dango", ms: 4000 }, { k: "imo", ms: 4000 }];
+  var PASOS = [{ k: "intro", ms: 4000 }, { k: "miso", ms: 4000 }, { k: "dango", ms: 4000 }, { k: "imo", ms: 4000 }];
   function presPaso(i) {
     var el = PRES.el, esc = el.querySelectorAll(".escena"), antes = esc[PRES.paso];
     PRES.paso = i;

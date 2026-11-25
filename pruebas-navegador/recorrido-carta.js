@@ -112,18 +112,20 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   ok(fichas.length === 3 && /Maid atleta.*19 años.*1,62 m.*Maid capitana.*La número 1 de su clase.*Le gusta el ajedrez/.test(fichas[0]) && /Maid cantante.*18 años.*1,75 m.*Comer es su pasión/.test(fichas[1])
      && /Maid streamer.*19 años.*1,61 m.*PlayStation 1.*Ama el café.*Odia el calor/.test(fichas[2]), "cada maid tiene su ficha: rol, edad, estatura y sus tres datos");
   await p.evaluate(() => window.scrollTo(0, 0));
+  const press = await p.evaluate(() => { const x = document.querySelector(".bienvenida .press"); return x && x.textContent + "|" + getComputedStyle(x).textTransform + "|" + x.getAttribute("aria-hidden"); });
+  ok(press === "Ichiraku Ramen|uppercase|true", "en la intro, «ICHIRAKU RAMEN» en blanco parpadea como un PRESS START (los lectores de pantalla leen el logo una sola vez)");
   let e0 = await est();
   ok(e0.actual === "intro" && e0.on === "intro" && e0.visibles === "intro" && e0.pausa === "false", "empieza con las tres y el logo; las fichas quedan ocultas para los lectores de pantalla");
-  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "miso", null, 6000);
+  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "miso", null, 7000);
   e0 = await est();
-  ok(e0.actual === "miso" && e0.on === "miso" && e0.visibles === "miso", "a los 3 segundos entra Miso con su ficha");
+  ok(e0.actual === "miso" && e0.on === "miso" && e0.visibles === "miso", "a los 4 segundos entra Miso con su ficha");
   await p.click(".bienvenida .pausa");
   e0 = await est();
   ok(e0.quieta && e0.pausa === "true" && /Seguir/.test(await p.getAttribute(".bienvenida .pausa", "aria-label")), "el botón de pausa la detiene (y dice que ahora sirve para seguir)");
   await p.waitForTimeout(4600);
   ok((await est()).actual === "miso", "detenida, no cambia de maid");
   await p.click(".bienvenida .pausa");
-  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "dango", null, 6000);
+  await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "dango", null, 7000);
   ok((await est()).pausa === "false", "al seguir, pasa a Dango");
   await p.fill("#q", "gyoza");
   await esperar(p, () => document.querySelector(".bienvenida").hidden, null, 3000);
