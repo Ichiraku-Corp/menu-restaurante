@@ -124,8 +124,14 @@ function ok(cond, msg) { if (cond) console.log("ok: " + msg); else { fallos++; c
     await page.click('#askChips [data-nota="poco picante"]');
     ok((await page.inputValue("#askInput")) === "sin salsa, poco picante", "en la nota del plato pedido también se agregan con un toque");
     await page.click('#askChips [data-nota="poco picante"]'); await page.click("#askOk"); await page.waitForTimeout(200);
+    // Elección de Edgar (25/11): brillo al tocar los botones y la campanita al enviar a cocina
+    await page.evaluate(() => { window.__campanas = 0; const o = window.campanita; window.campanita = function () { window.__campanas++; return o.apply(this, arguments); }; });
     await page.click("#send"); await page.waitForTimeout(300);
+    ok(await page.evaluate(() => { const f = document.querySelector("body > .brillo-fx"), b = document.getElementById("send").getBoundingClientRect();
+      if (!f) return false; const r = f.getBoundingClientRect(); return Math.abs(r.left - b.left) < 2 && Math.abs(r.width - b.width) < 2 && getComputedStyle(f).pointerEvents === "none"; }),
+      "al tocar un botón, un brillo lo cruza en su mismo lugar (sin estorbar los toques)");
     ok(await S(() => window.__S.items.some((i) => i.notes === "sin salsa" && i.status === "enviado")), "el plato llega a cocina con su nota");
+    ok(await page.evaluate(() => window.__campanas === 1), "al salir el pedido a cocina suena la campanita una vez");
     // Precuenta: la primera sale; si se vuelve a tocar antes de 5 minutos pregunta (vale también la de otra tablet)
     const cajaJobs = () => S(() => window.__S.jobs.filter((j) => j === "caja").length);
     const preguntas = []; let responder = "no";

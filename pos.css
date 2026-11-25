@@ -696,3 +696,11 @@ dialog h2 { font-weight:900; }
   max-width:calc(100vw - 24px); padding:10px 14px; border-radius:16px; background:var(--ink); color:#fff; font-size:14px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.25); }
 .act-aviso button { min-height:36px; padding:4px 12px; font-size:14px; }
 
+
+/* Brillo al tocar un botón (Edgar, 25/11): una franja de luz cruza el botón. El centro blanco se ve en los botones de
+   color y los bordes azulados en los blancos. Se apaga si el teléfono pide menos movimiento. */
+.brillo-fx { position:fixed; z-index:2147483000; pointer-events:none; overflow:hidden; }
+.brillo-fx i { position:absolute; inset:-2px; transform:translateX(-110%); animation:brilloFx .55s ease-out forwards;
+  background:linear-gradient(110deg, transparent 32%, rgba(27,45,107,.12) 42%, rgba(255,255,255,.85) 50%, rgba(27,45,107,.12) 58%, transparent 68%); }
+@keyframes brilloFx { to { transform:translateX(110%); } }
+@media (prefers-reduced-motion: reduce) { .brillo-fx { display:none; } }

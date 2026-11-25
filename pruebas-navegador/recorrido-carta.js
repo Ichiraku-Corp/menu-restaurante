@@ -116,9 +116,18 @@ const hoy = new Date().toLocaleDateString("en-CA", { timeZone: "America/Caracas"
   ok(press === "Ichiraku Ramen|uppercase|true", "en la intro, «ICHIRAKU RAMEN» en blanco parpadea como un PRESS START (los lectores de pantalla leen el logo una sola vez)");
   let e0 = await est();
   ok(e0.actual === "intro" && e0.on === "intro" && e0.visibles === "intro" && e0.pausa === "false", "empieza con las tres y el logo; las fichas quedan ocultas para los lectores de pantalla");
+  // Sin tirones (25/11): las escenas de atrás quedan pintadas y en su capa (no se pintan de golpe al entrar cada maid)
+  ok(await p.evaluate(() => [...document.querySelectorAll(".bienvenida .escena:not(.on)")].every((x) => { const c = getComputedStyle(x);
+      return c.visibility === "visible" && c.zIndex === "0" && /transform/.test(c.willChange); })
+    && /transform/.test(getComputedStyle(document.querySelector('.bienvenida .perfil[data-maid="miso"] .cerca')).willChange)),
+    "las escenas de atrás quedan pintadas y listas en su capa: al cambiar de maid no se traba");
   await esperar(p, () => document.querySelector(".bienvenida").getAttribute("data-actual") === "miso", null, 7000);
   e0 = await est();
   ok(e0.actual === "miso" && e0.on === "miso" && e0.visibles === "miso", "a los 4 segundos entra Miso con su ficha");
+  // La sombra del nombre no se pierde cuando termina de entrar (25/11: con text-shadow el borde la tapaba al segundo y medio)
+  await esperar(p, () => document.querySelector('.perfil[data-maid="miso"] .nom').getAnimations().every((a) => a.playState === "finished"), null, 3000);
+  const sombra = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.perfil[data-maid="miso"] .nom')); return s.filter + "|" + s.textShadow; });
+  ok(/^drop-shadow\(.*3px 4px 0px\)\|none$/.test(sombra), "el nombre de la maid conserva su sombra cuando termina de entrar (" + sombra + ")");
   await p.click(".bienvenida .pausa");
   e0 = await est();
   ok(e0.quieta && e0.pausa === "true" && /Seguir/.test(await p.getAttribute(".bienvenida .pausa", "aria-label")), "el botón de pausa la detiene (y dice que ahora sirve para seguir)");

@@ -403,6 +403,7 @@ $("send").addEventListener("click", function () {
   (items.length ? rpc("pos_add", { p_order: cur.order, p_items: items }) : Promise.resolve())
     .then(function () { cur.cart = []; return rpc("pos_send", { p_order: cur.order }); })
     .then(function (n) {
+      if (n) campanita();
       toast(n ? "Enviado a cocina (" + n + ")" : "Nada que enviar");
       if (n && typeof shibuPronto === "function") shibuPronto();   // las misiones avanzan: Shibu avisa enseguida
       return loadOrder();
