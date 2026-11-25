@@ -388,3 +388,25 @@
   #btnShibu .ic { width:26px; height:26px; }
   #btnShibu .pf-txt b { display:none; }
 }
+
+/* Estrellas de los clientes en el carnet (Edgar, 25/11): total, las del mes, el nivel y la barra hacia el siguiente.
+   El carnet cambia de marco con el nivel: bronce (1–2), plata (3), oro (4) y Leyenda (5, con brillo) */
+.carnet-estrellas { position:relative; z-index:1; margin:2px 12px 12px; padding:8px 10px; border-radius:14px; background:#fff; border:2px solid var(--ink);
+  box-shadow:2px 3px 0 var(--ink); display:grid; gap:4px; }
+.ce-fila { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+.ce-total { font-size:15px; } .ce-total b { font-size:20px; font-weight:900; } .ce-total i { font-style:normal; margin-right:2px; }
+.ce-mes { font-size:12px; font-weight:800; color:#5A6694; white-space:nowrap; }
+.ce-nivel { font-size:12.5px; } .ce-nivel b { font-weight:900; }
+.ce-barra { height:8px; border-radius:99px; background:#E3E7EF; border:1.5px solid var(--ink); overflow:hidden; }
+.ce-barra i { display:block; height:100%; background:linear-gradient(90deg, #FFC928, #EA5BA6); border-radius:99px; }
+.ce-falta { font-size:11.5px; font-weight:700; color:#5A6694; }
+.carnet.marco-bronce { border-color:#D08A4E; box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #D08A4E; }
+.carnet.marco-plata { border-color:#C9CED8; box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #C9CED8; }
+.carnet.marco-oro { border-color:#FFC928; box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #FFC928, 0 0 18px rgba(255,201,40,.55); }
+.carnet.marco-leyenda { border-color:#fff; box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #EA5BA6, 0 0 0 8.5px var(--ink), 0 0 22px rgba(234,91,166,.6);
+  animation:carnetLeyenda 3.2s ease-in-out infinite; }
+@keyframes carnetLeyenda { 50% { box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #2FB2E8, 0 0 0 8.5px var(--ink), 0 0 26px rgba(47,178,232,.65); } }
+.hub .carnet.marco-bronce, .hub .carnet.marco-plata, .hub .carnet.marco-oro, .hub .carnet.marco-leyenda { margin:6px; }
+.shibu-estrellas { display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 10px; }
+.shibu-estrellas span { padding:3px 10px; border-radius:999px; background:#fff; border:2px solid var(--ink); font-size:12.5px; font-weight:700; }
+@media (prefers-reduced-motion: reduce) { .carnet.marco-leyenda { animation:none; } }

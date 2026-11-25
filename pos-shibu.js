@@ -265,6 +265,9 @@ function shibuBienvenida() {
   $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuPose("bienvenida", "entra") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
     '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     "<h3>Tus misiones de hoy, " + esc(String(e.nombre || U.name).split(" ")[0]) + "</h3>" +
+    (e.estrellas ? '<p class="shibu-estrellas"><span>⭐ <b>' + (e.estrellas.total || 0) + "</b> " + ((e.estrellas.total || 0) === 1 ? "estrella" : "estrellas") +
+      "</span><span>este mes " + ((e.estrellas.mes || 0) > 0 ? "+" : "") + (e.estrellas.mes || 0) + "</span>" +
+      (e.estrellas.nivel ? "<span>Nivel " + e.estrellas.nivel + " · " + esc(e.estrellas.nombre || "") + "</span>" : "") + "</p>" : "") +
     shibuTarjetas(e.misiones || [], { desde: function () { return 0; } }) +
     '<p class="muted shibu-pie">Cada misión da sus puntos para la tienda y 1 ficha para jugar.</p>';
   $("shibuOk").textContent = "¡A trabajar!";
@@ -408,17 +411,19 @@ function shibuHubLado() {
   var info = { hoy: "★ " + hechas + "/" + m.length, ventas: v && v.hoy ? ref(v.hoy.monto) + " hoy" : "", top: mio ? mio.puesto + ".º del mes" : "",
                tienda: shibuS(pts, "punto", "puntos") };
   // Cada 30 s llega lo nuevo de la base: el carnet solo se redibuja si algo cambió (no parpadea ni se come un toque)
-  var firma = JSON.stringify([nombre, e.grupo, mio && mio.puesto, pts, fch, info, HUB.tab, hayJuegos]);
+  var es = e.estrellas || { total: 0, mes: 0, nivel: 0 };
+  var firma = JSON.stringify([nombre, e.grupo, mio && mio.puesto, pts, fch, info, HUB.tab, hayJuegos, es.total, es.mes, es.nivel]);
   if (firma === HUB.firmaLado && $("perfilLado").firstChild) return;
   HUB.firmaLado = firma;
   $("perfilLado").innerHTML =
-    '<div class="carnet">' +
+    '<div class="carnet marco-' + shibuMarco(es.nivel) + '">' +
       '<div class="carnet-cinta"><img src="assets/logo-gato.png" alt=""><span>ICHIRAKU · ' + (e.grupo === "cajeras" ? "CAJA" : "MAID") + "</span></div>" +
       '<div class="carnet-fila"><span class="carnet-ava' + (mio && mio.puesto <= 3 ? " p" + mio.puesto : "") + '" aria-hidden="true">' + esc(nombre.charAt(0).toUpperCase() || "?") + "</span>" +
         '<div class="carnet-quien"><b>' + esc(nombre) + "</b><span>" + (e.grupo === "cajeras" ? "Cajera" : "Maid") +
           (mio ? " · " + mio.puesto + ".º del Top maid" : "") + "</span></div></div>" +
       '<div class="perfil-saldos"><span class="pts"><i class="carnet-ico" aria-hidden="true">★</i><b id="hubPts">' + pts + "</b> punto" + (pts === 1 ? "" : "s") + "</span>" +
         '<span class="fch"><i class="jgo-moneda" aria-hidden="true"></i><b>' + fch + "</b> ficha" + (fch === 1 ? "" : "s") + "</span></div>" +
+      shibuEstrellasCarnet(es) +
     "</div>" +
     '<nav class="hub-nav" aria-label="Secciones de mi perfil">' + HUB_TABS.map(function (t) {
       var on = HUB.tab === t.id;
@@ -432,6 +437,20 @@ function shibuHubLado() {
   // En el teléfono las secciones van en una tira que se desliza: la elegida queda a la vista
   var nav = document.querySelector("#perfilLado .hub-nav"), on = nav && nav.querySelector(".hub-tab.on");
   if (on && nav.scrollWidth > nav.clientWidth + 1) nav.scrollLeft = Math.max(0, on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2);
+}
+// Estrellas de los clientes (Edgar, 25/11): cada opinión de 4 o 5 suma 1 y las de 1 o 2 restan 1. Niveles a las 5, 15, 30,
+// 60 y 100; el carnet cambia de marco con el nivel (bronce, plata, oro y el de Leyenda, que brilla)
+function shibuMarco(n) { return n >= 5 ? "leyenda" : n >= 4 ? "oro" : n >= 3 ? "plata" : n >= 1 ? "bronce" : "base"; }
+function shibuEstrellasCarnet(es) {
+  es = es || {}; var total = es.total || 0, mes = es.mes || 0, n = es.nivel || 0, niv = es.niveles || [5, 15, 30, 60, 100];
+  var antes = n > 0 ? niv[n - 1] : 0, sig = es.siguiente, pct = sig ? Math.max(0, Math.min(100, Math.round((total - antes) / (sig - antes) * 100))) : 100;
+  return '<div class="carnet-estrellas" aria-label="' + esc(shibuS(total, "estrella", "estrellas") + " de los clientes" + (n ? ", nivel " + n + " " + es.nombre : "")) + '">' +
+    '<div class="ce-fila"><span class="ce-total"><i aria-hidden="true">⭐</i><b id="hubEst">' + total + "</b> " + (total === 1 ? "estrella" : "estrellas") + "</span>" +
+      '<span class="ce-mes">este mes ' + (mes > 0 ? "+" : "") + mes + "</span></div>" +
+    '<div class="ce-nivel">' + (n ? "<b>Nivel " + n + "</b> · " + esc(es.nombre || "") : "<b>Sin nivel todavía</b>") + "</div>" +
+    (sig ? '<div class="ce-barra" aria-hidden="true"><i style="width:' + pct + '%"></i></div><small class="ce-falta">Faltan ' + (es.falta || sig - total) +
+      " para " + esc(es.siguiente_nombre || "el siguiente nivel") + "</small>" : '<small class="ce-falta">¡Nivel máximo!</small>') +
+  "</div>";
 }
 // La sección elegida. «soloSiCambio»: al refrescar, no se redibuja si los datos son los mismos (y no salta el scroll)
 function shibuHubPanel(soloSiCambio) {
@@ -472,7 +491,7 @@ function shibuHubHoy(e) {
         "<span><b>Jugar</b><small>Tienes " + shibuS(fch, "ficha", "fichas") + "</small></span></button>" : "") +
     "</div>" +
     ((e.canjes || []).length ? '<h3 class="hub-sub">Mis premios</h3><div class="hub-premios">' + e.canjes.map(function (c) {
-      return '<div class="canje-row ' + esc(c.estado) + '"><span>' + esc(c.nombre) + " · " + c.puntos + " pts</span><b>" + esc(est[c.estado] || c.estado) + "</b></div>";
+      return '<div class="canje-row ' + esc(c.estado) + '"><span>' + esc(c.nombre) + " · " + (c.regalo ? "gratis" : c.puntos + " pts") + "</span><b>" + esc(est[c.estado] || c.estado) + "</b></div>";
     }).join("") + "</div>" : "");
 }
 // ---- Top maid: el podio olímpico del mes
@@ -710,7 +729,8 @@ function shibuOlimpo(e) {
       '<rect x="' + (x - 6) + '" y="' + top + '" width="' + (w + 12) + '" height="9" rx="2" fill="url(#marmol' + k + ')" stroke="' + t + '" stroke-width="2.5"/>' +
       '<text class="ol-num" x="' + cx + '" y="' + b.num[0] + '" text-anchor="middle" style="font-size:' + b.num[1] + 'px">' + SHIBU_ROMANO[p] + "</text>" +
       '<text class="ol-nombre" x="' + cx + '" y="' + b.nom[0] + '" text-anchor="middle" style="font-size:' + b.nom[1] + 'px">' + esc(q ? shibuCorto(q.nombre, 11).toUpperCase() : "—") + "</text>" +
-      (q ? '<text class="ol-pts" x="' + cx + '" y="' + b.pts[0] + '" text-anchor="middle" style="font-size:' + b.pts[1] + 'px">' + q.puntos + " PTS</text>" : "") +
+      (q ? '<text class="ol-pts" x="' + cx + '" y="' + b.pts[0] + '" text-anchor="middle" style="font-size:' + b.pts[1] + 'px">' + q.puntos + " PTS" +
+        (q.estrellas != null ? " · ⭐" + q.estrellas : "") + "</text>" : "") +
       (p === 1 && premios[0] ? '<text class="ol-premio" x="' + cx + '" y="388" text-anchor="middle">+' + premios[0] + " AL CERRAR EL MES</text>" : "");
     // La estatua sobre su pedestal
     var pe = b.ped, metal = SHIBU_METAL[p], tw = 64 * b.tai, th = 40 * b.tai, ty = pe[0] - th + 5;
@@ -728,7 +748,8 @@ function shibuOlimpo(e) {
   var resto = r.slice(3), h = '<section class="olimpo-caja" aria-label="Top maid de ' + esc(mes) + '"><h3 class="olimpo-tit">Top maid de ' + esc(mes) + "</h3>" + s;
   if (!r.length) h += '<p class="olimpo-nota">Todavía nadie suma puntos de misiones este mes: la primera se lleva el taiyaki de oro.</p>';
   if (resto.length) h += '<ol class="olimpo-resto">' + resto.map(function (x) {
-    return '<li class="' + (x.yo ? "yo" : "") + '"><em>' + x.puesto + ".º</em><b>" + esc(x.nombre) + (x.yo ? " <small>(tú)</small>" : "") + "</b><span>" + x.puntos + " pts</span></li>";
+    return '<li class="' + (x.yo ? "yo" : "") + '"><em>' + x.puesto + ".º</em><b>" + esc(x.nombre) + (x.yo ? " <small>(tú)</small>" : "") + "</b><span>" + x.puntos + " pts" +
+      (x.estrellas != null ? " · ⭐" + x.estrellas : "") + "</span></li>";
   }).join("") + "</ol>";
   var yo = r.filter(function (x) { return x.yo; })[0];
   if (!yo && e.grupo === "meseras") h += '<p class="olimpo-nota">Tú todavía no sumas puntos de misiones este mes.</p>';

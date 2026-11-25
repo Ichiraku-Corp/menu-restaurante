@@ -170,3 +170,19 @@ button.vm-slot:active { transform:scale(.98); }
   .vm-focos i, .vm-slot.cae .vm-espiral, .vm-prod.repone, .vm-premio, .vm-tapa.golpe, .vm-globo { animation:none !important; }
   .vm-comprar.cargando .an-lleno { transition:stroke-dashoffset 1.2s linear; }
 }
+
+/* Economía de la máquina (Edgar, 25/11): premium con cinta, las que rotan dicen cuántas quedan en la semana y los premios
+   que no se pueden pedir ahora dicen por qué (recargando, mañana, 1 por semana, nivel, agotado) */
+.vm-slot.v-premium { background:linear-gradient(180deg, rgba(255,201,40,.18), rgba(255,201,40,.04)); box-shadow:inset 0 0 0 2px rgba(255,201,40,.55); }
+.vm-cinta-premium { position:absolute; top:6px; left:-4px; z-index:2; padding:2px 8px; border-radius:0 6px 6px 0; background:#FFC928; color:var(--ink);
+  border:2px solid var(--ink); font:900 10px/1.2 "Poppins", sans-serif; letter-spacing:.08em; }
+.vm-quedan { position:absolute; top:6px; right:4px; z-index:2; padding:2px 7px; border-radius:999px; background:#fff; color:var(--ink);
+  border:2px solid var(--ink); font:800 10.5px/1.2 "Poppins", sans-serif; }
+.vm-quedan.poco { background:#EA5BA6; color:#fff; animation:vmQuedan 1.2s ease-in-out infinite; }
+@keyframes vmQuedan { 50% { transform:scale(1.08); } }
+.vm-slot.bloq .vm-prod img { filter:grayscale(1) brightness(.6) drop-shadow(0 7px 4px rgba(0,0,0,.5)); }
+.vm-bloq { position:absolute; left:50%; top:38%; z-index:2; transform:translate(-50%, -50%) rotate(-6deg); padding:3px 9px; border-radius:8px;
+  background:var(--ink); color:#fff; border:2px solid #fff; font:800 11.5px/1.2 "Poppins", sans-serif; white-space:nowrap; }
+.vm-slot.b-nivel .vm-bloq { background:#FFC928; color:var(--ink); border-color:var(--ink); }
+.vm-slot.bloq .vm-etiqueta span { background:#E3E7EF; color:#5A6587; }
+@media (prefers-reduced-motion: reduce) { .vm-quedan.poco { animation:none; } }

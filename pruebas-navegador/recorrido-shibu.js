@@ -15,12 +15,15 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
               {nivel:2,texto:'Comanda promedio de $18 o más (mínimo 8 comandas)',puntos:2,tipo:'promedio',actual:14.5,meta:18,hecha:false},
               {nivel:3,texto:'Equipo: el local pasa la meta del día por 20 %',puntos:3,tipo:'equipo_meta',actual:310,meta:540,hecha:false,equipo:true},
               {nivel:0,extra:true,texto:'Vende 3 artículos de la tienda del menú',puntos:1,tipo:'unidades',actual:1,meta:3,hecha:false}],
-    tienda:[{id:1,nombre:'Refresco',puntos:6,dish_id:29},{id:2,nombre:'Taiyaki',puntos:7,dish_id:24},{id:3,nombre:'Amaterasu',puntos:10,dish_id:7}]};
+    tienda:[{id:1,nombre:'Refresco',puntos:6,dish_id:29,ventana:'fija'},{id:2,nombre:'Taiyaki',puntos:7,dish_id:24,ventana:'fija'},{id:3,nombre:'Amaterasu',puntos:10,dish_id:7,ventana:'rota',quedan:4},
+            {id:4,nombre:'Dorayaki',puntos:6,dish_id:25,ventana:'rota',quedan:2},{id:5,nombre:'Milk Tea',puntos:10,dish_id:32,ventana:'premium',bloqueo:'nivel'}],
+    estrellas:{total:7,mes:3,nivel:1,nombre:'Debut',siguiente:15,siguiente_nombre:'Idol del local',falta:8,niveles:[5,15,30,60,100],nombres:['Debut','Idol del local','Estrella','Superestrella','Leyenda']}};
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
     canjes:M.canjes.filter(function(c){return c.emp===e.id;}),juegos:{activo:true,tope_dia:3,ganado_hoy:0},grupo:'meseras',
-    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false},{puesto:2,nombre:e.name,puntos:20,yo:true},{puesto:3,nombre:'Hana',puntos:18,yo:false},{puesto:4,nombre:'Yumi',puntos:9,yo:false}],
+    estrellas:M.estrellas,regalo:false,canjes_hoy:M.canjes.filter(function(c){return c.emp===e.id;}).length,canjes_dia:2,premium_nivel:2,
+    ranking:[{puesto:1,nombre:'Sakura',puntos:34,yo:false,estrellas:12},{puesto:2,nombre:e.name,puntos:20,yo:true,estrellas:7},{puesto:3,nombre:'Hana',puntos:18,yo:false,estrellas:3},{puesto:4,nombre:'Yumi',puntos:9,yo:false,estrellas:1}],
     premios_top:[10,6,3],campeona:{mes:'2026-10-01',nombre:'Sakura'},top_premio:M.top&&M.topVisto.indexOf(M.top.id)<0?M.top:null}; };
   R.mis_top_visto=function(a){ quien(a); M.topVisto.push(a.p_id); return null; };
   var MONTOS=[0,12,30,0,18,0,45,22,0,15,60,0,8,25], CANT=[0,1,3,0,2,0,4,2,0,1,5,0,1,2];
@@ -68,6 +71,8 @@ ok(await p.evaluate(()=>{const i=document.querySelector('#shibuBody .shibu-pose.
 ok(await p.evaluate(()=>{const d=document.getElementById("shibuDlg").getBoundingClientRect(),b=document.getElementById("shibuOk").getBoundingClientRect(),t=document.querySelector("#shibuBody .shibu-pose").getBoundingClientRect();
     return b.bottom<=d.bottom&&b.top>=d.top&&t.top>=d.top&&document.activeElement===document.getElementById("shibuOk");}),
   "Shibu y el botón «¡A trabajar!» se ven enteros (si las misiones no caben, se desplazan adentro) y el botón queda listo para tocar");
+ok(/⭐\s*7\s*estrellas/.test(await p.textContent("#shibuBody .shibu-estrellas"))&&/este mes \+3/.test(await p.textContent("#shibuBody .shibu-estrellas"))&&/Nivel 1 · Debut/.test(await p.textContent("#shibuBody .shibu-estrellas")),
+  "la bienvenida dice sus estrellas de los clientes, las del mes y su nivel (Nivel 1 · Debut)");
 await foto("bienvenida.png");
 await p.click("#shibuOk");await p.waitForTimeout(300);
 ok((await M()).marcar.some(x=>x.emp===1&&x.saludo===true),"al cerrar, la base anota que ya la saludó hoy");
@@ -104,6 +109,10 @@ ok(await p.evaluate(()=>{const d=document.getElementById("perfilDlg").getBoundin
   "«Mi perfil» cubre la pantalla y tiene sus secciones: Hoy, Mis ventas, Top maid, Expendedora y Jugar");
 ok(/Mesera/.test(await p.textContent("#perfilLado .carnet"))&&/2\.º del Top maid/.test(await p.textContent("#perfilLado .carnet"))&&/9\s*puntos/.test(await p.textContent("#perfilLado .perfil-saldos"))
   &&/2\s*fichas/.test(await p.textContent("#perfilLado .perfil-saldos")),"el carnet de la maid muestra su nombre, su puesto en el Top maid, sus puntos y sus fichas");
+ok(await p.evaluate(()=>document.querySelector("#perfilLado .carnet").classList.contains("marco-bronce"))&&/7\s*estrellas/.test(await p.textContent("#perfilLado .carnet-estrellas"))
+  &&/Nivel 1 · Debut/.test(await p.textContent("#perfilLado .carnet-estrellas"))&&/Faltan 8 para Idol del local/.test(await p.textContent("#perfilLado .carnet-estrellas"))
+  &&await p.evaluate(()=>document.querySelector("#perfilLado .ce-barra i").style.width)==="20%",
+  "con nivel 1 el carnet tiene marco bronce, sus estrellas y la barra hacia «Idol del local» (2 de 10 = 20 %)");
 ok(await p.evaluate(()=>document.querySelector('#perfilLado [data-hub="hoy"]').classList.contains("on"))&&await p.locator("#perfilBody .mis-card").count()===4
   &&await p.isVisible('#perfilBody .hub-atajo[data-hub="tienda"]')&&await p.isVisible("#perfilJugar2"),"abre en «Hoy»: sus misiones y atajos a la Expendedora y a Jugar");
 await foto("perfil-hoy.png");
@@ -142,6 +151,8 @@ ok(await p.evaluate(()=>{
     return /TOP MAID · NOVIEMBRE/.test(s.querySelector(".ol-friso").textContent)&&n.join(",")==="MESERA,HANA,SAKURA"
       &&!!s.querySelector(".ol-estatua.e1")&&!!s.querySelector(".ol-laurel")&&s.querySelectorAll(".ol-tu").length===1&&/1\.ª Sakura con 34 puntos/.test(s.getAttribute("aria-label"));}),
   "el Top maid es un podio olímpico: templo con el mes, la Top 1 al centro con su estatua de oro y laurel, y «TÚ» sobre su puesto");
+ok(await p.evaluate(()=>[...document.querySelectorAll("#perfilBody svg.olimpo .ol-pts")].map(x=>x.textContent).join("|"))==="20 PTS · ⭐7|18 PTS · ⭐3|34 PTS · ⭐12"
+  &&/9 pts · ⭐1/.test(await p.textContent("#perfilBody .olimpo-resto")),"en el podio y en las tablillas cada maid muestra también sus estrellas");
 ok(/4\.º\s*Yumi\s*9 pts/.test(await p.textContent("#perfilBody .olimpo-resto"))&&/Top maid de octubre:\s*Sakura/.test(await p.textContent("#perfilBody .olimpo-campeona"))
   &&/la 1\.ª gana \+10, la 2\.ª \+6 y la 3\.ª \+3 puntos/.test(await p.textContent("#perfilBody .olimpo-caja")),
   "desde el 4.º puesto sigue en tablillas, sale la campeona del mes pasado y el premio de fin de mes");
@@ -151,9 +162,16 @@ await p.click('#perfilLado [data-hub="tienda"]');await p.waitForSelector("#perfi
 ok(await p.isVisible("#perfilDlg")&&await p.evaluate(()=>{const v=document.querySelector("#perfilBody .vm").getBoundingClientRect(),q=document.getElementById("perfilBody").getBoundingClientRect(),
     c=document.getElementById("perfilClose").getBoundingClientRect();return v.left>=q.left&&v.right<=q.right&&v.bottom<=q.bottom+1&&v.right<=c.left;}),
   "la máquina expendedora vive en su sección de Mi perfil, entera y sin tapar «Cerrar»");
-ok(await p.locator("#vmSlots .vm-slot[data-i]").count()===3&&await p.locator("#vmSlots .vm-slot.vacio").count()===5
+ok(await p.locator("#vmSlots .vm-slot[data-i]").count()===5&&await p.locator("#vmSlots .vm-slot.vacio").count()===3
   &&await p.locator('#vmSlots .vm-slot img[src="assets/dishes/taiyaki.webp"]').count()===1&&/9/.test(await p.textContent("#vmSaldo")),
-  "en el vidrio están los 3 premios con su foto (y 5 casillas «Pronto»); la pantalla muestra el saldo");
+  "en el vidrio están los 5 premios con su foto (y 3 casillas «Pronto»); la pantalla muestra el saldo");
+ok(/^Quedan 4$/.test(await p.textContent('#vmSlots .vm-slot[data-i="2"] .vm-quedan'))&&/¡Quedan 2!/.test(await p.textContent('#vmSlots .vm-slot[data-i="3"] .vm-quedan.poco'))
+  &&await p.locator('#vmSlots .vm-slot[data-i="0"] .vm-quedan').count()===0,"los premios que rotan dicen cuántos quedan esta semana (en rojo si quedan 2 o menos); los fijos no");
+ok(/PREMIUM/.test(await p.textContent('#vmSlots .vm-slot[data-i="4"] .vm-cinta-premium'))&&/🔒 Nivel 2/.test(await p.textContent('#vmSlots .vm-slot[data-i="4"] .vm-bloq'))
+  &&await p.evaluate(()=>document.querySelector('#vmSlots .vm-slot[data-i="4"]').classList.contains("b-nivel")),"la ventana premium lleva su cinta y el candado «Nivel 2»");
+await p.click('#vmSlots .vm-slot[data-i="4"]');await p.waitForTimeout(200);
+ok(/B1 · MILK TEA · SE ABRE CON EL NIVEL 2 DE ESTRELLAS \(15 ⭐\)/.test(await p.textContent("#vmMsg"))&&await p.isDisabled("#vmComprar"),
+  "al elegir la premium, la pantalla dice que se abre con el nivel 2 (15 ⭐) y el botón no se prende");
 await p.click('#vmSlots .vm-slot[data-i="2"]');await p.waitForTimeout(200);
 ok(/TE FALTAN 1 PTS/.test(await p.textContent("#vmMsg"))&&await p.isDisabled("#vmComprar"),"si elige algo que no le alcanza, la pantalla dice cuánto le falta y el botón no se prende");
 await p.click('#vmTeclado [data-k="A"]');await p.click('#vmTeclado [data-k="2"]');await p.waitForTimeout(200);

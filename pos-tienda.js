@@ -9,6 +9,34 @@ var VM_COLS = 4, VM_MIN = 8, VM_MANTENER_MS = 1200;
 function vmCodigo(i) { return String.fromCharCode(65 + Math.floor(i / VM_COLS)) + (i % VM_COLS + 1); }   // A1, A2… B1
 function vmItems() { return (SHIBU.est && SHIBU.est.tienda) || []; }
 function vmPuntos() { return (SHIBU.est && SHIBU.est.puntos) || 0; }
+// Economía (Edgar, 25/11): el nivel 4 de estrellas regala un premio; cada premio dice por qué no se puede pedir ahora
+// (la base lo decide: tope del mes, 2 al día, 1 grande por semana, nivel de la ventana premium o unidades de la semana)
+function vmRegalo() { return !!(SHIBU.est && SHIBU.est.regalo); }
+function vmNivelPremium() {
+  var e = SHIBU.est || {}, n = e.premium_nivel || 2, niv = (e.estrellas && e.estrellas.niveles) || [5, 15, 30, 60, 100];
+  return { n: n, estrellas: niv[n - 1] };
+}
+function vmBloqueoLcd(t) {
+  var p = vmNivelPremium();
+  return { recarga: "RECARGANDO · VUELVE EL DÍA 1", hoy: "YA PEDISTE TUS PREMIOS DE HOY · VUELVE MAÑANA", grande: "1 PREMIO GRANDE POR SEMANA · VUELVE EL LUNES",
+           nivel: "SE ABRE CON EL NIVEL " + p.n + " DE ESTRELLAS (" + p.estrellas + " ⭐)", agotado: "AGOTADO ESTA SEMANA · VUELVE EL LUNES" }[t.bloqueo] || "";
+}
+function vmBloqueoCorto(t) {
+  return { recarga: "Recargando", hoy: "Mañana", grande: "1 por semana", nivel: "Nivel " + vmNivelPremium().n, agotado: "Agotado" }[t.bloqueo] || "";
+}
+function vmFirma() { return JSON.stringify([vmItems(), vmPuntos(), ((SHIBU.est && SHIBU.est.canjes) || []).length, vmRegalo()]); }
+// Lo primero que dice la pantalla: si la máquina se recarga, si ya pidió lo del día o si tiene un premio gratis
+function vmMensajeInicial() {
+  var it = vmItems(), e = SHIBU.est || {};
+  if (it.length && it.every(function (x) { return x.bloqueo === "recarga"; })) {
+    vmMensaje("RECARGANDO · VUELVE EL DÍA 1", "falta"); vmGlobo("La máquina se está recargando. Vuelve el día 1 por más premios."); return;
+  }
+  if (e.canjes_dia && e.canjes_hoy >= e.canjes_dia) {
+    vmMensaje("YA PEDISTE TUS " + e.canjes_dia + " PREMIOS DE HOY", "falta"); vmGlobo("Por hoy ya está. Mañana la máquina te espera."); return;
+  }
+  if (vmRegalo()) { vmMensaje("🎁 TIENES 1 PREMIO GRATIS", "ok"); vmGlobo("¡Llegaste al nivel 4 de estrellas! Elige el premio que quieras: este va por la casa."); return; }
+  vmMensaje("ELIGE UN PREMIO"); vmGlobo("");
+}
 
 // Abrir la tienda es abrir Mi perfil en la expendedora
 function abrirTienda() { if (typeof shibuPerfil === "function") shibuPerfil("tienda"); }
@@ -17,18 +45,18 @@ function vmAbre(cont) {
   if (!cont) return;
   vmSuelta(false);
   VM.sel = null; VM.tecla = ""; VM.ocupada = false;
-  VM.firma = JSON.stringify([vmItems(), vmPuntos(), ((SHIBU.est && SHIBU.est.canjes) || []).length]);
+  VM.firma = vmFirma();
   vmDibuja(cont);
-  vmMensaje("ELIGE UN PREMIO");
+  vmMensajeInicial();
 }
 function vmAlDia() {
   if (!$("vmSlots") || VM.ocupada || VM.t) return;
   // Solo si cambió algo (premios, saldo o compras): así no parpadean las fotos cada 30 s
-  var firma = JSON.stringify([vmItems(), vmPuntos(), ((SHIBU.est && SHIBU.est.canjes) || []).length]);
+  var firma = vmFirma();
   if (firma === VM.firma) return;
   VM.firma = firma;
   vmPintaSlots(); vmSaldo(); vmRecibo();
-  if (VM.sel != null && vmItems()[VM.sel]) vmElige(VM.sel); else if (VM.sel != null) { VM.sel = null; vmMensaje("ELIGE UN PREMIO"); }
+  if (VM.sel != null && vmItems()[VM.sel]) vmElige(VM.sel); else { VM.sel = null; vmMensajeInicial(); }
 }
 
 // ---- Dibujo de la máquina
@@ -71,10 +99,16 @@ function vmPintaSlots() {
         '<span class="vm-espiral"></span><span class="vm-etiqueta"><b>' + cod + "</b><span>Pronto</span></span></div>";
       continue;
     }
-    var alcanza = pts >= t.puntos;
-    h += '<button type="button" class="vm-slot ' + (alcanza ? "alcanza" : "falta") + (VM.sel === i ? " sel" : "") + '" data-i="' + i + '" aria-label="' +
-      esc(cod + ", " + t.nombre + ", " + t.puntos + " puntos") + '"><span class="vm-prod">' + shibuFoto(t) + '</span><span class="vm-espiral"></span>' +
-      '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + t.puntos + " pts</span></span></button>";
+    var gratis = vmRegalo(), alcanza = !t.bloqueo && (gratis || pts >= t.puntos), precio = gratis ? "GRATIS" : t.puntos + " pts";
+    var quedan = t.ventana === "rota" && t.quedan != null && !t.bloqueo ? '<span class="vm-quedan' + (t.quedan <= 2 ? " poco" : "") + '">' +
+      (t.quedan <= 2 ? "¡Quedan " + t.quedan + "!" : "Quedan " + t.quedan) + "</span>" : "";
+    h += '<button type="button" class="vm-slot ' + (alcanza ? "alcanza" : "falta") + (t.bloqueo ? " bloq b-" + t.bloqueo : "") + (t.ventana ? " v-" + t.ventana : "") +
+      (VM.sel === i ? " sel" : "") + '" data-i="' + i + '" aria-label="' +
+      esc(cod + ", " + t.nombre + ", " + (gratis ? "gratis" : t.puntos + " puntos") + (t.bloqueo ? ", " + vmBloqueoCorto(t) : "")) + '">' +
+      (t.ventana === "premium" ? '<span class="vm-cinta-premium">PREMIUM</span>' : "") + quedan +
+      '<span class="vm-prod">' + shibuFoto(t) + '</span><span class="vm-espiral"></span>' +
+      (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
+      '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + precio + "</span></span></button>";
   }
   $("vmSlots").innerHTML = h;
   vmBoton();
@@ -95,7 +129,7 @@ function vmRecibo() {
   if (!$("vmRecibo")) return;
   var c = ((SHIBU.est && SHIBU.est.canjes) || []).slice(0, 4), est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
   $("vmRecibo").innerHTML = '<b class="rec-tit">MIS PREMIOS</b>' + (c.length ? "<ol>" + c.map(function (x) {
-    return '<li><span>' + esc(x.nombre) + "</span><span>" + x.puntos + " pts · " + esc(est[x.estado] || x.estado) + "</span></li>";
+    return '<li><span>' + esc(x.nombre) + "</span><span>" + (x.regalo ? "Gratis" : x.puntos + " pts") + " · " + esc(est[x.estado] || x.estado) + "</span></li>";
   }).join("") + "</ol>" : '<p>Todavía no compras nada.</p>');
 }
 function vmMensaje(txt, tipo) {
@@ -111,7 +145,7 @@ function vmGlobo(txt) {
 function vmBoton() {
   var b = $("vmComprar"); if (!b) return;
   var t = VM.sel == null ? null : vmItems()[VM.sel];
-  b.disabled = VM.ocupada || !t || vmPuntos() < t.puntos;
+  b.disabled = VM.ocupada || !t || !!t.bloqueo || (!vmRegalo() && vmPuntos() < t.puntos);
 }
 
 // ---- Elegir (tocando el vidrio o con el teclado)
@@ -120,13 +154,14 @@ function vmElige(i) {
   var t = vmItems()[i]; if (!t) return;
   VM.sel = i; VM.tecla = "";
   Array.prototype.forEach.call(document.querySelectorAll("#vmSlots .vm-slot"), function (s) { s.classList.toggle("sel", Number(s.dataset.i) === i); });
-  var falta = t.puntos - vmPuntos();
-  vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + (falta > 0 ? "TE FALTAN " + falta + " PTS" : t.puntos + " PTS"), falta > 0 ? "falta" : "");
+  var falta = vmRegalo() ? 0 : t.puntos - vmPuntos();
+  if (t.bloqueo) vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + vmBloqueoLcd(t), "falta");
+  else vmMensaje(vmCodigo(i) + " · " + t.nombre.toUpperCase() + " · " + (vmRegalo() ? "GRATIS" : falta > 0 ? "TE FALTAN " + falta + " PTS" : t.puntos + " PTS"), falta > 0 ? "falta" : "");
   vmBoton();
 }
 function vmTecla(k) {
   if (VM.ocupada) return;
-  if (k === "borrar") { VM.tecla = ""; VM.sel = null; vmPintaSlots(); vmMensaje("ELIGE UN PREMIO"); return; }
+  if (k === "borrar") { VM.tecla = ""; VM.sel = null; vmPintaSlots(); vmMensajeInicial(); return; }
   if (/^[A-Z]$/.test(k)) { VM.tecla = k; vmMensaje(k + "_"); return; }
   if (!VM.tecla) { vmMensaje("PRIMERO LA LETRA", "falta"); return; }
   var i = (VM.tecla.charCodeAt(0) - 65) * VM_COLS + Number(k) - 1;
@@ -160,7 +195,7 @@ function vmComprar() {
       vmSaldo(antes); vmRecibo();
       vmMensaje("¡LISTO! " + t.nombre.toUpperCase() + " VA A COCINA", "ok");
       vmGlobo(shibuFrase("canje_aprobado") || "Tu premio va a cocina.");
-      VM.ocupada = false; VM.sel = null; vmPintaSlots();
+      VM.ocupada = false; VM.sel = null; VM.firma = vmFirma(); vmPintaSlots();
       if (typeof shibuHubLado === "function" && $("perfilDlg").open) shibuHubLado();
       if (typeof shibuTabRedibuja === "function") shibuTabRedibuja();
     });
@@ -200,7 +235,7 @@ function vmCae(i, t, fin) {
     ], { duration: 1100, fill: "forwards" });
     a.onfinish = function () {
       c.remove(); slot.classList.remove("cae");
-      // La casilla se vuelve a llenar (en la máquina de Shibu nunca se acaba)
+      // La casilla se vuelve a llenar (las que rotan bajan una unidad: lo dice su etiqueta)
       prod.style.visibility = ""; prod.classList.add("repone"); setTimeout(function () { prod.classList.remove("repone"); }, 700);
       enBandeja();
     };
