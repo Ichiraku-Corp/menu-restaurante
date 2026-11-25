@@ -27,7 +27,14 @@ function jgoPts(n) { return n + (n === 1 ? " punto" : " puntos"); }
 // fichas o con el tope del día lleno) se espera su respuesta para no girar en vano. Igual decide el servidor.
 function jgoGiraYa() { var s = JGO.st; return s.fichas !== 0 && !(s.ganado_hoy >= s.tope_dia); }
 // Una frase de Shibu (data/shibu.json); si el archivo no cargó, el texto de respaldo. Nunca decide un resultado.
-function jgoFrase(tipo, resp) { return (typeof shibuFrase === "function" && shibuFrase(tipo)) || resp || ""; }
+// Una frase de Shibu (data/shibu.json) con la pose que Edgar eligió para ella: la imagen cambia cuando el globito la dice
+var JGO_POSE = null;
+function jgoFrase(tipo, resp) {
+  var fp = typeof shibuFraseConPose === "function" ? shibuFraseConPose(tipo) : { t: "" };
+  if (!fp.t) return resp || "";
+  JGO_POSE = fp.pose || "cara";
+  return fp.t;
+}
 function jgoAhora() { return performance.now() / 1000; }
 function jgoMod(a) { return ((a % 360) + 360) % 360; }
 // ¿Se anima? No con «reducir movimiento», ni con la ventana cerrada, ni si ese juego no está a la vista, ni mientras
@@ -80,6 +87,7 @@ function abrirJuegos() {
   var d = $("jgoDlg");
   if (!d.open) d.showModal();
   jgoVista("menu", true);
+  JGO.pose = "cara"; JGO_POSE = null;
   jgoDice("Un momento…");
   // Las frases y la cara de Shibu (data/shibu.json) ya suelen estar cargadas desde que entró; si no, se esperan aquí
   var frases = typeof shibuFrases === "function" ? shibuFrases() : Promise.resolve();
@@ -166,6 +174,7 @@ var JGO_TOPE = "llegaste al tope de hoy";
 function jgoDice(txt, tipo) {
   var b = $("jgoBub");
   b.textContent = txt;
+  if (JGO_POSE) { jgoShibuImg(JGO_POSE); JGO_POSE = null; }
   b.className = "shibu-bub" + (tipo ? " " + tipo : "");
   if (jgoAnima()) { void b.offsetWidth; b.classList.add("pop"); }
 }
@@ -182,12 +191,15 @@ function jgoError(e, delEstado) {
   // Los contadores, al día con el servidor (por si cambiaron en otro equipo)
   if (U && !delEstado && !jgoSinRed(e)) rpc("jgo_estado").then(function (r) { jgoTomar(r, true); }).catch(function () { /* se queda lo que había */ });
 }
-// La cara de Shibu: la misma imagen de la bienvenida (data/shibu.json → "imagen"). Mientras no esté, o si no carga,
-// queda el círculo naranja con su nombre.
-function jgoShibuImg() {
+// Shibu en los juegos: la pose de la frase que está diciendo (o su cara, data/shibu.json → "imagen"). Mientras no esté,
+// o si no carga, queda el círculo naranja con su nombre. Sin pose nueva se queda la que tenía.
+function jgoShibuImg(pose) {
+  if (pose) JGO.pose = pose;
   var img = document.querySelector("#jgoDlg .shibu-img"), badge = document.querySelector("#jgoDlg .shibu-badge");
-  var src = typeof SHIBU !== "undefined" && SHIBU.frases && SHIBU.frases.imagen;
+  var cuerpo = !!JGO.pose && JGO.pose !== "cara" && typeof shibuPoseSrc === "function";
+  var src = cuerpo ? shibuPoseSrc(JGO.pose) : typeof SHIBU !== "undefined" && SHIBU.frases && SHIBU.frases.imagen;
   if (!img || !badge) return;
+  var fila = img.closest(".jgo-shibu"); if (fila) fila.classList.toggle("pose", cuerpo);
   if (!src) { img.hidden = true; img.removeAttribute("src"); badge.hidden = false; return; }
   if (img.getAttribute("src") === src) return;
   img.onload = function () { img.hidden = false; badge.hidden = true; };

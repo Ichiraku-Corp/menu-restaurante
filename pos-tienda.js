@@ -11,6 +11,8 @@ var VM_COLS = 4, VM_MIN = 8, VM_MANTENER_MS = 1200;
 function vmCodigo(i) { return String.fromCharCode(65 + Math.floor(i / VM_COLS)) + (i % VM_COLS + 1); }   // A1, A2… B1
 function vmCom() { return VM.modo === "comodines" && !!vmComInfo().catalogo; }
 function vmComInfo() { return (SHIBU.est && SHIBU.est.comodines) || {}; }
+// El sorteo del día (Edgar, 25/11): cada maid ve sus propios comodines (3); se muestran grandes y al centro
+function vmSorteo() { var c = vmComInfo(); return vmCom() && (c.vitrina || 0) > 0 && (c.catalogo || []).length <= 3; }
 function vmItems() { return vmCom() ? vmComInfo().catalogo || [] : (SHIBU.est && SHIBU.est.tienda) || []; }
 // Lo que cuesta ahora: con el Cupón de Shibu (comodín), los premios cuestan 30 % menos
 function vmPrecio(t) { return !vmCom() && t.precio != null ? t.precio : t.puntos; }
@@ -30,18 +32,19 @@ function vmBloqueoLcd(t) {
            nivel: "SE ABRE CON EL NIVEL " + p.n + " DE ESTRELLAS (" + p.estrellas + " ⭐)", agotado: "AGOTADO ESTA SEMANA · VUELVE EL LUNES",
            semana: "YA COMPRASTE " + (r.semana || 3) + " COMODINES ESTA SEMANA · VUELVE EL LUNES", uno_semana: "ES UNO POR SEMANA · VUELVE EL LUNES",
            activo: "YA LO TIENES ACTIVO", activos: "YA TIENES " + (r.activos || 2) + " COMODINES ACTIVOS · ESPERA A QUE SE ACABE UNO",
-           bandera: "HOY YA HAY BANDERA DEL EQUIPO", insignias: "YA TIENES LAS 3 INSIGNIAS", sin_misiones: "NO TE QUEDAN MISIONES POR CAMBIAR HOY" }[t.bloqueo] || "";
+           bandera: "HOY YA HAY BANDERA DEL EQUIPO", insignias: "YA TIENES LAS 3 INSIGNIAS", sin_misiones: "NO TE QUEDAN MISIONES POR CAMBIAR HOY",
+           comprado: "YA LO COMPRASTE HOY · MAÑANA SALEN OTROS", sorteo: "NO TE SALIÓ HOY" }[t.bloqueo] || "";
 }
 function vmBloqueoCorto(t) {
   var r = vmComInfo().reglas || {};
   return { recarga: "Recargando", hoy: "Mañana", grande: "1 por semana", nivel: "Nivel " + vmNivelAbre(t).n, agotado: "Agotado",
            semana: (r.semana || 3) + " por semana", uno_semana: "1 por semana", activo: "Activo", activos: (r.activos || 2) + " activos",
-           bandera: "Ya hay hoy", insignias: "Completas", sin_misiones: "Sin misiones" }[t.bloqueo] || "";
+           bandera: "Ya hay hoy", insignias: "Completas", sin_misiones: "Sin misiones", comprado: "Comprado", sorteo: "Mañana" }[t.bloqueo] || "";
 }
 // Cuánto dura un comodín, en palabras (para el globo de Shibu)
 function vmComDura(t) {
   var e = t.efecto;
-  if (["x2_hoy", "sorpresa", "trebol", "tope5", "bandera", "duelo"].indexOf(e) >= 0) return "Vale hoy.";
+  if (["x2_hoy", "sorpresa", "tope5", "bandera", "duelo"].indexOf(e) >= 0) return "Vale hoy.";
   if (["x3_proxima", "ficha_dorada", "carta"].indexOf(e) >= 0) return "Vale para la próxima (tienes 7 días para usarlo).";
   if (e === "x2_finde") return "Vale el sábado y el domingo.";
   if (e === "doble_media" || e === "mapa") return "Vale para mañana.";
@@ -57,8 +60,8 @@ function vmMensajeInicial() {
   if (vmCom()) {
     var c = vmComInfo(), r = c.reglas || {};
     vmMensaje("ELIGE UN COMODÍN");
-    vmGlobo("Los comodines mejoran tu día: más puntos, misiones extra y ayudas. Puedes tener " + (r.activos || 2) + " activos y comprar " +
-      (r.semana || 3) + " por semana (llevas " + (c.semana || 0) + ").");
+    vmGlobo((c.vitrina > 0 ? "Hoy te salieron estos " + (c.catalogo || []).length + " comodines; mañana salen otros. " : "Los comodines mejoran tu día: más puntos, misiones extra y ayudas. ") +
+      "Puedes tener " + (r.activos || 2) + " activos y comprar " + (r.semana || 3) + " por semana (llevas " + (c.semana || 0) + ").");
     return;
   }
   if (it.length && it.every(function (x) { return x.bloqueo === "recarga"; })) {
@@ -145,7 +148,9 @@ function vmCambiaModo(m) {
 }
 function vmPintaSlots() {
   // En la de comodines solo se completa la última fila (no hay casillas «Pronto»)
-  var items = vmItems(), pts = vmPuntos(), n = vmCom() ? Math.ceil(items.length / VM_COLS) * VM_COLS : Math.max(VM_MIN, Math.ceil(items.length / VM_COLS) * VM_COLS), h = "";
+  var items = vmItems(), pts = vmPuntos(), sorteo = vmSorteo(), h = "";
+  var n = sorteo ? items.length : vmCom() ? Math.ceil(items.length / VM_COLS) * VM_COLS : Math.max(VM_MIN, Math.ceil(items.length / VM_COLS) * VM_COLS);
+  if ($("vmVidrio")) $("vmVidrio").classList.toggle("sorteo", sorteo);
   for (var i = 0; i < n; i++) {
     var t = items[i], cod = vmCodigo(i);
     if (!t) {
@@ -166,6 +171,7 @@ function vmPintaSlots() {
       (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
       '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + precio + "</span></span></button>";
   }
+  if (sorteo) h += '<p class="vm-sorteo-nota">🎲 Tus comodines de hoy. Mañana salen otros.</p>';
   $("vmSlots").innerHTML = h;
   vmBoton();
 }
@@ -175,12 +181,12 @@ function vmSlotCom(t, i, cod, pts) {
   return '<button type="button" class="vm-slot com ' + (ok ? "alcanza" : "falta") + (t.bloqueo ? " bloq b-" + esc(t.bloqueo) : "") + (VM.sel === i ? " sel" : "") +
     '" data-i="' + i + '" aria-label="' + esc(cod + ", " + t.nombre + ", " + t.puntos + " puntos" + (t.bloqueo ? ", " + vmBloqueoCorto(t) : "")) + '">' +
     '<span class="vm-prod">' + vmCapsula(t) + '</span><span class="vm-espiral"></span>' +
-    (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
+    (t.bloqueo ? '<span class="vm-bloq">' + (t.bloqueo === "nivel" ? "🔒 " : t.bloqueo === "comprado" ? "✓ " : "") + esc(vmBloqueoCorto(t)) + "</span>" : "") +
     '<span class="vm-nombre">' + esc(t.nombre) + '</span><span class="vm-etiqueta"><b>' + cod + "</b><span>" + t.puntos + " pts</span></span></button>";
 }
 function vmCapsula(t) { return '<span class="vm-capsula" aria-hidden="true"><i>' + esc(t.icono || "✨") + "</i></span>"; }
 function vmTeclado() {
-  var filas = Math.ceil(Math.max(VM_MIN, vmItems().length) / VM_COLS), k = "";
+  var filas = vmCom() ? Math.max(1, Math.ceil(vmItems().length / VM_COLS)) : Math.ceil(Math.max(VM_MIN, vmItems().length) / VM_COLS), k = "";
   // Arriba las letras (filas) y el borrar; abajo los números (columnas)
   for (var f = 0; f < Math.min(filas, 7); f++) k += '<button type="button" data-k="' + String.fromCharCode(65 + f) + '">' + String.fromCharCode(65 + f) + "</button>";
   k += '<button type="button" class="vm-borrar" data-k="borrar" aria-label="Borrar">⌫</button>';

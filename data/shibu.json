@@ -1,5 +1,5 @@
 {
-  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas. «imagen» es la cara de Shibu en los círculos y «poses» el dibujo de cuerpo entero de cada momento (de las 22 poses aprobadas del pack de Shibu, 24/11).",
+  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas. «imagen» es la cara de Shibu en los círculos y «poses» el dibujo de cuerpo entero de cada momento (de las 22 poses aprobadas del pack de Shibu, 24/11). «poses_frases» es la pose de cada frase, en el mismo orden que la lista de frases (Edgar las eligió el 25/11 en la página «Poses de Shibu»; «cara» = solo el círculo con su cara; las demás son archivos de assets/shibu/).",
   "nombre": "Shibu",
   "titulo": "el jefe",
   "imagen": "assets/shibu/cara.webp",
@@ -8,7 +8,89 @@
     "mision": "assets/shibu/pequeno-06-pulgar-arriba.webp",
     "dia_completo": "assets/shibu/grandote-03-gafas-riendo.webp",
     "top_maid": "assets/shibu/pequeno-09-gafas-confiado.webp",
-    "perfil": "assets/shibu/pequeno-01-clasico.webp"
+    "perfil": "assets/shibu/pequeno-09-gafas-confiado.webp"
+  },
+  "poses_frases": {
+    "manana": [
+      "cara",
+      "pequeno-08-brazos-cruzados",
+      "cara",
+      "serio-03-alto",
+      "serio-01-cara-de-nada",
+      "cara",
+      "pequeno-08-brazos-cruzados",
+      "pequeno-03-explicando"
+    ],
+    "manana_fuerte": [
+      "pequeno-04-senalando"
+    ],
+    "mision": [
+      "serio-01-cara-de-nada",
+      "pequeno-03-explicando",
+      "pequeno-06-pulgar-arriba",
+      "serio-02-por-encima-de-las-gafas",
+      "serio-04-mano-en-la-barbilla",
+      "rabieta-03-de-espaldas",
+      "serio-01-cara-de-nada",
+      "pequeno-11-yo-me-encargo",
+      "serio-01-cara-de-nada"
+    ],
+    "dia_completo": [
+      "rabieta-04-tu",
+      "serio-04-mano-en-la-barbilla",
+      "pequeno-08-brazos-cruzados",
+      "pequeno-09-gafas-confiado",
+      "grandote-03-gafas-riendo",
+      "pequeno-08-brazos-cruzados"
+    ],
+    "canje_aprobado": [
+      "cara",
+      "cara",
+      "cara"
+    ],
+    "juego_hola": [
+      "serio-01-cara-de-nada",
+      "serio-02-por-encima-de-las-gafas",
+      "rabieta-04-tu",
+      "serio-03-alto",
+      "rabieta-02-pataleta"
+    ],
+    "juego_suerte": [
+      "serio-04-mano-en-la-barbilla",
+      "serio-01-cara-de-nada",
+      "rabieta-04-tu",
+      "serio-02-por-encima-de-las-gafas",
+      "rabieta-03-de-espaldas"
+    ],
+    "juego_gana": [
+      "rabieta-05-argh",
+      "rabieta-04-tu",
+      "rabieta-02-pataleta",
+      "serio-01-cara-de-nada"
+    ],
+    "juego_mayor": [
+      "rabieta-05-argh",
+      "rabieta-06-muerde-panuelo"
+    ],
+    "juego_pierde": [
+      "pequeno-10-gafas-riendo",
+      "pequeno-03-explicando",
+      "serio-01-cara-de-nada",
+      "pequeno-10-gafas-riendo"
+    ],
+    "juego_empate": [
+      "serio-01-cara-de-nada",
+      "serio-01-cara-de-nada",
+      "serio-02-por-encima-de-las-gafas"
+    ],
+    "sin_fichas": [
+      "serio-02-por-encima-de-las-gafas",
+      "rabieta-04-tu"
+    ],
+    "tope": [
+      "serio-03-alto",
+      "serio-03-alto"
+    ]
   },
   "manana": [
     "Grrr... te estoy vigilando.",

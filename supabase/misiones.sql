@@ -14,7 +14,7 @@ language sql stable security definer set search_path = public as $$
   select '{"activo": true, "juegos": true, "tope_juegos": 3, "plato_semana": "", "premios_top": [10, 6, 3],
            "tope_mes_usd": 60, "canjes_dia": 2, "grande_puntos": 15, "grandes_semana": 1,
            "rota_ventanas": 3, "rota_por_semana": 5, "premium_nivel": 2, "estrellas_niveles": [5, 15, 30, 60, 100],
-           "comodines": {"activos": 2, "semana": 3, "suman": true, "uno_semana": [22, 23]},
+           "comodines": {"activos": 2, "semana": 3, "suman": true, "uno_semana": [22, 23], "vitrina": 3},
            "mejoras": {"bronce": 1, "nombre": 1, "ventana": 2, "plata": 3, "oro": 4, "canje": 4, "gratis": 4, "animado": 5, "llavero": 5, "corona": 5}}'::jsonb
          || coalesce((select value from public.pos_kv where key = 'misiones'), '{}'::jsonb)
 $$;
@@ -255,7 +255,7 @@ insert into public.com_catalogo (id, nombre, texto, icono, efecto, nivel, puntos
   (14, 'Paraguas', 'Si un día no cumples ninguna misión, igual ganas 1 punto y 1 ficha', '☂️', 'paraguas', null, 4, 5, 34),
   (15, 'Segunda oportunidad', 'La misión que quedó a menos del 20 % de la meta al cerrar la caja cuenta como cumplida', '🔁', 'segunda', null, 6, null, 35),
   (16, 'Bolsa de fichas', '3 fichas para jugar', '🪙', 'fichas3', 0, 3, null, 41),
-  (17, 'Trébol de cuatro hojas', 'Hoy la ruleta gana 1 de cada 3 veces (normal: 1 de cada 5)', '🍀', 'trebol', 1, 7, 1, 42),
+  (17, 'Trébol de cuatro hojas', 'Por 3 días, la ruleta gana 1 de cada 3 veces (normal: 1 de cada 5)', '🍀', 'trebol', 1, 7, 3, 42),
   (18, 'Tope abierto', 'Hoy puedes ganar hasta 5 puntos jugando, en vez de 3', '🔓', 'tope5', 3, 2, 1, 43),
   (19, 'Ficha dorada', 'En tu próxima jugada, si pierdes, te devuelve la ficha', '🟡', 'ficha_dorada', 0, 1, null, 44),
   (20, 'Carta bajo la manga', 'En tu próxima mano de blackjack ves la carta tapada del crupier', '🃏', 'carta', 1, 2, null, 45),
@@ -889,7 +889,15 @@ create or replace function public.com_instantaneo(p_efecto text) returns boolean
   select p_efecto in ('fichas3', 'regalo', 'premio_sorpresa', 'insignia', 'cambio', 'reloj') $$;
 create or replace function public.com_reglas() returns jsonb
 language sql stable security definer set search_path = public as $$
-  select '{"activos": 2, "semana": 3, "suman": true, "uno_semana": [22, 23]}'::jsonb || coalesce(public.mis_ajustes() -> 'comodines', '{}'::jsonb) $$;
+  select '{"activos": 2, "semana": 3, "suman": true, "uno_semana": [22, 23], "vitrina": 3}'::jsonb || coalesce(public.mis_ajustes() -> 'comodines', '{}'::jsonb) $$;
+-- El sorteo de la máquina (Edgar, 25/11): cada maid ve cada día sus propios comodines («vitrina» en los ajustes: 3; 0 = todos),
+-- sacados de todos los de la máquina, también los de un nivel que todavía no tiene (salen con candado). No cambia en el día.
+create or replace function public.com_sorteo(p_emp bigint, p_fecha date) returns int[]
+language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(x.id order by x.o), '{}') from (
+    select k.id, md5(p_emp::text || ':' || p_fecha::text || ':' || k.id::text) o
+    from public.com_catalogo k where k.nivel is not null and public.com_listo(k.efecto)
+    order by 2 limit nullif(coalesce((public.com_reglas() ->> 'vitrina')::int, 3), 0)) x $$;
 
 -- Los que valen ese día (los de una vez, mientras no se usen)
 create or replace function public.com_activas(p_emp bigint, p_fecha date) returns setof public.com_compras
@@ -1064,6 +1072,10 @@ language sql stable security definer set search_path = public as $$
             and (c.at at time zone 'America/Caracas')::date between public.tienda_lunes(p_fecha) and public.tienda_lunes(p_fecha) + 6)
   select case
     when k.nivel is null or not public.com_listo(k.efecto) then 'no'
+    when coalesce((select (j ->> 'vitrina')::int from r), 3) > 0 and not (k.id = any (public.com_sorteo(p_emp, p_fecha))) then 'sorteo'
+    when coalesce((select (j ->> 'vitrina')::int from r), 3) > 0
+         and exists (select 1 from public.com_compras c where c.employee_id = p_emp and c.comodin_id = k.id
+                       and (c.at at time zone 'America/Caracas')::date = p_fecha) then 'comprado'
     when coalesce(p_nivel, 0) < k.nivel then 'nivel'
     when (select count(*) from sem) >= coalesce((select (j ->> 'semana')::int from r), 3) then 'semana'
     when exists (select 1 from jsonb_array_elements_text(coalesce((select j -> 'uno_semana' from r), '[]'::jsonb)) u where u::int = k.id)
@@ -1091,7 +1103,9 @@ language sql stable security definer set search_path = public as $$
                     'elige', case when k.efecto in ('regalo', 'duelo') then 'companera' when k.efecto = 'insignia' then 'insignia'
                                   when k.efecto = 'cambio' then 'mision' end)
                   order by k.nivel, k.orden)
-                from public.com_catalogo k where k.nivel is not null and public.com_listo(k.efecto)), '[]'::jsonb),
+                from public.com_catalogo k where k.nivel is not null and public.com_listo(k.efecto)
+                  and (coalesce((public.com_reglas() ->> 'vitrina')::int, 3) = 0 or k.id = any (public.com_sorteo(p_emp, p_fecha)))), '[]'::jsonb),
+    'vitrina', coalesce((public.com_reglas() ->> 'vitrina')::int, 3),
     'activos', coalesce((select jsonb_agg(jsonb_build_object('id', c.id, 'comodin', c.comodin_id, 'nombre', k.nombre, 'icono', k.icono, 'efecto', c.efecto,
                     'desde', c.desde, 'hasta', c.hasta, 'empieza', c.desde > p_fecha, 'dias', c.hasta - greatest(c.desde, p_fecha) + 1,
                     'ocupa', not public.com_instantaneo(c.efecto),
@@ -1321,6 +1335,8 @@ begin
   est := public.mis_estrellas(p_emp, f); niv := coalesce((est ->> 'nivel')::int, 0);
   b := public.com_bloqueo(p_emp, f, k.id, niv);
   if b = 'no' then raise exception 'Ese comodín no está en la máquina'; end if;
+  if b = 'sorteo' then raise exception 'Ese comodín no te salió hoy en la máquina'; end if;
+  if b = 'comprado' then raise exception 'Ya lo compraste hoy: mañana salen otros'; end if;
   if b = 'nivel' then raise exception 'Este comodín se abre con el nivel % de estrellas (% ⭐)', k.nivel, (est -> 'niveles') ->> (k.nivel - 1); end if;
   if b = 'semana' then raise exception 'Ya compraste % comodines esta semana: vuelve el lunes', public.com_reglas() ->> 'semana'; end if;
   if b = 'uno_semana' then raise exception 'Este comodín es uno por semana: vuelve el lunes'; end if;
@@ -1347,7 +1363,7 @@ begin
     dat := jsonb_build_object('nivel', nv);
   end if;
   -- Cuándo vale
-  if k.efecto in ('x2_todo', 'x2_dificil', 'mas1_mision', 'hora_feliz', 'extra_facil', 'extra_dificil', 'cupon') then v_hasta := f + coalesce(k.dias, 1) - 1;
+  if k.efecto in ('x2_todo', 'x2_dificil', 'mas1_mision', 'hora_feliz', 'extra_facil', 'extra_dificil', 'cupon', 'trebol') then v_hasta := f + coalesce(k.dias, 1) - 1;
   elsif k.efecto in ('x3_proxima', 'ficha_dorada', 'carta') then v_hasta := f + 6;
   elsif k.efecto = 'x2_finde' then
     v_desde := case when dow >= 6 then f else f + (6 - dow) end;
@@ -1731,8 +1747,8 @@ begin
     raise exception 'Revisa las ventanas que rotan: de 0 a 8, con 1 a 50 unidades por semana'; end if;
   if (v ->> 'premium_nivel')::int not between 0 and 5 then raise exception 'El nivel de la ventana premium va de 0 a 5'; end if;
   if jsonb_typeof(v -> 'comodines') <> 'object' or coalesce((v #>> '{comodines,activos}')::int, 0) not between 1 and 5
-     or coalesce((v #>> '{comodines,semana}')::int, 0) not between 1 and 14 then
-    raise exception 'Revisa los comodines: de 1 a 5 activos y de 1 a 14 por semana'; end if;
+     or coalesce((v #>> '{comodines,semana}')::int, 0) not between 1 and 14 or coalesce((v #>> '{comodines,vitrina}')::int, 3) not between 0 and 30 then
+    raise exception 'Revisa los comodines: de 1 a 5 activos, de 1 a 14 por semana y de 0 a 30 en la vitrina (0 = todos)'; end if;
   if jsonb_typeof(v -> 'mejoras') <> 'object' then raise exception 'Revisa los niveles de las mejoras'; end if;
   insert into public.pos_kv (key, value) values ('misiones', v) on conflict (key) do update set value = excluded.value, updated_at = now();
   return v;
@@ -1792,7 +1808,7 @@ revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), publi
   public.tienda_precio_carta(bigint, text), public.tienda_puntos(bigint), public.tienda_costo(bigint), public.tienda_lunes(date),
   public.tienda_quincena(date), public.tienda_vitrina(date), public.tienda_quedan(bigint, date), public.tienda_gasto_mes(date),
   public.tienda_limites(bigint, date), public.tienda_bloqueo(bigint, date, jsonb, jsonb),
-  public.mis_mejora(text), public.mis_nivel(bigint, date), public.com_listo(text), public.com_instantaneo(text), public.com_reglas(),
+  public.mis_mejora(text), public.mis_nivel(bigint, date), public.com_listo(text), public.com_instantaneo(text), public.com_reglas(), public.com_sorteo(bigint, date),
   public.com_activas(bigint, date), public.com_ocupados(bigint, date), public.com_misiones(bigint, date), public.com_candidatas(bigint, date, int, text),
   public.com_poner_mision(bigint, date, int, int, text, bigint, boolean, bigint), public.com_asignar(bigint, date),
   public.com_efecto(bigint, date, int, boolean), public.com_premiar(bigint, date, int, int, bigint), public.com_hora_feliz(bigint, date),

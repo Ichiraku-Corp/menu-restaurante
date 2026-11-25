@@ -19,13 +19,11 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
             {id:4,nombre:'Dorayaki',puntos:6,dish_id:25,ventana:'rota',quedan:2},{id:5,nombre:'Milk Tea',puntos:10,dish_id:32,ventana:'premium',bloqueo:'nivel'}],
     estrellas:{total:7,mes:3,nivel:1,nombre:'Debut',siguiente:15,siguiente_nombre:'Idol del local',falta:8,niveles:[5,15,30,60,100],nombres:['Debut','Idol del local','Estrella','Superestrella','Leyenda']},
     mejoras:{bronce:1,nombre:1,ventana:2,plata:3,oro:4,canje:4,gratis:4,animado:5,llavero:5,corona:5,premium:2},compras:[],elegidos:[],vistosCom:[],coronaSakura:false,
-    comodines:{reglas:{activos:2,semana:3,suman:true},semana:0,ocupados:0,activos:[],insignias:[],avisos:[],mapa:null,bandera:null,duelos:[],hora_feliz:0,
+    comodines:{reglas:{activos:2,semana:3,suman:true},vitrina:3,semana:0,ocupados:0,activos:[],insignias:[],avisos:[],mapa:null,bandera:null,duelos:[],hora_feliz:0,
       companeras:[{id:2,nombre:'Nami'},{id:3,nombre:'Luz'}],
       catalogo:[{id:2,nombre:'Taza de Shibu',texto:'Duplica los puntos de tus misiones de hoy',icono:'☕',efecto:'x2_hoy',nivel:0,puntos:3,dias:1,bloqueo:null,elige:null},
                 {id:1,nombre:'Diadema dorada',texto:'Duplica los puntos de tus misiones',icono:'👑',efecto:'x2_todo',nivel:3,puntos:20,dias:7,bloqueo:'nivel',elige:null},
-                {id:22,nombre:'Regalo para una compañera',texto:'Le regalas 3 puntos a otra maid',icono:'🎁',efecto:'regalo',nivel:0,puntos:4,dias:null,bloqueo:null,elige:'companera'},
-                {id:11,nombre:'Ficha de cambio',texto:'Cambia una misión de hoy por otra del mismo nivel',icono:'🔄',efecto:'cambio',nivel:0,puntos:2,dias:null,bloqueo:null,elige:'mision'},
-                {id:16,nombre:'Bolsa de fichas',texto:'3 fichas para jugar',icono:'🪙',efecto:'fichas3',nivel:0,puntos:3,dias:null,bloqueo:'semana',elige:null}]}};
+                {id:22,nombre:'Regalo para una compañera',texto:'Le regalas 3 puntos a otra maid',icono:'🎁',efecto:'regalo',nivel:0,puntos:4,dias:null,bloqueo:null,elige:'companera'}]}};
   function quien(a){ var e=S.staff.find(function(x){return x.id===a.p_emp}); if(!e||e.pin!==a.p_pin) throw {message:'PIN incorrecto. Vuelve a entrar.'}; return e; }
   R.mis_estado=function(a){ var e=quien(a); return {juega:true,activo:true,fecha:'2026-11-24',tipo_dia:'normales',nombre:e.name,saludo_hoy:!!M.saludo[e.id],
     misiones:M.misiones,nuevos:M.nuevos[e.id]||[],puntos:M.puntos[e.id]||0,fichas:M.fichas[e.id]||0,tienda:M.tienda,
@@ -37,7 +35,8 @@ const FALSO_MIS=`(function(){ var R=window.__R,S=window.__S;
   // Comodines: comprar (se descuenta y queda activo), elegir el Mapa y marcar los avisos vistos
   R.com_comprar=function(a){ var e=quien(a), k=M.comodines.catalogo.find(function(x){return x.id===a.p_comodin;});
     if((M.puntos[e.id]||0)<k.puntos) throw {message:'Te faltan puntos'}; M.puntos[e.id]-=k.puntos; M.compras.push({id:k.id,datos:a.p_datos});
-    if(k.efecto==='x2_hoy'){ M.comodines.activos.push({id:900,comodin:2,nombre:k.nombre,icono:k.icono,efecto:k.efecto,dias:1,empieza:false,ocupa:true}); k.bloqueo='activo'; }
+    if(k.efecto==='x2_hoy') M.comodines.activos.push({id:900,comodin:2,nombre:k.nombre,icono:k.icono,efecto:k.efecto,dias:1,empieza:false,ocupa:true});
+    k.bloqueo='comprado'; M.comodines.semana++;
     return {id:900+M.compras.length,nombre:k.nombre,mensaje:k.efecto==='regalo'?'Le regalaste 3 puntos a Nami':'Vale hoy',puntos:M.puntos[e.id]}; };
   R.com_elegir_mapa=function(a){ quien(a); M.elegidos.push(a.p_catalogo); var o=M.comodines.mapa.opciones.find(function(x){return x.id===a.p_catalogo;});
     M.misiones[1].texto=o.texto; M.misiones[1].origen='mapa'; M.comodines.mapa=null; return {texto:o.texto}; };
@@ -82,10 +81,15 @@ ok(frase.length>5&&fr.manana.concat(fr.manana_fuerte).map(x=>x.replace(/\bnovata
 ok(/Ref 14,50 de Ref 18,00/.test(await p.textContent("#shibuBody"))&&/1 de 3/.test(await p.textContent("#shibuBody"))&&/Equipo/.test(await p.textContent("#shibuBody")),
   "cada misión muestra su avance (en Ref cuando es plata) y cuáles son de equipo");
 ok(await p.evaluate(()=>document.querySelector("#shibuBody .mis-card .mis-barra i").style.width)==="33%","las barras de la bienvenida se llenan hasta su avance (1 de 3 = 33 %)");
-ok(await p.evaluate(()=>{const i=document.querySelector('#shibuBody .shibu-pose.bienvenida img[src="assets/shibu/pequeno-03-explicando.webp"]');
-    return !!i&&i.complete&&i.naturalWidth>0&&document.querySelector("#shibuBody .shibu-pose + .shibu-dice .shibu-globo")!=null;}),
-  "en la bienvenida sale Shibu de cuerpo entero (explicando, de data/shibu.json → poses) con su globo al lado");
-ok(await p.evaluate(()=>{const d=document.getElementById("shibuDlg").getBoundingClientRect(),b=document.getElementById("shibuOk").getBoundingClientRect(),t=document.querySelector("#shibuBody .shibu-pose").getBoundingClientRect();
+// La pose que Edgar eligió para cada frase (data/shibu.json → poses_frases, en el orden de las frases)
+const poseDe=(k,t)=>{const i=fr[k].map(x=>x.replace(/\bnovata\b/gi,"Mesera")).indexOf(t);return i<0?null:(fr.poses_frases[k]||[])[i]||null;};
+const poseVista=sel=>p.evaluate(s=>{const top=document.querySelector(s),c=top&&top.firstElementChild;if(!c)return null;
+  if(c.classList.contains("shibu-cara"))return "cara";const i=c.querySelector("img");return i&&i.complete&&i.naturalWidth>0?(i.getAttribute("src").match(/([a-z0-9-]+)\.webp$/)||[])[1]:null;},sel);
+const poseB=poseDe("manana",frase)||poseDe("manana_fuerte",frase);
+await p.waitForFunction(()=>{const i=document.querySelector("#shibuBody .shibu-top img");return !i||(i.complete&&i.naturalWidth>0);},null,{timeout:4000}).catch(()=>{});
+ok(!!poseB&&await poseVista("#shibuBody .shibu-top")===poseB&&await p.evaluate(()=>document.querySelector("#shibuBody .shibu-top > :first-child + .shibu-dice .shibu-globo")!=null),
+  "en la bienvenida Shibu sale con la pose que Edgar eligió para esa frase («"+poseB+"») y su globo al lado");
+ok(await p.evaluate(()=>{const d=document.getElementById("shibuDlg").getBoundingClientRect(),b=document.getElementById("shibuOk").getBoundingClientRect(),t=document.querySelector("#shibuBody .shibu-top > :first-child").getBoundingClientRect();
     return b.bottom<=d.bottom&&b.top>=d.top&&t.top>=d.top&&document.activeElement===document.getElementById("shibuOk");}),
   "Shibu y el botón «¡A trabajar!» se ven enteros (si las misiones no caben, se desplazan adentro) y el botón queda listo para tocar");
 ok(/⭐\s*7\s*estrellas/.test(await p.textContent("#shibuBody .shibu-estrellas"))&&/este mes \+3/.test(await p.textContent("#shibuBody .shibu-estrellas"))&&/Nivel 1 · Debut/.test(await p.textContent("#shibuBody .shibu-estrellas")),
@@ -105,7 +109,9 @@ ok(misionOk.indexOf(await p.textContent("#shibuTxt"))>=0,"la frase de la celebra
 ok(await p.locator("#shibuBody .mis-card.fiesta .mis-sello.cae").count()===1&&/シブ\s*CUMPLIDA/.test(await p.textContent("#shibuBody .mis-sello"))&&/Vende 3 postres/.test(await p.textContent("#shibuBody .mis-card.fiesta")),
   "en la celebración cae el sello de Shibu («シブ CUMPLIDA») sobre la tarjeta de la misión");
 ok(/8 pts/.test(await p.textContent("#btnShibu")),"mientras celebra, la chapita sigue en 8 puntos (los nuevos llegan volando)");
-ok(await p.locator('#shibuBody .shibu-pose.mision img[src="assets/shibu/pequeno-06-pulgar-arriba.webp"]').count()===1,"al cumplir una misión, Shibu sale con el pulgar arriba");
+const fraseM=await p.textContent("#shibuTxt"),poseM=poseDe("mision",fraseM);
+await p.waitForFunction(()=>{const i=document.querySelector("#shibuBody .shibu-top img");return !i||(i.complete&&i.naturalWidth>0);},null,{timeout:4000}).catch(()=>{});
+ok(!!poseM&&await poseVista("#shibuBody .shibu-top")===poseM,"al cumplir una misión, Shibu sale con la pose elegida para esa frase («"+poseM+"»)");
 await foto("celebracion.png");
 await p.click("#shibuOk");await p.waitForTimeout(250);
 ok(await p.locator(".shibu-moneda").count()>=2,"al seguir, las monedas salen volando hacia la chapita ("+(await p.locator(".shibu-moneda").count())+")");
@@ -264,9 +270,13 @@ await foto("comodines-corona.png");
 await p.click('#perfilLado [data-hub="hoy"]');await p.waitForTimeout(300);
 await p.click('#perfilBody .hub-atajo.comodines');await p.waitForSelector("#perfilBody .vm");await p.waitForTimeout(600);
 ok(await p.evaluate(()=>VM.modo==="comodines"&&document.querySelector('#vmModos [data-vmodo="comodines"]').getAttribute("aria-selected")==="true")
-  &&await p.locator("#vmSlots .vm-slot.com").count()===5&&/🔒 Nivel 3/.test(await p.textContent('#vmSlots .vm-slot[data-i="1"] .vm-bloq'))
-  &&/3 por semana/.test(await p.textContent('#vmSlots .vm-slot[data-i="4"] .vm-bloq'))&&/MIS COMODINES/.test(await p.textContent("#vmRecibo")),
-  "el atajo abre la máquina en la vitrina de comodines: cápsulas con su precio y por qué no se pueden comprar (nivel 3, 3 por semana)");
+  &&await p.locator("#vmSlots .vm-slot.com").count()===3&&/🔒 Nivel 3/.test(await p.textContent('#vmSlots .vm-slot[data-i="1"] .vm-bloq'))
+  &&await p.evaluate(()=>document.getElementById("vmVidrio").classList.contains("sorteo"))&&/Mañana salen otros/.test(await p.textContent("#vmSlots .vm-sorteo-nota"))
+  &&/MIS COMODINES/.test(await p.textContent("#vmRecibo"))&&await p.locator("#vmTeclado [data-k]").count()===6,
+  "el atajo abre la máquina en sus 3 comodines del día (grandes, con el de nivel 3 con candado) y dice que mañana salen otros");
+await p.waitForFunction(()=>/\(llevas 0\)\.$/.test(document.getElementById("vmGlobo").textContent),null,{timeout:8000}).catch(()=>{});   // la escribe letra por letra
+ok(/Hoy te salieron estos 3 comodines; mañana salen otros\. Puedes tener 2 activos y comprar 3 por semana \(llevas 0\)\./.test(await p.textContent("#vmGlobo")),
+  "Shibu explica el sorteo del día y las reglas");
 await p.click('#vmSlots .vm-slot[data-i="0"]');await p.waitForTimeout(250);
 ok(/A1 · TAZA DE SHIBU · 3 PTS/.test(await p.textContent("#vmMsg"))&&await p.isEnabled("#vmComprar")&&await p.isHidden("#vmElige"),"al elegir la Taza la pantalla dice su precio y el botón se prende");
 await p.waitForFunction(()=>/Vale hoy\./.test(document.getElementById("vmGlobo").textContent),null,{timeout:6000}).catch(()=>{});
@@ -276,6 +286,8 @@ await p.hover("#vmComprar");await p.mouse.down();await p.waitForTimeout(1500);aw
 await p.waitForSelector("#vmHueco .vm-premio .vm-capsula",{timeout:6000});await p.waitForTimeout(800);
 ok((await M()).compras[0].id===2&&JSON.stringify((await M()).compras[0].datos)==="{}"&&/¡LISTO! TAZA DE SHIBU/.test(await p.textContent("#vmMsg"))
   &&/Taza de Shibu/.test(await p.textContent("#vmRecibo")),"manteniendo el botón compra la Taza: la cápsula cae a la bandeja y queda en «Mis comodines»");
+ok(/✓ Comprado/.test(await p.textContent('#vmSlots .vm-slot[data-i="0"] .vm-bloq'))&&await p.evaluate(()=>document.querySelector('#vmSlots .vm-slot[data-i="0"]').classList.contains("b-comprado")),
+  "la Taza queda «Comprado» en su lugar hasta mañana");
 await p.click('#vmSlots .vm-slot[data-i="2"]');await p.waitForTimeout(250);
 ok(await p.isVisible("#vmElige")&&/¿A quién le regalas\?/.test(await p.textContent("#vmElige"))&&await p.locator("#vmElige button").count()===2&&await p.isDisabled("#vmComprar"),
   "el Regalo pregunta a quién (sus compañeras) y el botón espera la respuesta");

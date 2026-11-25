@@ -23,10 +23,17 @@ function shibuFrases() {
   return fetch("data/shibu.json", { cache: "no-cache" }).then(function (r) { return r.json(); })
     .then(function (j) { SHIBU.frases = j || {}; return SHIBU.frases; }).catch(function () { SHIBU.frases = {}; return SHIBU.frases; });
 }
-function shibuFrase(tipo) {
+function shibuFrase(tipo) { return shibuFraseConPose(tipo).t; }
+// Cada frase sale con su pose (Edgar las eligió el 25/11 en la página «Poses de Shibu»): data/shibu.json → "poses_frases",
+// en el mismo orden que las frases. «cara» es el círculo con su cara; sin pose elegida queda la del momento.
+function shibuFraseConPose(tipo) {
   var l = (SHIBU.frases && SHIBU.frases[tipo]) || [];
-  return l.length ? shibuNovata(l[Math.floor(Math.random() * l.length)]) : "";
+  if (!l.length) return { t: "", pose: null };
+  var i = Math.floor(Math.random() * l.length), pf = SHIBU.frases.poses_frases && SHIBU.frases.poses_frases[tipo];
+  var pose = pf && typeof pf[i] === "string" && /^[a-z0-9-]+$/.test(pf[i]) ? pf[i] : null;
+  return { t: shibuNovata(l[i]), pose: pose };
 }
+function shibuPoseSrc(pose) { return pose && pose !== "cara" ? "assets/shibu/" + pose + ".webp" : (SHIBU.frases && SHIBU.frases.imagen) || ""; }
 // Mejora de nivel (Edgar, 25/11): desde el nivel 1 de estrellas, Shibu la llama por su nombre en vez de «novata»
 function shibuNovata(t) {
   var e = SHIBU.est, mj = e && e.mejoras, n = e && e.estrellas ? e.estrellas.nivel || 0 : 0;
@@ -41,8 +48,9 @@ function shibuCara(cls) {
 }
 // Shibu de cuerpo entero en cada momento (data/shibu.json → «poses», de las 22 poses aprobadas del pack de Shibu).
 // Sin pose para ese momento, queda su cara en el círculo grande.
-function shibuPose(momento, anim) {
-  var p = SHIBU.frases && SHIBU.frases.poses && SHIBU.frases.poses[momento];
+function shibuPose(momento, anim, pose) {
+  if (pose === "cara") return shibuCara("grande " + (anim || ""));
+  var p = pose ? shibuPoseSrc(pose) : SHIBU.frases && SHIBU.frases.poses && SHIBU.frases.poses[momento];
   if (!p || !/^assets\//.test(p)) return shibuCara("grande " + (anim || ""));
   return '<span class="shibu-pose ' + esc(momento) + " " + (anim || "") + '"><img src="' + esc(p) + '" alt="Shibu"></span>';
 }
@@ -357,8 +365,9 @@ function shibuLlena(box) {
 function shibuBienvenida() {
   var e = SHIBU.est; if (!e) return;
   var fuerte = e.tipo_dia === "fuertes" && Math.random() < 0.5;
-  var frase = shibuFrase(fuerte ? "manana_fuerte" : "manana") || shibuFrase("manana");
-  $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuPose("bienvenida", "entra") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
+  var fp = shibuFraseConPose(fuerte ? "manana_fuerte" : "manana"); if (!fp.t) fp = shibuFraseConPose("manana");
+  var frase = fp.t;
+  $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuPose("bienvenida", "entra", fp.pose) + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
     '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     "<h3>Tus misiones de hoy, " + esc(String(e.nombre || U.name).split(" ")[0]) + "</h3>" +
     (e.estrellas ? '<p class="shibu-estrellas"><span>⭐ <b>' + (e.estrellas.total || 0) + "</b> " + ((e.estrellas.total || 0) === 1 ? "estrella" : "estrellas") +
@@ -392,8 +401,9 @@ function shibuCelebra() {
   var quieto = shibuQuieto(), sello0 = quieto ? 0 : 0.95, tPremio = quieto ? 0 : sello0 + (lista.length - 1) * 0.45 + 0.55;
   var confeti = "";
   if (!quieto) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
+  var fc = shibuFraseConPose(todas ? "dia_completo" : "mision");
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" +
-    '<div class="shibu-top">' + shibuPose(todas ? "dia_completo" : "mision", "salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' +
+    '<div class="shibu-top">' + shibuPose(todas ? "dia_completo" : "mision", "salta", fc.pose) + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     '<div class="shibu-fiesta"><div class="fiesta-titulo">' + (todas ? "¡Las 3 misiones de hoy!" : nuevos.length > 1 ? "¡Misiones cumplidas!" : "¡Misión cumplida!") + "</div>" +
     shibuTarjetas(lista, { sellar: true, sello0: sello0, desde: function (x) { var d = SHIBU.desde[x._id]; return d == null ? 60 : d; } }) +
     '<div class="fiesta-premio" style="animation-delay:' + tPremio.toFixed(2) + 's"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") +
@@ -407,7 +417,7 @@ function shibuCelebra() {
   d.showModal();
   $("shibuBody").scrollTop = 0;
   shibuLlena($("shibuBody"));
-  shibuEscribe($("shibuTxt"), shibuFrase(todas ? "dia_completo" : "mision"));
+  shibuEscribe($("shibuTxt"), fc.t);
 }
 // Dónde estaba el premio de la celebración: de ahí salen volando las monedas
 function shibuGuardaPremio() { var p = $("shibuBody").querySelector(".fiesta-premio"); if (p) SHIBU.rectFiesta = p.getBoundingClientRect(); }

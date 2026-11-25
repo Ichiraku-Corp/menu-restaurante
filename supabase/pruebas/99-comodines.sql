@@ -44,6 +44,8 @@ insert into public.mis_dia (fecha, grupo, nivel, texto, tipo, params, puntos) va
   (:'hoy', 'meseras', 0, 'Vende 1 Taiyaki', 'unidades', '{"n": 1, "nombres": ["Taiyaki"]}', 1);
 insert into public.pos_kv (key, value) values ('misiones', '{}'::jsonb) on conflict (key) do nothing;
 update public.pos_kv set value = value - 'comodines' - 'mejoras' - 'estrellas_niveles' where key = 'misiones';
+-- La máquina con todos los comodines (vitrina 0); el sorteo de 3 por maid se prueba al final (17)
+update public.pos_kv set value = value || '{"comodines": {"vitrina": 0}}'::jsonb where key = 'misiones';
 
 -- 1) La lista de Edgar y lo que ve la tablet
 select prueba.ok((select count(*) from public.com_catalogo) = 31 and (select count(*) from public.com_catalogo where nivel is not null) = 25
@@ -97,7 +99,7 @@ select prueba.ok(public.mis_fichas_saldo(:mei) = :f0 + 3, 'la Bolsa de fichas no
 select prueba.falla(format('select public.com_comprar(%s, %L, 19)', :mei, '8101'), 'ya compraste 3 comodines esta semana', 'el cuarto comodín de la semana no sale');
 
 -- Desde aquí: todas con el nivel 5 de estrellas y reglas más amplias (las reglas por defecto ya se probaron)
-update public.pos_kv set value = value || '{"estrellas_niveles": [0, 0, 0, 0, 0], "comodines": {"activos": 10, "semana": 20, "suman": true, "uno_semana": [22, 23]}}'::jsonb
+update public.pos_kv set value = value || '{"estrellas_niveles": [0, 0, 0, 0, 0], "comodines": {"activos": 10, "semana": 20, "suman": true, "uno_semana": [22, 23], "vitrina": 0}}'::jsonb
 where key = 'misiones';
 
 -- 4) Diadema (×2, 7 días) + Campanita (×3 a la próxima): se suman (×6) y la Campanita se gasta en una sola misión
@@ -228,6 +230,10 @@ reset role;
 select prueba.ok(jsonb_array_length(:'je'::jsonb -> 'casillas') = 9 and (select count(*) from jsonb_array_elements_text(:'je'::jsonb -> 'casillas') c where c::int > 0) = 3
   and (:'je'::jsonb ->> 'tope_dia')::int = 5,
   'con el Trébol la rueda tiene 9 casillas y 3 premios (1 de cada 3); con el Tope abierto puede ganar 5 hoy');
+select prueba.ok(exists (select 1 from public.com_activas(:luz, :'hoy'::date + 2) x where x.efecto = 'trebol')
+  and not exists (select 1 from public.com_activas(:luz, :'hoy'::date + 3) x where x.efecto = 'trebol')
+  and not exists (select 1 from public.com_activas(:luz, :'hoy'::date + 1) x where x.efecto = 'tope5'),
+  'el Trébol dura 3 días (Edgar, 25/11: hoy, mañana y pasado); el Tope abierto, solo hoy');
 insert into public.mis_fichas (employee_id, delta, motivo) values (:luz, 10, 'prueba');
 set role authenticated;
 select public.com_comprar(:luz, '8103', 19);
@@ -351,6 +357,47 @@ select prueba.ok((public.tienda_limites(:mei, :'hoy') ->> 'canjes_dia')::int = 2
   'sin estrellas vuelve a 2 premios al día y la ventana extra queda cerrada');
 select prueba.falla(format('select public.tienda_canjear(%s, %L, %s)', :mei, '8101', :extra), 'se abre con el nivel 2', 'la ventana extra no se compra sin el nivel 2');
 
+-- 17) El sorteo de la máquina (Edgar, 25/11): cada maid ve cada día sus 3 comodines, sacados de todos (los de un nivel que no
+-- tiene salen con candado); el que compra queda «Comprado» hasta el sorteo de mañana
+update public.pos_kv set value = jsonb_set(value, '{comodines,vitrina}', '3') where key = 'misiones';
+insert into public.employees (name, job_title, pos_can_charge, pos_pin_hash) values ('Rin Comodín', 'Maid', false, extensions.crypt('8106', extensions.gen_salt('bf')));
+select id as rin from public.employees where name = 'Rin Comodín' \gset
+insert into public.mis_puntos (employee_id, delta, motivo) values (:rin, 200, 'prueba');
+select prueba.ok(cardinality(public.com_sorteo(:rin, :'hoy')) = 3 and (select count(distinct x) from unnest(public.com_sorteo(:rin, :'hoy')) x) = 3
+  and public.com_sorteo(:rin, :'hoy') = public.com_sorteo(:rin, :'hoy')
+  and (select count(distinct public.com_sorteo(:rin, :'hoy'::date + d)) from generate_series(0, 6) d) >= 5
+  and (select count(distinct public.com_sorteo(e, :'hoy')) from unnest(array[:mei, :nami, :luz, :sol, :rin]::bigint[]) e) >= 4,
+  'cada maid tiene su sorteo de 3 comodines distintos, el mismo todo el día y otro al día siguiente');
+select prueba.ok((select count(distinct x) from generate_series(0, 89) d, unnest(public.com_sorteo(:rin, :'hoy'::date + d)) x) = 25,
+  'el sorteo sale de todos los comodines de la máquina (en 90 días le salen los 25)');
+set role authenticated;
+select public.mis_estado(:rin, '8106') as es \gset
+reset role;
+select prueba.ok(jsonb_array_length(:'es'::jsonb -> 'comodines' -> 'catalogo') = 3 and (:'es'::jsonb -> 'comodines' ->> 'vitrina')::int = 3
+  and (select array_agg((k ->> 'id')::int order by (k ->> 'id')::int) from jsonb_array_elements(:'es'::jsonb -> 'comodines' -> 'catalogo') k)
+      = (select array_agg(x order by x) from unnest(public.com_sorteo(:rin, :'hoy')) x)
+  and not exists (select 1 from jsonb_array_elements(:'es'::jsonb -> 'comodines' -> 'catalogo') k
+                  where ((k ->> 'nivel')::int > 0) <> (k ->> 'bloqueo' is not distinct from 'nivel')),
+  'la tablet ve solo sus 3 del día; los de un nivel que no tiene salen con candado');
+-- Con todos los niveles abiertos, compra uno de los suyos (el primero que no sea la Bandera ni la Ficha de cambio)
+update public.pos_kv set value = value || '{"estrellas_niveles": [0, 0, 0, 0, 0]}'::jsonb where key = 'misiones';
+select x as dentro from unnest(public.com_sorteo(:rin, :'hoy')) with ordinality u(x, o) join public.com_catalogo k on k.id = u.x
+where k.efecto not in ('bandera', 'cambio') order by u.o limit 1 \gset
+select k.id as fuera from public.com_catalogo k where k.nivel is not null and public.com_listo(k.efecto)
+  and not (k.id = any (public.com_sorteo(:rin, :'hoy'))) order by k.id limit 1 \gset
+select prueba.falla(format('select public.com_comprar(%s, %L, %s)', :rin, '8106', :fuera), 'no te salió hoy', 'el que no le salió hoy no se compra');
+set role authenticated;
+select public.com_comprar(:rin, '8106', :dentro, jsonb_build_object('para', :mei, 'insignia', 'estrella'));
+select public.mis_estado(:rin, '8106') as es2 \gset
+reset role;
+select prueba.ok(jsonb_array_length(:'es2'::jsonb -> 'comodines' -> 'catalogo') = 3
+  and (select k ->> 'bloqueo' from jsonb_array_elements(:'es2'::jsonb -> 'comodines' -> 'catalogo') k where (k ->> 'id')::int = :dentro) = 'comprado'
+  and public.com_bloqueo(:rin, :'hoy'::date + 1, :dentro, 5) is distinct from 'comprado',
+  'el que compró queda «Comprado» en su lugar hasta el sorteo de mañana');
+select prueba.falla(format('select public.com_comprar(%s, %L, %s, %L)', :rin, '8106', :dentro, jsonb_build_object('para', :mei, 'insignia', 'ramen')),
+  'ya lo compraste hoy', 'no se compra dos veces el mismo día');
+update public.pos_kv set value = value - 'estrellas_niveles' where key = 'misiones';
+
 -- 16) Permisos y Gestión
 set role authenticated;
 select prueba.falla(format('select public.com_premiar(%s, %L, 1, 1, 1)', :mei, :'hoy'), 'permission denied', 'la tablet no llama a las funciones internas de los comodines');
@@ -360,5 +407,7 @@ select set_config('request.jwt.claims', '{"role":"authenticated","email":"dueno@
 select public.gestion_misiones() as g \gset
 select prueba.ok(jsonb_array_length(:'g'::jsonb -> 'comodines') = 31 and jsonb_array_length(:'g'::jsonb -> 'com_compras') > 10,
   'Gestión ve el catálogo de comodines y las últimas compras');
+select prueba.falla($q$select public.gestion_misiones_ajustes('{"comodines": {"activos": 2, "semana": 3, "vitrina": 40}}')$q$, 'de 0 a 30 en la vitrina',
+  'en Gestión la vitrina de comodines va de 0 (todos) a 30');
 rollback;
 \echo 'TODAS LAS PRUEBAS DE COMODINES PASARON'

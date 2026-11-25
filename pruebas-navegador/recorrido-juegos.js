@@ -20,7 +20,11 @@ const libre=id=>p.waitForFunction(i=>!document.getElementById(i).classList.conta
 const cont=async()=>(await txt("#jgoFichas"))+" · "+(await txt("#jgoPuntos"))+" · "+(await txt("#jgoHoy"));
 const burbuja=re=>p.waitForFunction(s=>new RegExp(s).test(document.getElementById("jgoBub").textContent),re.source,{timeout:8000}).then(()=>true,()=>false);
 const FR=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8"));
-const dice=async k=>FR[k].includes((await txt("#jgoBub")).trim());   // ¿el globito dice una frase de Shibu de esa lista?
+// ¿El globito dice una frase de Shibu de esa lista, y Shibu sale con la pose que Edgar eligió para esa frase?
+const imgDe=(k,t)=>{const i=FR[k].indexOf(t),ps=i>=0&&FR.poses_frases&&FR.poses_frases[k]?FR.poses_frases[k][i]:"cara";return ps==="cara"?FR.imagen:"assets/shibu/"+ps+".webp";};
+const dice=async k=>{const t=(await txt("#jgoBub")).trim();if(!FR[k].includes(t))return false;const w=imgDe(k,t);
+  await p.waitForFunction(x=>{const i=document.querySelector("#jgoDlg .shibu-img");return i.getAttribute("src")===x&&!i.hidden&&i.complete&&i.naturalWidth>0;},w,{timeout:5000}).catch(()=>{});
+  return p.evaluate(x=>{const i=document.querySelector("#jgoDlg .shibu-img");return i.getAttribute("src")===x&&!i.hidden;},w);};
 // Qué casilla de la rueda quedó bajo la flecha (arriba): la rueda gira «w» grados y la casilla k está en k × 24°
 const bajoFlecha=()=>p.evaluate(()=>{const w=+/rotate\(([-\d.]+)\)/.exec(document.getElementById("jgoRueda").getAttribute("transform"))[1];
   const n=document.querySelectorAll("#jgoRueda .r-cas").length,d=(((-w)%360)+360)%360;return {k:Math.round(d/(360/n))%n,resto:Math.abs(d/(360/n)-Math.round(d/(360/n)))};});
@@ -40,13 +44,13 @@ ok((await p.$$eval("#jgoMenu [data-jgo] b",x=>x.map(y=>y.textContent))).join(","
 const cara=()=>p.evaluate(()=>{const i=document.querySelector("#jgoDlg .shibu-img"),c=document.querySelector("#jgoDlg .shibu-badge");
   return {img:!i.hidden&&i.complete&&i.naturalWidth>0,src:i.getAttribute("src")||"",circulo:getComputedStyle(c).display!=="none"&&!c.hidden,texto:c.textContent,color:getComputedStyle(c).backgroundColor};});
 const FR_IMG=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8")).imagen;
-await p.waitForFunction(()=>!document.querySelector("#jgoDlg .shibu-img").hidden,null,{timeout:5000}).catch(()=>{});
+await p.waitForFunction(()=>!/Un momento/.test(document.getElementById("jgoBub").textContent),null,{timeout:5000}).catch(()=>{});
+ok(await dice("juego_hola"),"Shibu saluda con una frase suya de data/shibu.json y con la pose elegida para ella: «"+(await txt("#jgoBub"))+"»");
 let k=await cara();
-ok(FR_IMG==="assets/shibu/cara.webp"&&k.img&&k.src===FR_IMG&&!k.circulo,"Shibu: sale su cara de data/shibu.json («"+FR_IMG+"») y el círculo con su nombre se esconde");
-ok(await dice("juego_hola"),"Shibu saluda con una frase suya de data/shibu.json: «"+(await txt("#jgoBub"))+"»");
+ok(FR_IMG==="assets/shibu/cara.webp"&&k.img&&!k.circulo&&(k.src===FR_IMG||/^assets\/shibu\/[a-z0-9-]+\.webp$/.test(k.src)),"su imagen carga («"+k.src+"») y el círculo con su nombre se esconde");
 await foto("menu.png");
 // Con otra «imagen» en data/shibu.json sale esa (la misma de la bienvenida) en vez del círculo
-await p.evaluate(()=>{SHIBU.frases.imagen="assets/pos-192.png";});await p.click("#jgoCerrar");await p.evaluate(()=>abrirJuegos());
+await p.evaluate(()=>{SHIBU.frases.imagen="assets/pos-192.png";SHIBU.frases._pf=SHIBU.frases.poses_frases;SHIBU.frases.poses_frases=null;});await p.click("#jgoCerrar");await p.evaluate(()=>abrirJuegos());
 await p.waitForFunction(()=>{const i=document.querySelector("#jgoDlg .shibu-img");return !i.hidden&&i.getAttribute("src")==="assets/pos-192.png"&&i.complete&&i.naturalWidth>0;},null,{timeout:5000}).catch(()=>{});
 k=await cara();
 ok(k.img&&k.src==="assets/pos-192.png"&&!k.circulo,"con «imagen» en data/shibu.json sale su imagen y el círculo se esconde");
@@ -54,7 +58,7 @@ await p.evaluate(()=>{delete SHIBU.frases.imagen;});await p.click("#jgoCerrar");
 await p.waitForFunction(()=>/Fichas: 3/.test(document.getElementById("jgoFichas").textContent));
 k=await cara();
 ok(!k.img&&k.circulo&&k.texto==="Shibu"&&k.color==="rgb(224, 138, 60)","sin «imagen» vuelve el círculo naranja con su nombre (y no se pide ningún archivo)");
-await p.evaluate(i=>{SHIBU.frases.imagen=i;},FR_IMG);
+await p.evaluate(i=>{SHIBU.frases.imagen=i;SHIBU.frases.poses_frases=SHIBU.frases._pf;},FR_IMG);
 // ---- Tragamonedas con premio forzado (dos iguales = 1 punto): paran uno tras otro en lo que dijo el servidor
 await ir(null,"slot");
 ok(await p.isVisible("#jgoSlot")&&/3 iguales = 3 puntos · 2 iguales = 1 punto/.test(await txt("#jgoSlot .jgo-premios"))&&(await txt("#jgoGirar"))==="Girar (1 ficha)","la tragamonedas muestra sus premios y «Girar (1 ficha)»");
