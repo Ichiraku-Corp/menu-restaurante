@@ -1,8 +1,4 @@
-/* Tienda de Shibu: máquina expendedora a pantalla completa (pos-tienda.js) */
-#tiendaDlg { width:100vw; height:100vh; height:100dvh; max-width:100vw; max-height:100vh; max-height:100dvh; margin:0 !important; padding:0;
-  border:0; border-radius:0 !important; box-shadow:none; background:#FAF6F0; color:var(--ink); overflow:hidden; }
-#tiendaDlg[open] { height:100dvh !important; max-height:100dvh !important; }
-#tiendaDlg::backdrop { background:#1B2D6B; }
+/* Tienda de Shibu: la máquina expendedora de Mi perfil › Expendedora (pos-tienda.js) */
 
 /* La sala: pared con puntitos, luz desde arriba y piso */
 .vm-sala { position:relative; width:100%; height:100%; display:grid; place-items:center; padding:14px 18px 22px; overflow:hidden;
@@ -13,10 +9,6 @@
     #FAF6F0; }
 .vm-sala::after { content:""; position:absolute; left:50%; bottom:2.5%; width:min(900px, 80vw); height:34px; transform:translateX(-50%);
   background:radial-gradient(ellipse at center, rgba(27,45,107,.35), transparent 70%); pointer-events:none; }
-.vm-cerrar { position:absolute; top:14px; right:16px; z-index:4; font:800 16px/1 "Poppins", sans-serif; padding:11px 18px; border-radius:14px;
-  background:#fff; color:var(--ink); border:2.5px solid var(--ink); box-shadow:3px 4px 0 var(--ink); cursor:pointer; }
-.vm-cerrar:active { transform:translate(2px, 2px); box-shadow:1px 2px 0 var(--ink); }
-
 /* La máquina */
 .vm { position:relative; z-index:1; width:min(1040px, calc(100% - 150px)); height:min(770px, 100%); display:grid; grid-template-rows:auto minmax(0, 1fr) auto; gap:10px;
   padding:12px 14px 12px; border:3px solid var(--ink); border-radius:30px;
@@ -160,7 +152,7 @@ button.vm-slot:active { transform:scale(.98); }
 
 /* Teléfono: el vidrio arriba con 2 columnas y el panel abajo; la sala se puede deslizar */
 @media (max-width: 760px) {
-  .vm-sala { place-items:start center; padding:56px 10px 26px; overflow:auto; }
+  .vm-sala { place-items:start center; padding:12px 10px 26px; overflow:visible; height:auto; }
   .vm { width:100%; height:auto; padding:10px; border-radius:24px; box-shadow:6px 8px 0 var(--ink); }
   .vm-bandeja { grid-template-columns:minmax(0, 1fr); height:80px; }
   .vm-bandeja .vm-hueco { grid-column:1; width:86%; }

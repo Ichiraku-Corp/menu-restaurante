@@ -1,11 +1,28 @@
 /* Misiones de Shibu: chapita de arriba, bienvenida, celebración, Mi perfil con la tienda y la pestaña «Maids» */
 :root { --shibu:#E08A3C; --shibu-t:#FBE3CC; }
-#btnShibu { display:inline-flex; align-items:center; gap:6px; background:var(--shibu-t); border-color:var(--shibu); color:var(--ink); }
+/* El botón «Mi perfil» de la barra de arriba (también recibe las monedas de las misiones) */
+#btnShibu { display:inline-flex; align-items:center; gap:8px; padding:5px 14px 5px 8px; border:2px solid var(--ink); border-radius:999px;
+  background:linear-gradient(100deg, #FFF6FB, #FDE3EF); color:var(--ink); box-shadow:2px 3px 0 var(--ink); }
 #btnShibu.hidden { display:none; }
-#btnShibu small { color:var(--muted); font-weight:600; }
+#btnShibu .ic { width:30px; height:30px; padding:4px; border-radius:50%; background:#EA5BA6; color:#fff; border:2px solid var(--ink); flex:none; }
+#btnShibu .pf-txt { display:grid; text-align:left; line-height:1.15; }
+#btnShibu .pf-txt b { font-weight:900; font-size:14.5px; }
+#btnShibu small { color:var(--muted); font-weight:700; font-size:12px; white-space:nowrap; }
+#btnShibu:active { transform:translate(1px, 2px); box-shadow:1px 1px 0 var(--ink); }
 .shibu-cara { display:inline-grid; place-items:center; border-radius:50%; background:var(--shibu); color:#fff; overflow:hidden; flex:none;
   border:3px solid #fff; box-shadow:0 0 0 2px var(--ink); }
 .shibu-cara img { width:100%; height:100%; object-fit:cover; }
+.shibu-cara.con-img { background:#FFE8A3; }
+/* Shibu de cuerpo entero (bienvenida, celebraciones y premio del mes); el globo apunta a su boca */
+.shibu-pose { flex:none; display:block; width:101px; height:180px; }
+.shibu-pose img { display:block; width:100%; height:100%; object-fit:contain; object-position:bottom center; filter:drop-shadow(0 4px 0 rgba(27,45,107,.16)); }
+.shibu-pose.dia_completo { width:112px; }
+.shibu-pose.bienvenida { width:84px; height:150px; }
+.shibu-top:has(.shibu-pose) { align-items:flex-start; }
+.shibu-pose + .shibu-dice { padding-top:26px; }
+.shibu-pose + .shibu-dice .shibu-globo { border-radius:16px; }
+.shibu-pose + .shibu-dice .shibu-globo::before { content:""; position:absolute; left:-9px; top:15px; width:14px; height:14px; background:var(--surface);
+  border-left:2px solid var(--ink); border-bottom:2px solid var(--ink); transform:rotate(45deg); }
 .shibu-cara b { font-weight:900; letter-spacing:.02em; }
 .shibu-cara.mini { width:26px; height:26px; border-width:1.5px; box-shadow:0 0 0 1px var(--ink); }
 .shibu-cara.mini b { font-size:7px; }
@@ -15,6 +32,10 @@
 .shibu-cara.grande b { font-size:18px; }
 
 #shibuDlg { width:min(640px, calc(100vw - 20px)); position:relative; overflow:hidden; }
+/* Si las misiones no caben, se desplazan adentro y el botón queda siempre a la vista */
+#shibuDlg[open] { display:flex; flex-direction:column; }
+#shibuBody { min-height:0; overflow:auto; }
+#shibuDlg > p:last-child { flex:none; }
 .shibu-top { display:flex; gap:14px; align-items:flex-end; margin-bottom:6px; position:relative; }
 .shibu-dice { flex:1; min-width:0; }
 .shibu-nom small { color:var(--muted); }
@@ -55,7 +76,6 @@
 .shibu-confeti i:nth-child(3n+2) { background:#FFC928; }
 @keyframes shibuConfeti { to { transform:translateY(440px) rotate(540deg); opacity:.15; } }
 
-#perfilDlg { width:min(760px, calc(100vw - 20px)); }
 .perfil-top { display:flex; align-items:center; gap:12px; margin:8px 0 6px; }
 .perfil-quien { flex:1; min-width:0; }
 .perfil-saldos { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; }
@@ -119,40 +139,169 @@
 @keyframes avisoEntra { from { transform:translateX(48px); opacity:0; } to { transform:none; opacity:1; } }
 @keyframes avisoSale { to { transform:translateX(48px); opacity:0; } }
 
-/* ---- Mi perfil: el carnet de la maid */
+/* ---- Mi perfil: pantalla completa con el carnet y las secciones a la izquierda, y la sección elegida a la derecha */
 @font-face { font-family:"Cinzel"; font-weight:400 900; font-display:swap; src:url(assets/fuentes/cinzel.woff2) format("woff2"); }
-.carnet { position:relative; display:grid; grid-template-columns:auto minmax(0, 1fr) auto; grid-template-areas:"ava quien botones" "ava saldos botones";
-  align-items:center; gap:4px 14px; margin:6px 0 10px; padding:14px 16px; border:2.5px solid var(--ink); border-radius:20px; overflow:hidden;
-  background:linear-gradient(120deg, #FFF6FB 0%, #FDE3EF 55%, #FBD6E5 100%); box-shadow:4px 5px 0 var(--ink); }
-.carnet::after { content:""; position:absolute; right:-40px; top:-50px; width:180px; height:180px; border-radius:50%;
-  background:radial-gradient(rgba(234,91,166,.18) 1.6px, transparent 2px) 0 0 / 12px 12px; pointer-events:none; }
-.carnet-ava { grid-area:ava; width:64px; height:64px; border-radius:50%; display:grid; place-items:center; border:3px solid #fff;
-  box-shadow:0 0 0 2.5px var(--ink); background:linear-gradient(135deg, #F27BBB, #EA5BA6); color:#fff; font:900 28px/1 "Poppins", sans-serif; }
-.carnet-quien { grid-area:quien; min-width:0; display:grid; }
-.carnet-quien b { font-size:21px; font-weight:900; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#perfilDlg.hub { width:100vw; height:100vh; height:100dvh; max-width:100vw; max-height:100vh; max-height:100dvh; margin:0 !important; padding:0;
+  border:0; border-radius:0 !important; box-shadow:none; background:var(--bg); color:var(--ink); overflow:hidden; }
+#perfilDlg.hub[open] { height:100dvh !important; max-height:100dvh !important; }
+#perfilDlg.hub::backdrop { background:#1B2D6B; }
+.hub-marco { display:grid; grid-template-columns:300px minmax(0, 1fr); height:100%; }
+.hub-lado { display:flex; flex-direction:column; gap:16px; min-height:0; overflow:auto; padding:18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  background:radial-gradient(rgba(255,255,255,.07) 1.4px, transparent 1.8px) 0 0 / 16px 16px, #1B2D6B; color:#fff; }
+.hub-panel { position:relative; min-width:0; min-height:0; overflow:auto; padding:22px 28px calc(32px + env(safe-area-inset-bottom, 0px));
+  background:radial-gradient(rgba(234,91,166,.10) 1.6px, transparent 2px) 0 0 / 22px 22px, var(--bg); }
+.hub-panel:focus { outline:none; }
+.hub-cerrar { position:absolute; top:14px; right:16px; z-index:6; font:800 16px/1 "Poppins", sans-serif; padding:11px 18px; border-radius:14px;
+  background:#fff; color:var(--ink); border:2.5px solid var(--ink); box-shadow:3px 4px 0 var(--ink); cursor:pointer; }
+.hub-cerrar:active { transform:translate(2px, 2px); box-shadow:1px 2px 0 var(--ink); }
+.hub-cab { margin:0 0 16px; padding-right:120px; }
+.hub-cab h2 { margin:0; font:900 30px/1.1 "Poppins", sans-serif; letter-spacing:-.01em; color:var(--ink); }
+.hub-cab p { margin:4px 0 0; font-size:15px; font-weight:600; color:var(--muted); }
+.hub-oculto { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; margin:0; }
+.hub-sub { margin:22px 0 8px; font:900 17px/1.2 "Poppins", sans-serif; }
+
+/* El carnet: una tarjeta de empleada (cinta rosa con el logo, inicial, nombre, puesto del mes, puntos y fichas) */
+.hub .carnet { position:relative; margin:0; padding:0; border:2.5px solid #fff; border-radius:20px; overflow:hidden; color:var(--ink);
+  background:linear-gradient(160deg, #FFF6FB 0%, #FDE3EF 60%, #FBD6E5 100%); box-shadow:0 0 0 2.5px var(--ink), 6px 7px 0 rgba(0,0,0,.35); --jgo-oro:#FFC928; }
+.carnet::after { content:""; position:absolute; right:-46px; bottom:-56px; width:170px; height:170px; border-radius:50%;
+  background:radial-gradient(rgba(234,91,166,.20) 1.6px, transparent 2px) 0 0 / 12px 12px; pointer-events:none; }
+.carnet-cinta { display:flex; align-items:center; gap:8px; padding:7px 12px; background:#EA5BA6; color:#fff; border-bottom:2.5px solid var(--ink);
+  font:800 11px/1 "Poppins", sans-serif; letter-spacing:.2em; }
+.carnet-cinta img { width:22px; height:22px; border-radius:6px; background:#fff; border:1.5px solid var(--ink); }
+.carnet-fila { position:relative; z-index:1; display:grid; grid-template-columns:auto minmax(0, 1fr); align-items:center; gap:12px; padding:12px 12px 8px; }
+.carnet-ava { width:58px; height:58px; border-radius:50%; display:grid; place-items:center; border:3px solid #fff; box-shadow:0 0 0 2.5px var(--ink);
+  background:linear-gradient(135deg, #F27BBB, #EA5BA6); color:#fff; font:900 26px/1 "Poppins", sans-serif; }
+.carnet-ava.p1 { box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #FFC928, 0 0 0 8.5px var(--ink); }
+.carnet-ava.p2 { box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #C9CED8, 0 0 0 8.5px var(--ink); }
+.carnet-ava.p3 { box-shadow:0 0 0 2.5px var(--ink), 0 0 0 6px #D08A4E, 0 0 0 8.5px var(--ink); }
+.carnet-quien { min-width:0; display:grid; }
+.carnet-quien b { font:900 20px/1.15 "Poppins", sans-serif; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .carnet-quien span { font-size:13px; font-weight:700; color:var(--muted); }
-.carnet .perfil-saldos { grid-area:saldos; margin:0; gap:8px; }
-.carnet .perfil-saldos span { display:inline-flex; align-items:center; gap:6px; padding:4px 12px 4px 6px; border:2px solid var(--ink); border-radius:999px;
-  background:#fff; font-size:13px; font-weight:700; }
-.carnet .perfil-saldos b { font-size:17px; font-weight:900; font-variant-numeric:tabular-nums; }
+.carnet .perfil-saldos { position:relative; z-index:1; margin:0; padding:2px 12px 14px; gap:6px; flex-wrap:nowrap; }
+.carnet .perfil-saldos span { display:inline-flex; align-items:center; gap:5px; padding:3px 10px 3px 4px; border:2px solid var(--ink); border-radius:999px;
+  background:#fff; font-size:12.5px; font-weight:700; white-space:nowrap; }
+.carnet .perfil-saldos b { font-size:16px; font-weight:900; font-variant-numeric:tabular-nums; }
 .carnet .perfil-saldos .pts { background:#FFF3C4; }
 .carnet-ico { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#FFC928; border:2px solid var(--ink);
   font-style:normal; font-size:12px; color:var(--ink); }
-.carnet { --jgo-oro:#FFC928; }
 .carnet .jgo-moneda { width:22px; height:22px; }
-.carnet-botones { grid-area:botones; position:relative; z-index:1; display:grid; gap:8px; }
-.carnet-botones button { min-width:118px; }
 
-/* ---- La tienda desde el perfil: una mini máquina que invita a entrar */
-.tienda-banner { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:14px; margin:16px 0 6px; padding:12px 14px;
-  border:2.5px solid var(--ink); border-radius:18px; background:linear-gradient(100deg, #1B2D6B, #2A3F86); color:#fff; box-shadow:4px 5px 0 var(--ink); }
-.tb-maq { width:54px; height:68px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:7px 6px 14px; border:2.5px solid var(--ink); border-radius:10px;
-  background:linear-gradient(#F27BBB, #D9468F); box-shadow:inset 0 -6px 0 rgba(0,0,0,.15); }
-.tb-maq i { border-radius:4px; background:#24376F; box-shadow:inset 0 -5px 0 #FFC928; }
-.tb-maq i:nth-child(2) { box-shadow:inset 0 -5px 0 #2FB2E8; } .tb-maq i:nth-child(3) { box-shadow:inset 0 -5px 0 #F38C32; } .tb-maq i:nth-child(4) { box-shadow:inset 0 -5px 0 #8CFFB8; }
-.tb-txt { display:grid; min-width:0; }
-.tb-txt b { font:900 18px/1.2 "Poppins", sans-serif; letter-spacing:.08em; color:#FFE066; text-shadow:0 0 8px rgba(255,201,40,.6); }
-.tb-txt span { font-size:13px; font-weight:600; color:rgba(255,255,255,.85); }
+/* Las secciones: botones grandes sobre el azul; la elegida en rosa */
+.hub-nav { display:grid; gap:8px; }
+.hub-tab { display:grid; grid-template-columns:26px minmax(0, 1fr); align-items:center; gap:12px; width:100%; min-height:58px; margin:0; padding:8px 14px;
+  border:2.5px solid transparent; border-radius:16px; background:rgba(255,255,255,.06); color:#fff; box-shadow:none; text-align:left; cursor:pointer; font:inherit; }
+.hub-tab .ic { width:26px; height:26px; }
+.ht-txt { display:grid; min-width:0; }
+.ht-txt b { font:800 17px/1.2 "Poppins", sans-serif; }
+.ht-txt small { font:600 12.5px/1.25 "Poppins", sans-serif; color:rgba(255,255,255,.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-variant-numeric:tabular-nums; }
+.ht-txt small:empty { display:none; }
+.hub-tab:hover { background:rgba(255,255,255,.12); }
+.hub-tab:focus-visible { outline:3px solid #FFC928; outline-offset:2px; }
+.hub-tab.on { background:#EA5BA6; border-color:#fff; box-shadow:4px 5px 0 rgba(0,0,0,.35); }
+.hub-tab.on .ht-txt small { color:#fff; }
+.hub-tab.jugar { margin-top:6px; border:2.5px dashed rgba(255,255,255,.4); background:transparent; }
+.hub-tab.jugar .ht-txt small { color:#FFC928; }
+/* Shibu de pie al fondo de la barra (vigilando, como buen jefe) */
+.hub-shibu { margin-top:auto; padding-top:8px; display:flex; justify-content:center; pointer-events:none; }
+.hub-shibu .shibu-pose { width:96px; height:170px; }
+.hub-shibu .shibu-pose img { filter:drop-shadow(0 6px 0 rgba(0,0,0,.28)); }
+@media (max-height: 760px) { .hub-shibu { display:none; } }
+
+/* Hoy: misiones, atajos y premios */
+.hub-panel.hoy > *, .hub-panel.top > * { max-width:860px; }
+.hub-atajos { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin:18px 0 0; }
+.hub-atajo { display:grid; grid-template-columns:auto minmax(0, 1fr); align-items:center; gap:12px; margin:0; padding:14px 16px; text-align:left;
+  border:2.5px solid var(--ink); border-radius:18px; box-shadow:4px 5px 0 var(--ink); color:var(--ink); cursor:pointer; font:inherit; }
+.hub-atajo .ic { width:34px; height:34px; padding:6px; border-radius:12px; background:#fff; border:2px solid var(--ink); }
+.hub-atajo span { display:grid; gap:2px; }
+.hub-atajo b { font:900 18px/1.15 "Poppins", sans-serif; }
+.hub-atajo small { font-size:13px; font-weight:700; color:var(--ink); opacity:.8; }
+.hub-atajo.tienda { background:linear-gradient(100deg, #F27BBB, #EA5BA6); color:#fff; }
+.hub-atajo.tienda small { color:#fff; opacity:.95; }
+.hub-atajo.tienda .ic { color:var(--ink); }
+.hub-atajo.jugar { background:#FFE8A3; }
+.hub-atajo:active { transform:translate(2px, 2px); box-shadow:2px 3px 0 var(--ink); }
+.hub-premios { border:2.5px solid var(--ink); border-radius:16px; background:#fff; padding:4px 14px; box-shadow:4px 5px 0 var(--ink); }
+.hub-premios .canje-row:last-child { border-bottom:0; }
+
+/* Top maid dentro del perfil: el título lo pone la cabecera */
+.hub-panel .olimpo-caja { margin:0; }
+
+/* Expendedora: la máquina llena la sección */
+.hub-panel.tienda { padding:0; overflow:hidden; }
+.hub-vm { height:100%; }
+.hub-vm .vm-sala { padding-right:118px; }   /* deja libre la esquina de «Cerrar» */
+.hub-vm .vm { width:min(1000px, 100%); }
+
+/* Cargando y sin conexión */
+.hub-cargando { display:flex; gap:10px; padding:40px 0; justify-content:center; }
+.hub-cargando i { width:14px; height:14px; border-radius:50%; background:#EA5BA6; border:2px solid var(--ink); animation:hubPunto 1s ease-in-out infinite; }
+.hub-cargando i:nth-child(2) { animation-delay:.15s; } .hub-cargando i:nth-child(3) { animation-delay:.3s; }
+@keyframes hubPunto { 0%, 100% { transform:translateY(0); opacity:.5; } 50% { transform:translateY(-10px); opacity:1; } }
+.hub-vacio { display:grid; justify-items:start; gap:6px; max-width:520px; padding:16px 18px; border:2.5px solid var(--ink); border-radius:18px; background:#fff;
+  box-shadow:4px 5px 0 var(--ink); }
+.hub-vacio span { color:var(--muted); font-size:14px; }
+.hub-vacio button { margin-top:6px; }
+.hub-nota { margin:16px 2px 0; font-size:12.5px; font-weight:600; color:var(--muted); }
+
+/* ---- Mis ventas */
+.vt-kpis { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:14px; margin:0 0 18px; }
+.vt-kpi { display:grid; align-content:start; gap:2px; min-width:0; padding:12px 16px 14px; border:2.5px solid var(--ink); border-radius:18px; background:#fff;
+  box-shadow:4px 5px 0 var(--ink); }
+.vt-kpi.hoy { background:linear-gradient(135deg, #FFF6FB, #FDE3EF); }
+.vt-tit { font:800 12px/1.3 "Poppins", sans-serif; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); }
+.vt-kpi > b { font:900 28px/1.15 "Poppins", sans-serif; font-variant-numeric:tabular-nums; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vt-kpi > span:not(.vt-tit) { font-size:14px; font-weight:700; color:var(--ink); }
+.vt-kpi small { margin-top:8px; padding-top:7px; border-top:2px dashed var(--line); font-size:12.5px; font-weight:600; color:var(--muted); }
+.vt-cuerpo { display:grid; grid-template-columns:minmax(0, 1.2fr) minmax(0, 1fr); gap:16px; align-items:start; }
+.vt-col { display:grid; gap:16px; min-width:0; }
+.vt-card { min-width:0; padding:14px 16px 16px; border:2.5px solid var(--ink); border-radius:18px; background:#fff; box-shadow:4px 5px 0 var(--ink); }
+.vt-card h3 { margin:0 0 12px; font:900 17px/1.2 "Poppins", sans-serif; }
+.vt-card h3 small { font-weight:600; font-size:13px; color:var(--muted); }
+.vt-nada { margin:0; font-size:14px; color:var(--muted); }
+/* Las barras: una sola tinta (rosa), hoy en azul; extremos redondeados apoyados en la línea de base */
+.vt-graf { position:relative; }
+.vt-barras { display:grid; grid-template-columns:repeat(14, minmax(0, 1fr)); align-items:end; gap:4px; padding-top:22px; }
+.vt-dia { display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:0; min-width:0; min-height:0; margin:0; padding:0;
+  border:0; border-radius:8px; background:none; box-shadow:none; color:var(--ink); font:inherit; cursor:pointer; }
+.vt-col-barra { position:relative; height:150px; display:flex; align-items:flex-end; justify-content:center; border-bottom:2px solid var(--ink); }
+.vt-col-barra i { display:block; width:min(26px, 80%); border:2px solid var(--ink); border-bottom:0; border-radius:5px 5px 0 0; background:#EA5BA6; }
+.vt-dia.cero .vt-col-barra i { border:0; }
+.vt-dia.hoy .vt-col-barra i { background:#1B2D6B; }
+.vt-dia:hover .vt-col-barra i, .vt-dia:focus-visible .vt-col-barra i { filter:brightness(1.12); }
+.vt-dia:focus-visible { outline:3px solid var(--accent-line); outline-offset:2px; }
+.vt-val { position:absolute; left:50%; bottom:calc(var(--h, 0%) + 4px); transform:translateX(-50%); white-space:nowrap;
+  font:800 11.5px/1 "Poppins", sans-serif; color:var(--ink); font-variant-numeric:tabular-nums; }
+.vt-eje { display:grid; padding-top:5px; font-size:11px; line-height:1.15; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums; }
+.vt-eje b { font-weight:800; color:var(--ink); }
+.vt-dia.hoy .vt-eje b { color:var(--accent); }
+.vt-tip { position:absolute; top:0; z-index:3; transform:translate(-50%, -70%); padding:6px 10px; border-radius:10px; background:var(--ink); color:#fff;
+  font:700 12.5px/1.2 "Poppins", sans-serif; white-space:nowrap; pointer-events:none; box-shadow:0 6px 16px rgba(27,45,107,.25); }
+/* Lo que más vende */
+.vt-top { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
+.vt-top li { display:grid; grid-template-columns:28px minmax(0, 1fr) auto; align-items:center; gap:10px; }
+.vt-pos { width:28px; height:28px; display:grid; place-items:center; border-radius:50%; background:#FFF3C4; border:2px solid var(--ink); font:900 13px/1 "Poppins", sans-serif; }
+.vt-plato { display:grid; gap:5px; min-width:0; }
+.vt-plato b { font-size:14.5px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-plato i { display:block; height:8px; min-width:6px; border-radius:4px; background:#EA5BA6; }
+.vt-cant { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.vt-cant b { font:900 17px/1 "Poppins", sans-serif; }
+.vt-cant small { display:block; margin-top:2px; font-size:12px; font-weight:600; color:var(--muted); }
+/* Sus comandas, por día */
+.vt-dia-tit { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin:14px 0 2px; padding-bottom:5px;
+  border-bottom:2px solid var(--ink); font:900 14.5px/1.2 "Poppins", sans-serif; }
+.vt-lista h3 + .vt-dia-tit { margin-top:0; }
+.vt-dia-tit b { font-variant-numeric:tabular-nums; }
+.vt-coms { list-style:none; margin:0; padding:0; }
+.vt-coms li { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:center; gap:12px; padding:8px 0; border-bottom:2px dashed var(--line); }
+.vt-coms li:last-child { border-bottom:0; }
+.vt-hora { min-width:58px; font-size:12.5px; font-weight:700; color:var(--muted); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.vt-que { display:grid; min-width:0; }
+.vt-que b { font-size:14.5px; font-weight:800; }
+.vt-que em { font-style:normal; color:var(--accent); }
+.vt-que small { font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vt-monto { font-weight:900; font-variant-numeric:tabular-nums; white-space:nowrap; }
 
 /* ---- Top maid del mes: el podio olímpico griego */
 .olimpo-caja { margin:16px 0 6px; }
@@ -188,12 +337,54 @@
 
 @media (prefers-reduced-motion: reduce) {
   .entra, .salta, .mis-card, .shibu-confeti i, .mis-sello.cae, .mis-sello.cae::after, .fiesta-premio,
-  .shibu-aviso, #btnShibu.recibe, .ol-rayos, .ol-glint, .ol-destello { animation:none !important; }
+  .shibu-aviso, #btnShibu.recibe, .ol-rayos, .ol-glint, .ol-destello, .hub-cargando i { animation:none !important; }
   .mis-barra i, .sa-barra i { transition:none !important; }
 }
-@media (max-width: 640px) {
-  .carnet { grid-template-columns:auto minmax(0, 1fr); grid-template-areas:"ava quien" "saldos saldos" "botones botones"; }
-  .carnet-botones { grid-template-columns:1fr 1fr; }
-  .tienda-banner { grid-template-columns:auto minmax(0, 1fr); }
-  .tienda-banner button { grid-column:1 / -1; }
+/* Tablet angosta y teléfono: el carnet y las secciones arriba, la sección abajo */
+@media (max-width: 1100px) {
+  .vt-cuerpo { grid-template-columns:1fr; }
+}
+@media (max-width: 760px) {
+  .hub-marco { grid-template-columns:minmax(0, 1fr); grid-template-rows:auto minmax(0, 1fr); }
+  .hub-lado { gap:10px; min-width:0; overflow:visible; padding:10px 10px 0; }
+  .hub .carnet { border-radius:16px; margin-right:96px; box-shadow:0 0 0 2px var(--ink), 4px 5px 0 rgba(0,0,0,.35); }
+  .carnet-cinta { padding:5px 10px; font-size:9.5px; }
+  .carnet-cinta img { width:18px; height:18px; }
+  .carnet-fila { padding:8px 10px 4px; gap:10px; }
+  .carnet-ava { width:42px; height:42px; font-size:19px; }
+  .carnet-quien b { font-size:17px; }
+  .carnet-quien span { font-size:12px; }
+  .carnet .perfil-saldos { padding:2px 10px 10px; gap:6px; flex-wrap:nowrap; }
+  .carnet .perfil-saldos span { padding:2px 9px 2px 3px; gap:4px; font-size:12px; }
+  .carnet .perfil-saldos b { font-size:14px; }
+  .carnet-ico, .carnet .jgo-moneda { width:18px; height:18px; font-size:10px; }
+  .hub-nav { position:relative; display:flex; gap:6px; overflow-x:auto; margin:0 -10px; padding:2px 10px 10px; scroll-snap-type:x proximity; scrollbar-width:none; }
+  .hub-nav::-webkit-scrollbar { display:none; }
+  .hub-tab { flex:none; width:auto; grid-template-columns:22px auto; gap:7px; min-height:46px; padding:6px 12px; scroll-snap-align:start; }
+  .hub-tab .ic { width:22px; height:22px; }
+  .ht-txt b { font-size:15px; }
+  .ht-txt small { display:none; }
+  .hub-tab.jugar { margin-top:0; }
+  .hub-shibu { display:none; }
+  .hub-cerrar { top:10px; right:10px; padding:10px 14px; font-size:15px; }
+  .hub-panel { padding:16px 12px calc(26px + env(safe-area-inset-bottom, 0px)); }
+  .hub-panel.tienda { overflow:auto; }
+  .hub-vm { height:auto; }
+  .hub-vm .vm-sala { padding-right:10px; }
+  .hub-cab { padding-right:0; margin-bottom:12px; }
+  .hub-cab h2 { font-size:24px; }
+  .vt-kpis { grid-template-columns:1fr; gap:10px; }
+  .vt-kpi { padding:10px 14px 12px; }
+  .vt-kpi > b { font-size:24px; }
+  .vt-kpi small { margin-top:6px; padding-top:5px; }
+  .vt-barras { gap:2px; }
+  .vt-col-barra { height:120px; }
+  .vt-eje { font-size:10px; }
+  .vt-val { font-size:10px; }
+  .shibu-pose { width:78px; height:140px; }
+  .shibu-pose.dia_completo { width:87px; }
+  .shibu-pose + .shibu-dice { padding-top:16px; }
+  #btnShibu { padding:4px 10px 4px 5px; gap:6px; }
+  #btnShibu .ic { width:26px; height:26px; }
+  #btnShibu .pf-txt b { display:none; }
 }

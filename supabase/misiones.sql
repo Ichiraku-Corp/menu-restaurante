@@ -173,23 +173,38 @@ language sql stable security definer set search_path = public as $$
   where employee_id = p_emp and motivo like 'juego:%' and delta > 0 and (at at time zone 'America/Caracas')::date = public.mis_hoy() $$;
 
 -- ---------------------------------------------------------------- Lo que cuenta para las misiones
--- Comandas de una persona en un día: lo que ella anotó en pedidos cobrados ese día. No cuentan los platos anulados,
--- los de Ref 0 (canjes y premios), Yummy ni el consumo de empleados.
+-- Lo que una persona anotó en pedidos cobrados entre dos días (los dos incluidos). No cuentan los platos anulados,
+-- los de Ref 0 (canjes y premios), Yummy ni el consumo de empleados. Es la regla de las misiones y de «Mis ventas».
+create or replace function public.mis_items_rango(p_emp bigint, p_desde date, p_hasta date)
+returns table (order_id bigint, qty numeric, monto numeric, dish_id bigint, nombre text, variant text, promo text,
+               es_extra boolean, cat text, kind text, abierta timestamptz, cerrada timestamptz, enviada timestamptz,
+               fecha date, mesa text, numero int)
+language sql stable security definer set search_path = public as $$
+  select i.order_id, i.qty, i.qty * i.unit_price, i.dish_id, coalesce(d.name, i.name), coalesce(i.variant, ''), coalesce(i.promo, ''),
+         coalesce(c.es_extra, false) or i.extra_de is not null, coalesce(c.name, ''), o.kind, o.opened_at, o.closed_at, i.sent_at,
+         (o.closed_at at time zone 'America/Caracas')::date,
+         case when o.kind = 'delivery' then 'Delivery' when o.kind = 'llevar' then 'Para llevar'
+              when t.id is not null then t.area || ' ' || t.number else 'Mesa' end,
+         o.day_number
+  from public.pos_orders o
+  join public.pos_items i on i.order_id = o.id
+  left join public.pos_tables t on t.id = o.table_id
+  left join public.dishes d on d.id = i.dish_id
+  left join public.categories c on c.id = d.category_id
+  where o.status = 'cobrada'
+    and o.closed_at >= (p_desde::timestamp at time zone 'America/Caracas') and o.closed_at < ((p_hasta + 1)::timestamp at time zone 'America/Caracas')
+    and i.created_by = p_emp and i.status <> 'anulado' and i.unit_price > 0
+    and coalesce(o.channel, 'propio') <> 'yummy'
+    and not exists (select 1 from public.pos_payments p where p.order_id = o.id and p.method in ('cuenta', 'yummy'))
+$$;
+
+-- Comandas de una persona en un día: lo que ella anotó en pedidos cobrados ese día (con la misma regla)
 create or replace function public.mis_items(p_emp bigint, p_fecha date)
 returns table (order_id bigint, qty numeric, monto numeric, dish_id bigint, nombre text, variant text, promo text,
                es_extra boolean, cat text, kind text, abierta timestamptz, cerrada timestamptz, enviada timestamptz)
 language sql stable security definer set search_path = public as $$
-  select i.order_id, i.qty, i.qty * i.unit_price, i.dish_id, coalesce(d.name, i.name), coalesce(i.variant, ''), coalesce(i.promo, ''),
-         coalesce(c.es_extra, false) or i.extra_de is not null, coalesce(c.name, ''), o.kind, o.opened_at, o.closed_at, i.sent_at
-  from public.pos_orders o
-  join public.pos_items i on i.order_id = o.id
-  left join public.dishes d on d.id = i.dish_id
-  left join public.categories c on c.id = d.category_id
-  where o.status = 'cobrada'
-    and o.closed_at >= (p_fecha::timestamp at time zone 'America/Caracas') and o.closed_at < ((p_fecha + 1)::timestamp at time zone 'America/Caracas')
-    and i.created_by = p_emp and i.status <> 'anulado' and i.unit_price > 0
-    and coalesce(o.channel, 'propio') <> 'yummy'
-    and not exists (select 1 from public.pos_payments p where p.order_id = o.id and p.method in ('cuenta', 'yummy'))
+  select order_id, qty, monto, dish_id, nombre, variant, promo, es_extra, cat, kind, abierta, cerrada, enviada
+  from public.mis_items_rango(p_emp, p_fecha, p_fecha)
 $$;
 
 create or replace function public.mis_comandas(p_emp bigint, p_fecha date)
@@ -902,9 +917,51 @@ begin
   return v;
 end $$;
 
+-- ---------------------------------------------------------------- Mis ventas (Mi perfil, pedido de Edgar del 24/11)
+-- Lo que la maid vendió hoy, en la semana (desde el lunes) y en el mes; sus últimos 14 días; sus comandas de los
+-- últimos 7 días con lo que llevaba cada una, y sus platos más vendidos del mes. Cuenta igual que las misiones.
+create or replace function public.mis_ventas(p_emp bigint, p_pin text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  f date := public.mis_hoy();
+  lunes date := f - (extract(isodow from f)::int - 1);
+  mes0 date := date_trunc('month', f)::date;
+  r jsonb;
+begin
+  perform public.pos_auth(p_emp, p_pin);
+  with it as (select * from public.mis_items_rango(p_emp, least(f - 13, mes0), f)),
+  com as (select order_id, min(fecha) fecha, sum(monto) monto, coalesce(sum(qty) filter (where not es_extra), 0) platos,
+                 max(cerrada) cerrada, min(mesa) mesa, min(numero) numero, min(kind) kind
+          from it group by order_id),
+  dia as (select fecha, sum(monto) monto, count(*) n from com group by fecha)
+  select jsonb_build_object(
+    'fecha', f, 'lunes', lunes, 'mes', mes0,
+    'hoy', (select jsonb_build_object('monto', coalesce(sum(monto), 0), 'comandas', count(*), 'platos', coalesce(sum(platos), 0)) from com where fecha = f),
+    'semana', (select jsonb_build_object('monto', coalesce(sum(monto), 0), 'comandas', count(*)) from com where fecha >= lunes),
+    -- La semana pasada hasta el mismo día (para comparar parejo)
+    'semana_pasada', (select jsonb_build_object('monto', coalesce(sum(monto), 0), 'comandas', count(*)) from com where fecha between lunes - 7 and f - 7),
+    'mes_total', (select jsonb_build_object('monto', coalesce(sum(monto), 0), 'comandas', count(*), 'platos', coalesce(sum(platos), 0),
+                                            'dias', count(distinct fecha)) from com where fecha >= mes0),
+    'dias', (select jsonb_agg(jsonb_build_object('fecha', g::date, 'monto', coalesce(dia.monto, 0), 'comandas', coalesce(dia.n, 0)) order by g)
+             from generate_series(f - 13, f, interval '1 day') g left join dia on dia.fecha = g::date),
+    'mejor_dia', (select jsonb_build_object('fecha', fecha, 'monto', monto) from dia where fecha >= mes0 order by monto desc, fecha desc limit 1),
+    'platos_top', coalesce((select jsonb_agg(jsonb_build_object('nombre', nombre, 'qty', q, 'monto', m) order by q desc, m desc, nombre)
+                            from (select nombre, sum(qty) q, sum(monto) m from it where fecha >= mes0 and not es_extra
+                                  group by nombre order by sum(qty) desc, sum(monto) desc, nombre limit 5) p), '[]'::jsonb),
+    'comandas', coalesce((select jsonb_agg(jsonb_build_object('id', c.order_id, 'fecha', c.fecha, 'cerrada', c.cerrada, 'mesa', c.mesa,
+                            'numero', c.numero, 'kind', c.kind, 'monto', c.monto, 'platos', c.platos,
+                            'detalle', (select string_agg(case when z.q = 1 then z.nombre else trim_scale(z.q)::text || '× ' || z.nombre end, ' · '
+                                                          order by z.q desc, z.nombre)
+                                        from (select i.nombre || case when i.variant <> '' then ' ' || i.variant else '' end nombre, sum(i.qty) q
+                                              from it i where i.order_id = c.order_id group by 1) z)) order by c.cerrada desc)
+                          from (select * from com where fecha >= f - 6 order by cerrada desc limit 40) c), '[]'::jsonb)
+  ) into r;
+  return r;
+end $$;
+
 -- ---------------------------------------------------------------- Permisos: las funciones internas no se llaman desde afuera
 revoke execute on function public.mis_ajustes(), public.mis_juega(bigint), public.mis_saldo(bigint), public.mis_fichas_saldo(bigint),
-  public.jgo_ganado_hoy(bigint), public.mis_items(bigint, date), public.mis_comandas(bigint, date), public.mis_venta_dia(bigint, date),
+  public.jgo_ganado_hoy(bigint), public.mis_items(bigint, date), public.mis_items_rango(bigint, date, date), public.mis_comandas(bigint, date), public.mis_venta_dia(bigint, date),
   public.mis_trabajo(bigint, date), public.mis_medir(bigint, date, text, jsonb), public.mis_asignar(date), public.mis_revisar(bigint, date, boolean),
   public.mis_tras_cobro(), public.mis_tras_cierre(), public.jgo_gastar_ficha(bigint, text), public.jgo_pagar(bigint, text, int, bigint),
   public.jgo_contadores(bigint), public.jgo_bj_vista(bigint), public.jgo_bj_terminar(bigint, text), public.jgo_ruleta_casillas(),
@@ -917,7 +974,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['mis_estado(bigint, text)', 'mis_marcar(bigint, text, boolean, bigint[])', 'tienda_canjear(bigint, text, bigint)',
-                           'mis_top_visto(bigint, text, bigint)',
+                           'mis_top_visto(bigint, text, bigint)', 'mis_ventas(bigint, text)',
                            'jgo_estado(bigint, text)',
                            'jgo_tragamonedas(bigint, text)', 'jgo_ruleta(bigint, text)', 'jgo_bj_empezar(bigint, text)',
                            'jgo_bj_accion(bigint, text, bigint, text)', 'gestion_misiones()', 'gestion_mision_guardar(bigint, boolean, text, integer, text, jsonb)',

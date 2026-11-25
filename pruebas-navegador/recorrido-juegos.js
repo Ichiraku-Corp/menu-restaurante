@@ -32,26 +32,29 @@ try{
 await p.goto("http://localhost:8796/pos.html");await p.fill("#devEmail","a@b.c");await p.fill("#devPass","x");await p.click("#device button");
 await pin("2222");await p.waitForSelector("#tablesView:not(.hidden)");await p.waitForTimeout(300);
 if(await p.isVisible("#annDlg"))await p.keyboard.press("Escape");
-// ---- Abrir: cabecera con fichas y lo ganado hoy; tres tarjetas; Shibu sin imagen todavía → círculo con su nombre
+// ---- Abrir: cabecera con fichas y lo ganado hoy; tres tarjetas; la cara de Shibu (data/shibu.json → «imagen»)
 await p.evaluate(()=>abrirJuegos());await p.waitForSelector("#jgoDlg[open]");
 await p.waitForFunction(()=>/Fichas: 3/.test(document.getElementById("jgoFichas").textContent));
 ok(/Fichas: 3/.test(await txt("#jgoFichas"))&&(await txt("#jgoHoy"))==="Hoy ganaste 0 de 3 puntos jugando","al abrir, la cabecera dice «Fichas: 3» y «Hoy ganaste 0 de 3 puntos jugando» ("+await cont()+")");
 ok((await p.$$eval("#jgoMenu [data-jgo] b",x=>x.map(y=>y.textContent))).join(",")==="Tragamonedas,Ruleta,Blackjack","tres tarjetas grandes: Tragamonedas, Ruleta y Blackjack");
 const cara=()=>p.evaluate(()=>{const i=document.querySelector("#jgoDlg .shibu-img"),c=document.querySelector("#jgoDlg .shibu-badge");
   return {img:!i.hidden&&i.complete&&i.naturalWidth>0,src:i.getAttribute("src")||"",circulo:getComputedStyle(c).display!=="none"&&!c.hidden,texto:c.textContent,color:getComputedStyle(c).backgroundColor};});
+const FR_IMG=JSON.parse(fs.readFileSync(path.join(ROOT,"data/shibu.json"),"utf8")).imagen;
+await p.waitForFunction(()=>!document.querySelector("#jgoDlg .shibu-img").hidden,null,{timeout:5000}).catch(()=>{});
 let k=await cara();
-ok(!k.img&&!k.src&&k.circulo&&k.texto==="Shibu"&&k.color==="rgb(224, 138, 60)","Shibu: sin «imagen» en data/shibu.json queda el círculo naranja con «Shibu» y no se pide ningún archivo");
+ok(FR_IMG==="assets/shibu/cara.webp"&&k.img&&k.src===FR_IMG&&!k.circulo,"Shibu: sale su cara de data/shibu.json («"+FR_IMG+"») y el círculo con su nombre se esconde");
 ok(await dice("juego_hola"),"Shibu saluda con una frase suya de data/shibu.json: «"+(await txt("#jgoBub"))+"»");
 await foto("menu.png");
-// Con «imagen» en data/shibu.json sale su imagen (la misma de la bienvenida) en vez del círculo
+// Con otra «imagen» en data/shibu.json sale esa (la misma de la bienvenida) en vez del círculo
 await p.evaluate(()=>{SHIBU.frases.imagen="assets/pos-192.png";});await p.click("#jgoCerrar");await p.evaluate(()=>abrirJuegos());
-await p.waitForFunction(()=>!document.querySelector("#jgoDlg .shibu-img").hidden,null,{timeout:5000}).catch(()=>{});
+await p.waitForFunction(()=>{const i=document.querySelector("#jgoDlg .shibu-img");return !i.hidden&&i.getAttribute("src")==="assets/pos-192.png"&&i.complete&&i.naturalWidth>0;},null,{timeout:5000}).catch(()=>{});
 k=await cara();
 ok(k.img&&k.src==="assets/pos-192.png"&&!k.circulo,"con «imagen» en data/shibu.json sale su imagen y el círculo se esconde");
 await p.evaluate(()=>{delete SHIBU.frases.imagen;});await p.click("#jgoCerrar");await p.evaluate(()=>abrirJuegos());
 await p.waitForFunction(()=>/Fichas: 3/.test(document.getElementById("jgoFichas").textContent));
 k=await cara();
-ok(!k.img&&k.circulo,"sin «imagen» vuelve el círculo");
+ok(!k.img&&k.circulo&&k.texto==="Shibu"&&k.color==="rgb(224, 138, 60)","sin «imagen» vuelve el círculo naranja con su nombre (y no se pide ningún archivo)");
+await p.evaluate(i=>{SHIBU.frases.imagen=i;},FR_IMG);
 // ---- Tragamonedas con premio forzado (dos iguales = 1 punto): paran uno tras otro en lo que dijo el servidor
 await ir(null,"slot");
 ok(await p.isVisible("#jgoSlot")&&/3 iguales = 3 puntos · 2 iguales = 1 punto/.test(await txt("#jgoSlot .jgo-premios"))&&(await txt("#jgoGirar"))==="Girar (1 ficha)","la tragamonedas muestra sus premios y «Girar (1 ficha)»");

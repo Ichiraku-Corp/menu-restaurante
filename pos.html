@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ichiraku Sala">
 <link rel="stylesheet" href="pos.css?v=630c6ac8d7">
-<link rel="stylesheet" href="shibu.css?v=0336311b7c">
+<link rel="stylesheet" href="shibu.css?v=215f50e615">
 <link rel="stylesheet" href="tienda.css">
 <link rel="stylesheet" href="juegos.css?v=90d2bc4ebf">
 <script src="config.js"></script>
@@ -31,8 +31,8 @@
 <script src="pos-sinred.js?v=15dc6dfc47" defer></script>
 <script src="pos-caja.js?v=aab53aee36" defer></script>
 <script src="pos-juegos.js?v=bd3012c592" defer></script>
-<script src="pos-shibu.js?v=58633a9e8f" defer></script>
-<script src="pos-tienda.js?v=b1dde67831" defer></script>
+<script src="pos-shibu.js?v=18f7ff21d4" defer></script>
+<script src="pos-tienda.js?v=d418d1522e" defer></script>
 </head>
 <body>
 <header>
@@ -43,7 +43,7 @@
   <span class="grow"></span>
   <button id="btnFull" class="hidden" aria-label="Pantalla completa" title="Pantalla completa"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   <button id="btnWa" class="hidden" title="Pedidos, reservas y chats de WhatsApp">WhatsApp <span id="waBadge" class="wabadge hidden"></span></button>
-  <button id="btnShibu" class="hidden" type="button" title="Misiones de Shibu"></button>
+  <button id="btnShibu" class="hidden" type="button" title="Mi perfil: misiones, ventas, Top maid y expendedora"></button>
   <button id="btnCaja" class="hidden">Caja</button>
   <button id="btnUser" class="hidden"></button>
 </header>
@@ -237,9 +237,8 @@
 
 <!-- Avisos del restaurante (se confirman con «Entendido») -->
 <!-- Misiones de Shibu: bienvenida y celebración (pos-shibu.js) -->
-<dialog id="shibuDlg"><div id="shibuBody"></div><p style="text-align:right;margin:12px 0 0"><button type="button" class="primary big" id="shibuOk">¡A trabajar!</button></p></dialog>
-<dialog id="tiendaDlg" aria-label="Tienda de Shibu"></dialog>
-<dialog id="perfilDlg"><div class="row between"><h2 style="margin:0">Mi perfil</h2><button type="button" id="perfilClose">Cerrar</button></div><div id="perfilBody"></div></dialog>
+<dialog id="shibuDlg"><div id="shibuBody"></div><p style="text-align:right;margin:12px 0 0"><button type="button" class="primary big" id="shibuOk" autofocus>¡A trabajar!</button></p></dialog>
+<dialog id="perfilDlg" class="hub" aria-label="Mi perfil"><button type="button" class="hub-cerrar" id="perfilClose">Cerrar</button><div class="hub-marco"><aside class="hub-lado" id="perfilLado"></aside><section class="hub-panel" id="perfilBody"></section></div></dialog>
 <dialog id="annDlg">
   <h2 id="annTitle">Avisos para ti</h2>
   <div id="annBody"></div>

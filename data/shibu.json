@@ -1,7 +1,15 @@
 {
-  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas.",
+  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas. «imagen» es la cara de Shibu en los círculos y «poses» el dibujo de cuerpo entero de cada momento (de las 22 poses aprobadas del pack de Shibu, 24/11).",
   "nombre": "Shibu",
   "titulo": "el jefe",
+  "imagen": "assets/shibu/cara.webp",
+  "poses": {
+    "bienvenida": "assets/shibu/pequeno-03-explicando.webp",
+    "mision": "assets/shibu/pequeno-06-pulgar-arriba.webp",
+    "dia_completo": "assets/shibu/grandote-03-gafas-riendo.webp",
+    "top_maid": "assets/shibu/pequeno-09-gafas-confiado.webp",
+    "perfil": "assets/shibu/pequeno-01-clasico.webp"
+  },
   "manana": [
     "Grrr... te estoy vigilando.",
     "Hoy quiero cero mesas molestas. CERO. ¿Entendido, novata?",

@@ -1,11 +1,12 @@
 // ---------------------------------------------------------------- Misiones de Shibu (pedido de Edgar, 24/11)
 // Shibu, el jefe, recibe a la maid la primera vez del día con sus 3 misiones y celebra cada misión cumplida.
-// «Mi perfil» muestra sus puntos y fichas, la tienda de premios y el botón «Jugar». En la tienda la maid compra con sus
-// puntos y el premio sale a cocina de una vez (queda en el cierre de caja).
+// «Mi perfil» (botón de la barra de arriba) es una pantalla completa con su carnet y las secciones Hoy, Mis ventas,
+// Top maid y Expendedora, más «Jugar». En la expendedora la maid compra con sus puntos y el premio sale a cocina de una
+// vez (queda en el cierre de caja).
 // Todo lo decide la base (mis_estado, tienda_canjear): la tablet solo muestra. Las frases salen de data/shibu.json.
 // Mejoras que eligió Edgar: el sello de Shibu cae sobre la misión cumplida, los puntos vuelan a la chapita de arriba,
 // un aviso chico cuando avanza una misión, el carnet de Mi perfil y el «Top maid» del mes en un podio olímpico griego.
-// La tienda es una máquina expendedora a pantalla completa (pos-tienda.js).
+// La expendedora es una máquina de premios dentro de Mi perfil (pos-tienda.js).
 var SHIBU = { frases: null, est: null, timer: null, vistos: {}, desde: {}, chipPts: null, retener: false, avisos: [], avisosT: 0,
   pronto: 0, rectFiesta: null, topVisto: {} };
 var NIVEL_TXT = { 0: "Extra del día", 1: "Fácil", 2: "Media", 3: "Difícil" };
@@ -25,7 +26,14 @@ function shibuFrase(tipo) {
 // La cara de Shibu: su PNG cuando esté (data/shibu.json → "imagen"); mientras, un círculo naranja con su nombre
 function shibuCara(cls) {
   var img = SHIBU.frases && SHIBU.frases.imagen;
-  return '<span class="shibu-cara ' + (cls || "") + '">' + (img ? '<img src="' + esc(img) + '" alt="Shibu">' : "<b>Shibu</b>") + "</span>";
+  return '<span class="shibu-cara ' + (cls || "") + (img ? " con-img" : "") + '">' + (img ? '<img src="' + esc(img) + '" alt="Shibu">' : "<b>Shibu</b>") + "</span>";
+}
+// Shibu de cuerpo entero en cada momento (data/shibu.json → «poses», de las 22 poses aprobadas del pack de Shibu).
+// Sin pose para ese momento, queda su cara en el círculo grande.
+function shibuPose(momento, anim) {
+  var p = SHIBU.frases && SHIBU.frases.poses && SHIBU.frases.poses[momento];
+  if (!p || !/^assets\//.test(p)) return shibuCara("grande " + (anim || ""));
+  return '<span class="shibu-pose ' + esc(momento) + " " + (anim || "") + '"><img src="' + esc(p) + '" alt="Shibu"></span>';
 }
 // La frase sale letra por letra, como si Shibu la estuviera escribiendo
 function shibuEscribe(el, txt) {
@@ -48,7 +56,10 @@ function shibuSalir() {
   SHIBU.avisos = []; SHIBU.rectFiesta = null; SHIBU.topVisto = {};
   show("btnShibu", false);
   var box = $("shibuAvisos"); if (box) box.innerHTML = "";
-  ["shibuDlg", "perfilDlg", "tiendaDlg"].forEach(function (id) { var d = $(id); if (d && d.open) d.close(); });
+  // Lo de una maid no lo ve la siguiente que entra
+  HUB.ventas = null; HUB.ventasAt = 0; HUB.ventasErr = ""; HUB.pidiendo = null; HUB.firma = ""; HUB.firmaLado = "";
+  if ($("perfilLado")) $("perfilLado").innerHTML = "";
+  ["shibuDlg", "perfilDlg"].forEach(function (id) { var d = $(id); if (d && d.open) d.close(); });
 }
 // Después de mandar a cocina o de cobrar, las misiones se revisan enseguida (sin esperar la vuelta de 30 s)
 function shibuPronto() {
@@ -80,7 +91,7 @@ function shibuPoll(alEntrar) {
     if (!e || !e.juega) return;
     if (alEntrar && !e.saludo_hoy) shibuCuandoLibre(shibuBienvenida);
     else if ((e.nuevos || []).length || shibuTopPendiente(e)) shibuCuandoLibre(shibuSiguiente);
-    if ($("perfilDlg").open) shibuPerfilDibuja();
+    shibuHubAlDia();
     shibuTabRedibuja();
   }).catch(function () {});
 }
@@ -100,7 +111,7 @@ function shibuCuandoLibre(fn) {
   })();
 }
 
-// ---- Chapita de arriba: «★ 1/3 · 12 pts»; al tocarla abre Mi perfil
+// ---- Botón «Mi perfil» de la barra de arriba: «★ 1/3 · 12 pts»; al tocarlo abre Mi perfil
 function shibuChip() {
   var e = SHIBU.est, ok = !!(e && e.juega);
   show("btnShibu", ok);
@@ -108,9 +119,10 @@ function shibuChip() {
   var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
   var pts = SHIBU.retener && SHIBU.chipPts != null ? SHIBU.chipPts : (e.puntos || 0);
   if (!SHIBU.retener) SHIBU.chipPts = pts;
-  $("btnShibu").innerHTML = shibuCara("mini") + "<b>★ " + hechas + "/" + m.length + '</b><small><span class="chip-pts">' + pts + "</span> pts</small>";
+  $("btnShibu").innerHTML = shibuIc(HUB_IC.perfil) + '<span class="pf-txt"><b>Mi perfil</b><small>★ ' + hechas + "/" + m.length +
+    ' · <span class="chip-pts">' + pts + "</span> pts</small></span>";
 }
-$("btnShibu").addEventListener("click", function () { shibuPerfil(); });
+$("btnShibu").addEventListener("click", function () { shibuPerfil("hoy"); });
 // Un número que sube (o baja) contando hasta su valor nuevo
 function shibuCuentaEn(el, desde, hasta, ms) {
   if (!el) return;
@@ -200,7 +212,7 @@ function shibuAvisoPinta(box, a) {
   box.appendChild(el);
   while (box.children.length > 3) box.removeChild(box.firstChild);
   shibuLlena(el);
-  el.addEventListener("click", function () { el.remove(); shibuPerfil(); });
+  el.addEventListener("click", function () { el.remove(); shibuPerfil("hoy"); });
   setTimeout(function () { el.classList.add("sale"); setTimeout(function () { el.remove(); }, 400); }, 5200);
 }
 
@@ -250,7 +262,7 @@ function shibuBienvenida() {
   var e = SHIBU.est; if (!e) return;
   var fuerte = e.tipo_dia === "fuertes" && Math.random() < 0.5;
   var frase = shibuFrase(fuerte ? "manana_fuerte" : "manana") || shibuFrase("manana");
-  $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuCara("grande entra") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
+  $("shibuBody").innerHTML = '<div class="shibu-top">' + shibuPose("bienvenida", "entra") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe · vigilando</small></div>' +
     '<p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     "<h3>Tus misiones de hoy, " + esc(String(e.nombre || U.name).split(" ")[0]) + "</h3>" +
     shibuTarjetas(e.misiones || [], { desde: function () { return 0; } }) +
@@ -258,6 +270,7 @@ function shibuBienvenida() {
   $("shibuOk").textContent = "¡A trabajar!";
   $("shibuDlg").dataset.modo = "saludo";
   $("shibuDlg").showModal();
+  $("shibuBody").scrollTop = 0;
   shibuLlena($("shibuBody"));
   shibuEscribe($("shibuTxt"), frase);
 }
@@ -278,7 +291,7 @@ function shibuCelebra() {
   var confeti = "";
   if (!quieto) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" +
-    '<div class="shibu-top">' + shibuCara("grande salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' +
+    '<div class="shibu-top">' + shibuPose(todas ? "dia_completo" : "mision", "salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' +
     '<div class="shibu-fiesta"><div class="fiesta-titulo">' + (todas ? "¡Las 3 misiones de hoy!" : nuevos.length > 1 ? "¡Misiones cumplidas!" : "¡Misión cumplida!") + "</div>" +
     shibuTarjetas(lista, { sellar: true, sello0: sello0, desde: function (x) { var d = SHIBU.desde[x._id]; return d == null ? 60 : d; } }) +
     '<div class="fiesta-premio" style="animation-delay:' + tPremio.toFixed(2) + 's"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + pts + "</b> punto" + (pts === 1 ? "" : "s") +
@@ -289,6 +302,7 @@ function shibuCelebra() {
   d.dataset.ids = nuevos.map(function (x) { return x.id; }).join(",");
   d.dataset.pts = pts; d.dataset.fichas = nuevos.length;
   d.showModal();
+  $("shibuBody").scrollTop = 0;
   shibuLlena($("shibuBody"));
   shibuEscribe($("shibuTxt"), shibuFrase(todas ? "dia_completo" : "mision"));
 }
@@ -319,45 +333,243 @@ $("shibuDlg").addEventListener("close", function () {
   shibuAvisosSigue();
 });
 
-// ---- Mi perfil: el carnet de la maid (puntos, fichas y su puesto), sus misiones, el Top maid, la tienda y sus premios
-function shibuPerfil() {
-  if (!SHIBU.est || !SHIBU.est.juega) return;
-  shibuPerfilDibuja(); $("perfilDlg").showModal();
-  rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); if ($("perfilDlg").open) shibuPerfilDibuja(); }).catch(function () {});
+// ---- Mi perfil (Edgar, 24/11: «el botón de perfil allí en la barra principal, y de allí una interfaz con el historial
+// de sus ventas, el top maid, y la expendedora»). Una pantalla completa: el carnet de la maid a un lado y sus secciones
+// Hoy (misiones y premios), Mis ventas, Top maid y Expendedora, más el botón Jugar.
+var HUB = { tab: "hoy", ventas: null, ventasAt: 0, ventasErr: "", pidiendo: null, firma: "", firmaLado: "", teclado: false };
+var HUB_VENTAS_MS = 60000;   // «Mis ventas» se vuelve a pedir si pasó más de un minuto
+var HUB_IC = {
+  perfil: '<rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="9" cy="11" r="2.4"/><path d="M5.6 16.6c.6-1.7 1.9-2.6 3.4-2.6s2.8.9 3.4 2.6M14.5 9.5h4M14.5 13h3"/>',
+  hoy: '<rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9.5 2.8h5v3h-5zM8.6 12.2l2 2 4-4.2M8.6 17.5h6.8"/>',
+  ventas: '<path d="M4 20h16"/><rect x="5.5" y="12" width="3" height="5" rx="1"/><rect x="10.5" y="8" width="3" height="9" rx="1"/><rect x="15.5" y="4.5" width="3" height="12.5" rx="1"/>',
+  top: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5.2a2.8 2.8 0 0 0 3 3.6M16 6h2.8a2.8 2.8 0 0 1-3 3.6M12 13v4M8.5 21h7M10 17h4v4h-4z"/>',
+  tienda: '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8 6.5h5M8 9.5h5M8 12.5h5M16 6.5v6M8.5 17.5h7"/>',
+  jugar: '<rect x="2.5" y="7.5" width="19" height="10" rx="5"/><path d="M7.5 10.5v4M5.5 12.5h4M15.2 11.6h.01M17.8 13.6h.01"/>'
+};
+var HUB_TABS = [{ id: "hoy", txt: "Hoy" }, { id: "ventas", txt: "Mis ventas" }, { id: "top", txt: "Top maid" }, { id: "tienda", txt: "Expendedora" }];
+function shibuIc(d) {
+  return '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
 }
 // La foto del premio es la del plato del menú (si el premio tiene plato y el plato tiene foto)
 function shibuFoto(t) {
   var d = t && t.dish_id && typeof MENU !== "undefined" ? (MENU.dishes || []).find(function (x) { return x.id === t.dish_id; }) : null, u = d && d.photo_url;
   return u && /^(assets\/|data:image\/|https:\/\/)/.test(u) ? '<img src="' + esc(u) + '" alt="" loading="lazy">' : '<span class="premio-sin-foto" aria-hidden="true">★</span>';
 }
-function shibuPerfilDibuja() {
-  var e = SHIBU.est; if (!e) return;
-  var pts = e.puntos || 0, fch = e.fichas || 0, est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
-  var juegos = e.juegos || {}, hayJuegos = typeof abrirJuegos === "function" && juegos.activo !== false;
-  var nombre = String(e.nombre || U.name || ""), mio = (e.ranking || []).filter(function (x) { return x.yo; })[0];
-  var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length;
-  $("perfilBody").innerHTML =
-    '<div class="carnet">' +
-      '<span class="carnet-ava" aria-hidden="true">' + esc(nombre.charAt(0).toUpperCase() || "?") + "</span>" +
-      '<div class="carnet-quien"><b>' + esc(nombre) + "</b><span>" + (e.grupo === "cajeras" ? "Cajera" : "Maid") +
-        (mio ? " · " + mio.puesto + ".º del Top maid" : "") + " · ★ " + hechas + "/" + m.length + " hoy</span></div>" +
-      '<div class="perfil-saldos"><span class="pts"><i class="carnet-ico" aria-hidden="true">★</i><b>' + pts + "</b> punto" + (pts === 1 ? "" : "s") + "</span>" +
-        '<span class="fch"><i class="jgo-moneda" aria-hidden="true"></i><b>' + fch + "</b> ficha" + (fch === 1 ? "" : "s") + "</span></div>" +
-      '<div class="carnet-botones"><button type="button" class="primary" id="perfilTienda">Tienda</button>' +
-        (hayJuegos ? '<button type="button" id="perfilJugar">Jugar</button>' : "") + "</div>" +
-    "</div>" +
-    "<h3>Misiones de hoy</h3>" + shibuTarjetas(m) +
-    shibuOlimpo(e) +
-    '<div class="tienda-banner"><span class="tb-maq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>' +
-      '<div class="tb-txt"><b>Shibu Mart</b><span>Cambia tus puntos por premios de la carta. Tienes ' + pts + " punto" + (pts === 1 ? "" : "s") + ".</span></div>" +
-      '<button type="button" class="primary" id="perfilTienda2">Abrir la tienda</button></div>' +
-    ((e.canjes || []).length ? "<h3>Mis premios</h3>" + e.canjes.map(function (c) {
-      return '<div class="canje-row ' + c.estado + '"><span>' + esc(c.nombre) + " · " + c.puntos + ' pts</span><b>' + esc(est[c.estado] || c.estado) + "</b></div>";
-    }).join("") : "");
-  if (hayJuegos) $("perfilJugar").addEventListener("click", function () { $("perfilDlg").close(); abrirJuegos(); });
-  ["perfilTienda", "perfilTienda2"].forEach(function (id) { $(id).addEventListener("click", function () { if (typeof abrirTienda === "function") abrirTienda(); }); });
+function shibuMaquinaOcupada() { return typeof VM !== "undefined" && VM.ocupada; }
+function shibuS(n, uno, varios) { return n + " " + (n === 1 ? uno : varios); }
+
+function shibuPerfil(tab) {
+  if (!SHIBU.est || !SHIBU.est.juega || shibuMaquinaOcupada()) return;
+  var d = $("perfilDlg");
+  HUB.tab = tab || "hoy"; HUB.firma = "";
+  shibuPerfilDibuja();
+  if (!d.open) d.showModal();
+  rpc("mis_estado").then(function (e) { SHIBU.est = e; shibuChip(); if (d.open) shibuHubAlDia(); }).catch(function () {});
+  shibuVentasPide(true);
 }
-$("perfilClose").addEventListener("click", function () { $("perfilDlg").close(); });
+function shibuPerfilDibuja() { shibuHubLado(); shibuHubPanel(false); }
+// Lo nuevo de la base (cada 30 s o al abrir): el carnet siempre; la sección, solo si cambió algo (la máquina no se reinicia)
+function shibuHubAlDia() {
+  if (!$("perfilDlg").open) return;
+  shibuHubLado();
+  if (HUB.tab === "tienda") { if (typeof vmAlDia === "function") vmAlDia(); }
+  else shibuHubPanel(true);
+}
+function shibuHubVe(tab) {
+  if (tab === HUB.tab || shibuMaquinaOcupada()) return;
+  if (typeof vmSuelta === "function") vmSuelta(false);
+  HUB.tab = tab; HUB.firma = "";
+  shibuHubLado(); shibuHubPanel(false);
+  if (tab === "ventas") shibuVentasPide(false);
+  // Con teclado, el foco sigue en la sección elegida (al tocar con el dedo no queda el anillo)
+  var b = document.querySelector('#perfilLado [data-hub="' + tab + '"]'); if (b && HUB.teclado) b.focus();
+}
+document.addEventListener("keydown", function () { HUB.teclado = true; }, true);
+document.addEventListener("pointerdown", function () { HUB.teclado = false; }, true);
+// «Mis ventas» viene de la base (mis_ventas): se pide al abrir el perfil y al entrar a la sección si pasó un minuto
+function shibuVentasPide(siempre) {
+  if (!U || HUB.pidiendo || (!siempre && HUB.ventas && Date.now() - HUB.ventasAt < HUB_VENTAS_MS)) return;
+  var quien = U.id;
+  HUB.ventasErr = "";
+  HUB.pidiendo = rpc("mis_ventas").then(function (v) {
+    if (U && U.id === quien) { HUB.ventas = v; HUB.ventasAt = Date.now(); }
+  }, function (err) { if (U && U.id === quien) HUB.ventasErr = errMsg(err) || "Sin conexión"; }).then(function () {
+    HUB.pidiendo = null;
+    if (U && U.id === quien && $("perfilDlg").open) { shibuHubLado(); if (HUB.tab === "ventas") shibuHubPanel(true); }
+  });
+}
+
+// ---- El carnet y las secciones (a la izquierda en la tablet; arriba en el teléfono)
+function shibuHubLado() {
+  var e = SHIBU.est; if (!e) return;
+  var nombre = String(e.nombre || (U && U.name) || ""), mio = (e.ranking || []).filter(function (x) { return x.yo; })[0];
+  var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length, pts = e.puntos || 0, fch = e.fichas || 0;
+  var hayJuegos = typeof abrirJuegos === "function" && (e.juegos || {}).activo !== false, v = HUB.ventas;
+  var info = { hoy: "★ " + hechas + "/" + m.length, ventas: v && v.hoy ? ref(v.hoy.monto) + " hoy" : "", top: mio ? mio.puesto + ".º del mes" : "",
+               tienda: shibuS(pts, "punto", "puntos") };
+  // Cada 30 s llega lo nuevo de la base: el carnet solo se redibuja si algo cambió (no parpadea ni se come un toque)
+  var firma = JSON.stringify([nombre, e.grupo, mio && mio.puesto, pts, fch, info, HUB.tab, hayJuegos]);
+  if (firma === HUB.firmaLado && $("perfilLado").firstChild) return;
+  HUB.firmaLado = firma;
+  $("perfilLado").innerHTML =
+    '<div class="carnet">' +
+      '<div class="carnet-cinta"><img src="assets/logo-gato.png" alt=""><span>ICHIRAKU · ' + (e.grupo === "cajeras" ? "CAJA" : "MAID") + "</span></div>" +
+      '<div class="carnet-fila"><span class="carnet-ava' + (mio && mio.puesto <= 3 ? " p" + mio.puesto : "") + '" aria-hidden="true">' + esc(nombre.charAt(0).toUpperCase() || "?") + "</span>" +
+        '<div class="carnet-quien"><b>' + esc(nombre) + "</b><span>" + (e.grupo === "cajeras" ? "Cajera" : "Maid") +
+          (mio ? " · " + mio.puesto + ".º del Top maid" : "") + "</span></div></div>" +
+      '<div class="perfil-saldos"><span class="pts"><i class="carnet-ico" aria-hidden="true">★</i><b id="hubPts">' + pts + "</b> punto" + (pts === 1 ? "" : "s") + "</span>" +
+        '<span class="fch"><i class="jgo-moneda" aria-hidden="true"></i><b>' + fch + "</b> ficha" + (fch === 1 ? "" : "s") + "</span></div>" +
+    "</div>" +
+    '<nav class="hub-nav" aria-label="Secciones de mi perfil">' + HUB_TABS.map(function (t) {
+      var on = HUB.tab === t.id;
+      return '<button type="button" class="hub-tab' + (on ? " on" : "") + '" data-hub="' + t.id + '"' + (on ? ' aria-current="page"' : "") + ">" +
+        shibuIc(HUB_IC[t.id]) + '<span class="ht-txt"><b>' + t.txt + "</b><small>" + esc(info[t.id]) + "</small></span></button>";
+    }).join("") +
+      (hayJuegos ? '<button type="button" class="hub-tab jugar" id="perfilJugar">' + shibuIc(HUB_IC.jugar) + '<span class="ht-txt"><b>Jugar</b><small>' +
+        shibuS(fch, "ficha", "fichas") + "</small></span></button>" : "") +
+    "</nav>" +
+    (HUB.tab !== "tienda" && SHIBU.frases && SHIBU.frases.poses && SHIBU.frases.poses.perfil ? '<div class="hub-shibu" aria-hidden="true">' + shibuPose("perfil") + "</div>" : "");
+  // En el teléfono las secciones van en una tira que se desliza: la elegida queda a la vista
+  var nav = document.querySelector("#perfilLado .hub-nav"), on = nav && nav.querySelector(".hub-tab.on");
+  if (on && nav.scrollWidth > nav.clientWidth + 1) nav.scrollLeft = Math.max(0, on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2);
+}
+// La sección elegida. «soloSiCambio»: al refrescar, no se redibuja si los datos son los mismos (y no salta el scroll)
+function shibuHubPanel(soloSiCambio) {
+  var e = SHIBU.est, p = $("perfilBody"); if (!e || !p) return;
+  var tab = HUB.tab;
+  var firma = tab + "|" + (tab === "hoy" ? JSON.stringify([e.misiones, e.canjes, e.puntos, e.fichas, (e.juegos || {}).activo])
+    : tab === "top" ? JSON.stringify([e.ranking, e.campeona, e.premios_top])
+    : tab === "ventas" ? HUB.ventasAt + "|" + HUB.ventasErr + "|" + !!HUB.ventas : "");
+  if (soloSiCambio && firma === HUB.firma) return;
+  HUB.firma = firma;
+  var y = soloSiCambio ? p.scrollTop : 0;
+  p.className = "hub-panel " + tab;
+  if (tab === "tienda") {
+    p.innerHTML = '<h2 class="hub-oculto">Expendedora</h2><div class="hub-vm" id="hubVm"></div>';
+    if (typeof vmAbre === "function") vmAbre($("hubVm"));
+    p.scrollTop = 0;
+    return;
+  }
+  p.innerHTML = tab === "hoy" ? shibuHubHoy(e) : tab === "ventas" ? shibuHubVentas() : shibuHubTop(e);
+  p.scrollTop = y;
+  if (tab === "hoy") shibuLlena(p);
+}
+function shibuHubCab(titulo, sub) {
+  return '<div class="hub-cab"><h2>' + titulo + "</h2>" + (sub ? "<p>" + sub + "</p>" : "") + "</div>";
+}
+
+// ---- Hoy: sus misiones, atajos a la expendedora y a los juegos, y sus últimos premios
+function shibuHubHoy(e) {
+  var m = e.misiones || [], hechas = m.filter(function (x) { return x.hecha; }).length, pts = e.puntos || 0, fch = e.fichas || 0;
+  var hayJuegos = typeof abrirJuegos === "function" && (e.juegos || {}).activo !== false;
+  var est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
+  return shibuHubCab("Hoy", m.length ? "Llevas " + hechas + " de " + m.length + " misiones. Cada una da sus puntos y 1 ficha." : "") +
+    shibuTarjetas(m) +
+    '<div class="hub-atajos">' +
+      '<button type="button" class="hub-atajo tienda" data-hub="tienda">' + shibuIc(HUB_IC.tienda) +
+        "<span><b>Expendedora</b><small>Tienes " + shibuS(pts, "punto", "puntos") + " para premios</small></span></button>" +
+      (hayJuegos ? '<button type="button" class="hub-atajo jugar" id="perfilJugar2">' + shibuIc(HUB_IC.jugar) +
+        "<span><b>Jugar</b><small>Tienes " + shibuS(fch, "ficha", "fichas") + "</small></span></button>" : "") +
+    "</div>" +
+    ((e.canjes || []).length ? '<h3 class="hub-sub">Mis premios</h3><div class="hub-premios">' + e.canjes.map(function (c) {
+      return '<div class="canje-row ' + esc(c.estado) + '"><span>' + esc(c.nombre) + " · " + c.puntos + " pts</span><b>" + esc(est[c.estado] || c.estado) + "</b></div>";
+    }).join("") + "</div>" : "");
+}
+// ---- Top maid: el podio olímpico del mes
+function shibuHubTop(e) {
+  return shibuHubCab("Top maid", "Las maids con más puntos de misiones en " + esc(shibuMes(e.fecha)) + ".") +
+    (shibuOlimpo(e) || '<p class="muted">El Top maid sale cuando la base lo mande.</p>');
+}
+
+// ---- Mis ventas: hoy, la semana y el mes; sus últimos 14 días en barras; sus comandas de la semana y lo que más vende
+var SHIBU_DIAS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+function shibuDia(f) { return new Date(String(f).slice(0, 10) + "T12:00:00"); }
+function shibuDiaCorto(f) { var d = shibuDia(f); return SHIBU_DIAS[d.getDay()].slice(0, 3).toLowerCase() + " " + d.getDate(); }
+function shibuDiaTitulo(f, hoy) {
+  var d = shibuDia(f), n = Math.round((shibuDia(hoy) - d) / 864e5);
+  return n === 0 ? "Hoy" : n === 1 ? "Ayer" : SHIBU_DIAS[d.getDay()] + " " + d.getDate();
+}
+function shibuRefCorto(n) { n = Number(n) || 0; return "Ref " + (n >= 100 ? Math.round(n) : nf2.format(n).replace(/,00$/, "")); }
+function shibuHubVentas() {
+  var v = HUB.ventas, cab = shibuHubCab("Mis ventas", "Lo que tú anotaste en comandas cobradas.");
+  if (!v) {
+    if (HUB.ventasErr) return cab + '<div class="hub-vacio"><b>No se pudieron cargar tus ventas.</b><span>' + esc(HUB.ventasErr) +
+      '</span><button type="button" id="hubReintentar">Reintentar</button></div>';
+    return cab + '<div class="hub-cargando" role="status" aria-label="Cargando tus ventas"><i></i><i></i><i></i></div>';
+  }
+  var hoy = v.hoy || {}, sem = v.semana || {}, ant = v.semana_pasada || {}, mes = v.mes_total || {}, mejor = v.mejor_dia;
+  var nomMes = shibuMes(v.fecha), nMes = Number(mes.comandas) || 0, dias = v.dias || [];
+  var kpi = function (cls, tit, monto, sub, nota) {
+    return '<div class="vt-kpi ' + cls + '"><span class="vt-tit">' + tit + "</span><b>" + ref(monto) + "</b><span>" + sub + "</span>" + (nota ? "<small>" + nota + "</small>" : "") + "</div>";
+  };
+  var h = cab + '<div class="vt-kpis">' +
+    kpi("hoy", "Hoy", hoy.monto, shibuS(Number(hoy.comandas) || 0, "comanda", "comandas") + " · " + shibuS(Number(hoy.platos) || 0, "plato", "platos")) +
+    kpi("sem", "Esta semana", sem.monto, shibuS(Number(sem.comandas) || 0, "comanda", "comandas"),
+        Number(ant.monto) > 0 ? "La semana pasada a esta altura: " + ref(ant.monto) : "") +
+    kpi("mes", nomMes.charAt(0).toUpperCase() + nomMes.slice(1), mes.monto,
+        shibuS(nMes, "comanda", "comandas") + (Number(mes.dias) ? " en " + shibuS(Number(mes.dias), "día", "días") : ""),
+        mejor && Number(mejor.monto) > 0 ? "Tu mejor día: " + shibuDiaCorto(mejor.fecha) + " · " + ref(mejor.monto) : "") +
+    "</div>";
+  // Las barras de los 14 días: una sola tinta; hoy resaltado; se rotulan hoy y el día más alto
+  var max = 0, iMax = -1;
+  dias.forEach(function (d, i) { if (Number(d.monto) > max) { max = Number(d.monto); iMax = i; } });
+  var resumen = dias.filter(function (d) { return Number(d.monto) > 0; }).map(function (d) { return shibuDiaCorto(d.fecha) + " " + ref(d.monto); }).join(", ");
+  h += '<div class="vt-cuerpo"><div class="vt-col">' +
+    '<section class="vt-card"><h3>Tus últimos 14 días</h3>' +
+    '<div class="vt-graf" role="group" aria-label="' + esc("Ventas de los últimos 14 días" + (resumen ? ": " + resumen : ": sin ventas")) + '">' +
+    '<div class="vt-barras">' + dias.map(function (d, i) {
+      var mto = Number(d.monto) || 0, esHoy = i === dias.length - 1, alto = mto > 0 && max > 0 ? Math.max(3, Math.round(mto / max * 100)) : 0, dd = shibuDia(d.fecha);
+      var etiqueta = (esHoy || i === iMax) && mto > 0 ? '<span class="vt-val">' + shibuRefCorto(mto) + "</span>" : "";
+      return '<button type="button" class="vt-dia' + (esHoy ? " hoy" : "") + (mto ? "" : " cero") + '" data-tip="' +
+        esc(shibuDiaTitulo(d.fecha, v.fecha) + " · " + ref(mto) + " · " + shibuS(Number(d.comandas) || 0, "comanda", "comandas")) + '" aria-label="' +
+        esc(shibuDiaCorto(d.fecha) + ": " + ref(mto) + ", " + shibuS(Number(d.comandas) || 0, "comanda", "comandas")) + '">' +
+        '<span class="vt-col-barra" style="--h:' + alto + '%">' + etiqueta + '<i style="height:' + alto + '%"></i></span>' +
+        '<span class="vt-eje"><b>' + (esHoy ? "Hoy" : SHIBU_DIAS[dd.getDay()].charAt(0)) + "</b>" + dd.getDate() + "</span></button>";
+    }).join("") + '</div><div class="vt-tip" id="vtTip" hidden></div></div></section>';
+  // Lo que más vende en el mes
+  var top = v.platos_top || [], maxQ = top.reduce(function (s, x) { return Math.max(s, Number(x.qty) || 0); }, 0);
+  h += '<section class="vt-card"><h3>Lo que más vendes en ' + esc(nomMes) + "</h3>" + (top.length ? '<ol class="vt-top">' + top.map(function (x, i) {
+    var q = Number(x.qty) || 0;
+    return '<li><span class="vt-pos">' + (i + 1) + '</span><span class="vt-plato"><b>' + esc(x.nombre) + '</b><i style="width:' + (maxQ ? Math.round(q / maxQ * 100) : 0) +
+      '%"></i></span><span class="vt-cant"><b>' + q + "</b> <small>" + ref(x.monto) + "</small></span></li>";
+  }).join("") + "</ol>" : '<p class="vt-nada">Cuando cobren comandas que tú anotaste, aquí salen tus platos más vendidos.</p>') + "</section></div>";
+  // Sus comandas de la última semana, por día
+  var coms = v.comandas || [], porDia = [], hdr = {};
+  coms.forEach(function (c) { var f = String(c.fecha).slice(0, 10); if (!hdr[f]) { hdr[f] = { f: f, l: [], t: 0 }; porDia.push(hdr[f]); } hdr[f].l.push(c); hdr[f].t += Number(c.monto) || 0; });
+  h += '<section class="vt-card vt-lista"><h3>Mis comandas <small>de los últimos 7 días</small></h3>' + (porDia.length ? porDia.map(function (g) {
+    return '<h4 class="vt-dia-tit"><span>' + esc(shibuDiaTitulo(g.f, v.fecha)) + "</span><b>" + ref(g.t) + "</b></h4><ul class=\"vt-coms\">" + g.l.map(function (c) {
+      return '<li><span class="vt-hora">' + new Date(c.cerrada).toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" }) + "</span>" +
+        '<span class="vt-que"><b>' + esc(c.mesa) + (c.numero ? " <em>#" + c.numero + "</em>" : "") + "</b><small>" + esc(c.detalle || "") + "</small></span>" +
+        '<b class="vt-monto">' + ref(c.monto) + "</b></li>";
+    }).join("") + "</ul>";
+  }).join("") : '<p class="vt-nada">Todavía no tienes comandas cobradas esta semana.</p>') + "</section></div>" +
+    '<p class="hub-nota">Cuentan las comandas cobradas que tú anotaste. No cuentan los premios de Ref 0, Yummy ni el consumo del personal.</p>';
+  return h;
+}
+// El globito de cada barra: al pasar el dedo, al tocarla o con el teclado
+function shibuVtTip(b) {
+  var t = $("vtTip"); if (!t) return;
+  if (!b) { t.hidden = true; return; }
+  var g = b.closest(".vt-graf").getBoundingClientRect(), r = b.getBoundingClientRect();
+  t.textContent = b.dataset.tip; t.hidden = false;
+  var x = r.left + r.width / 2 - g.left, w = t.offsetWidth;
+  t.style.left = Math.max(w / 2 + 4, Math.min(g.width - w / 2 - 4, x)) + "px";
+}
+
+$("perfilDlg").addEventListener("click", function (ev) {
+  var t = ev.target.closest("[data-hub]");
+  if (t) { shibuHubVe(t.dataset.hub); return; }
+  if (ev.target.closest("#perfilClose")) { if (!shibuMaquinaOcupada()) $("perfilDlg").close(); return; }
+  if (ev.target.closest("#perfilJugar, #perfilJugar2")) { if (shibuMaquinaOcupada()) return; $("perfilDlg").close(); abrirJuegos(); return; }
+  if (ev.target.closest("#hubReintentar")) { shibuVentasPide(true); return; }
+  var b = ev.target.closest(".vt-dia"); if (b) shibuVtTip(b);
+});
+$("perfilDlg").addEventListener("pointerover", function (ev) { var b = ev.target.closest(".vt-dia"); if (b) shibuVtTip(b); });
+$("perfilDlg").addEventListener("pointerout", function (ev) { if (ev.target.closest(".vt-dia") && !(ev.relatedTarget && ev.relatedTarget.closest && ev.relatedTarget.closest(".vt-dia"))) shibuVtTip(null); });
+$("perfilDlg").addEventListener("focusin", function (ev) { var b = ev.target.closest(".vt-dia"); shibuVtTip(b || null); });
+// Mientras cae un premio de la máquina no se cierra (Escape espera a que termine)
+$("perfilDlg").addEventListener("cancel", function (ev) { if (shibuMaquinaOcupada()) ev.preventDefault(); });
+$("perfilDlg").addEventListener("close", function () { if (typeof vmSuelta === "function") vmSuelta(false); shibuVtTip(null); });
 // ---- Top maid del mes: un podio olímpico griego (Edgar: «una estatua griega olímpica donde se vea glorioso el primer lugar»)
 // Templo de mármol con su frontón, podio con greca y una estatua de taiyaki por puesto: oro (con laurel, rayos y brillo),
 // plata y bronce. El ranking lo calcula la base (mis_ranking): solo puntos de misiones del mes.
@@ -542,7 +754,7 @@ function shibuTopPremio() {
   var mes = shibuMes(p.mes), frase = shibuFrase("top_maid"), confeti = "";
   if (!shibuQuieto()) for (var i = 0; i < 18; i++) confeti += '<i style="left:' + (5 + i * 5.2).toFixed(1) + "%;animation-delay:" + (i % 6 * 0.12).toFixed(2) + 's"></i>';
   $("shibuBody").innerHTML = '<div class="shibu-confeti" aria-hidden="true">' + confeti + "</div>" + shibuEstatua(p.puesto) +
-    (frase ? '<div class="shibu-top">' + shibuCara("grande salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' : "") +
+    (frase ? '<div class="shibu-top">' + shibuPose("top_maid", "salta") + '<div class="shibu-dice"><div class="shibu-nom"><b>Shibu</b> <small>el jefe</small></div><p class="shibu-globo" id="shibuTxt"></p></div></div>' : "") +
     '<div class="shibu-fiesta"><div class="fiesta-titulo">' + (p.puesto === 1 ? "¡Fuiste la Top maid de " + esc(mes) + "!" : "¡" + p.puesto + ".º lugar del Top maid de " + esc(mes) + "!") + "</div>" +
     '<div class="fiesta-mis">Tu premio por el mes</div>' +
     '<div class="fiesta-premio"><i class="fiesta-moneda" aria-hidden="true"></i><b>+' + p.puntos + "</b> puntos para la tienda</div></div>";
@@ -553,7 +765,7 @@ function shibuTopPremio() {
   if (frase) shibuEscribe($("shibuTxt"), frase);
 }
 
-// ---- Pestaña «Maids» (junto a Tokio y Edo): cada maid ve su día con Shibu, su perfil con la tienda y «Jugar»
+// ---- Pestaña «Maids» (junto a Tokio y Edo): cada maid ve su día con Shibu y atajos a Mi perfil, sus ventas, la expendedora y «Jugar»
 // Si la pestaña «Maids» está a la vista, se redibuja con lo último
 function shibuTabRedibuja() {
   if (U && cur.area === "Maids" && !$("tablesView").classList.contains("hidden")) shibuTabMaids($("areaBody"));
@@ -572,13 +784,14 @@ function shibuTabMaids(box) {
     html += '<div class="card maids-dia"><div class="perfil-top">' + shibuCara("media") + '<div class="perfil-quien"><b>Tu día con Shibu</b><div class="perfil-saldos">' +
       "<span>★ " + hechas + " de " + m.length + ' misiones</span><span class="pts"><b>' + (e.puntos || 0) + "</b> puntos</span><span><b>" + (e.fichas || 0) + "</b> fichas</span></div></div></div>" +
       '<div class="row" style="margin-top:10px"><button type="button" class="primary" id="maidsPerfil">Mi perfil</button>' +
-      '<button type="button" id="maidsTienda">Tienda</button>' +
+      '<button type="button" id="maidsVentas">Mis ventas</button><button type="button" id="maidsTienda">Expendedora</button>' +
       (typeof abrirJuegos === "function" && (e.juegos || {}).activo !== false ? '<button type="button" id="maidsJugar">Jugar</button>' : "") + "</div></div>";
   }
   box.innerHTML = '<div class="maids-tab">' + (html || '<p class="muted">Aquí salen las misiones de Shibu.</p>') + "</div>";
 }
 document.addEventListener("click", function (ev) {
-  if (ev.target.closest("#maidsPerfil")) shibuPerfil();
+  if (ev.target.closest("#maidsPerfil")) shibuPerfil("hoy");
+  else if (ev.target.closest("#maidsVentas")) shibuPerfil("ventas");
   else if (ev.target.closest("#maidsJugar") && typeof abrirJuegos === "function") abrirJuegos();
-  else if (ev.target.closest("#maidsTienda") && typeof abrirTienda === "function") abrirTienda();
+  else if (ev.target.closest("#maidsTienda")) shibuPerfil("tienda");
 });

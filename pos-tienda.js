@@ -1,37 +1,42 @@
-// ---------------------------------------------------------------- Tienda de Shibu: una máquina expendedora a pantalla completa
-// Pedido de Edgar (24/11): la tienda es una máquina expendedora grande que cubre la pantalla.
+// ---------------------------------------------------------------- Tienda de Shibu: la máquina expendedora de Mi perfil
+// Pedido de Edgar (24/11): la tienda es una máquina expendedora grande. Vive en la sección «Expendedora» de Mi perfil.
 // La maid elige el premio en el vidrio (o con el teclado: A1, B2…), mantiene presionado el botón grande y el premio
 // cae a la bandeja. La compra la hace la base (tienda_canjear): el premio sale a cocina en Ref 0 y queda en el cierre.
 // Las casillas sin premio dicen «Pronto» (ahí van los comodines que Edgar está eligiendo).
-var VM = { sel: null, tecla: "", ocupada: false, t: 0, volverPerfil: false };
+var VM = { sel: null, tecla: "", ocupada: false, t: 0 };
 var VM_COLS = 4, VM_MIN = 8, VM_MANTENER_MS = 1200;
 
 function vmCodigo(i) { return String.fromCharCode(65 + Math.floor(i / VM_COLS)) + (i % VM_COLS + 1); }   // A1, A2… B1
 function vmItems() { return (SHIBU.est && SHIBU.est.tienda) || []; }
 function vmPuntos() { return (SHIBU.est && SHIBU.est.puntos) || 0; }
 
-function abrirTienda() {
-  if (!SHIBU.est || !SHIBU.est.juega) return;
-  var perfil = $("perfilDlg");
-  VM.volverPerfil = !!(perfil && perfil.open);
-  if (VM.volverPerfil) perfil.close();
+// Abrir la tienda es abrir Mi perfil en la expendedora
+function abrirTienda() { if (typeof shibuPerfil === "function") shibuPerfil("tienda"); }
+// Mi perfil dibuja la máquina al entrar a la sección; lo nuevo de la base la pone al día sin reiniciarla
+function vmAbre(cont) {
+  if (!cont) return;
+  vmSuelta(false);
   VM.sel = null; VM.tecla = ""; VM.ocupada = false;
-  vmDibuja();
-  $("tiendaDlg").showModal();
+  VM.firma = JSON.stringify([vmItems(), vmPuntos(), ((SHIBU.est && SHIBU.est.canjes) || []).length]);
+  vmDibuja(cont);
   vmMensaje("ELIGE UN PREMIO");
-  rpc("mis_estado").then(function (e) {
-    SHIBU.est = e; shibuChip();
-    if ($("tiendaDlg").open && !VM.ocupada) { vmPintaSlots(); vmSaldo(); vmRecibo(); }
-  }).catch(function () {});
+}
+function vmAlDia() {
+  if (!$("vmSlots") || VM.ocupada || VM.t) return;
+  // Solo si cambió algo (premios, saldo o compras): así no parpadean las fotos cada 30 s
+  var firma = JSON.stringify([vmItems(), vmPuntos(), ((SHIBU.est && SHIBU.est.canjes) || []).length]);
+  if (firma === VM.firma) return;
+  VM.firma = firma;
+  vmPintaSlots(); vmSaldo(); vmRecibo();
+  if (VM.sel != null && vmItems()[VM.sel]) vmElige(VM.sel); else if (VM.sel != null) { VM.sel = null; vmMensaje("ELIGE UN PREMIO"); }
 }
 
 // ---- Dibujo de la máquina
-function vmDibuja() {
+function vmDibuja(cont) {
   var focos = "";
   for (var i = 0; i < 22; i++) focos += "<i></i>";
-  $("tiendaDlg").innerHTML =
+  cont.innerHTML =
     '<div class="vm-sala">' +
-    '<button type="button" class="vm-cerrar" id="vmCerrar">Cerrar</button>' +
     '<div class="vm" role="group" aria-label="Máquina de premios de Shibu">' +
       '<div class="vm-letrero"><span class="vm-focos" aria-hidden="true">' + focos + '</span>' +
         '<span class="vm-marca"><b>SHIBU MART</b><small>Premios para maids · se pagan con puntos</small></span></div>' +
@@ -87,6 +92,7 @@ function vmSaldo(desde) {
   if (desde != null) shibuCuentaEn(b, desde, vmPuntos(), 900); else b.textContent = vmPuntos();
 }
 function vmRecibo() {
+  if (!$("vmRecibo")) return;
   var c = ((SHIBU.est && SHIBU.est.canjes) || []).slice(0, 4), est = { entregado: "A cocina", pendiente: "Esperando", rechazado: "No salió" };
   $("vmRecibo").innerHTML = '<b class="rec-tit">MIS PREMIOS</b>' + (c.length ? "<ol>" + c.map(function (x) {
     return '<li><span>' + esc(x.nombre) + "</span><span>" + x.puntos + " pts · " + esc(est[x.estado] || x.estado) + "</span></li>";
@@ -155,6 +161,7 @@ function vmComprar() {
       vmMensaje("¡LISTO! " + t.nombre.toUpperCase() + " VA A COCINA", "ok");
       vmGlobo(shibuFrase("canje_aprobado") || "Tu premio va a cocina.");
       VM.ocupada = false; VM.sel = null; vmPintaSlots();
+      if (typeof shibuHubLado === "function" && $("perfilDlg").open) shibuHubLado();
       if (typeof shibuTabRedibuja === "function") shibuTabRedibuja();
     });
   }).catch(function (err) {
@@ -164,7 +171,7 @@ function vmComprar() {
 }
 // La espiral gira, el premio sale hacia adelante, cae a la bandeja y rebota; la tapa se mueve
 function vmCae(i, t, fin) {
-  var slot = document.querySelector('#vmSlots .vm-slot[data-i="' + i + '"]'), sala = document.querySelector("#tiendaDlg .vm-sala");
+  var slot = document.querySelector('#vmSlots .vm-slot[data-i="' + i + '"]'), sala = document.querySelector("#perfilBody .vm-sala");
   var hueco = $("vmHueco"), prod = slot && slot.querySelector(".vm-prod");
   function enBandeja() {
     hueco.querySelectorAll(".vm-premio").forEach(function (x) { x.remove(); });
@@ -173,7 +180,7 @@ function vmCae(i, t, fin) {
     $("vmTapa").classList.remove("golpe"); void hueco.offsetWidth; $("vmTapa").classList.add("golpe");
     fin();
   }
-  if (!slot || !prod || !sala || shibuQuieto() || !sala.animate) { enBandeja(); return; }
+  if (!slot || !prod || !sala || !hueco || shibuQuieto() || !sala.animate) { if (hueco) enBandeja(); else fin(); return; }
   slot.classList.add("cae");
   var rs = sala.getBoundingClientRect(), r0 = prod.getBoundingClientRect(), r1 = hueco.getBoundingClientRect();
   var c = document.createElement("span");
@@ -202,8 +209,7 @@ function vmCae(i, t, fin) {
 
 // ---- Eventos
 document.addEventListener("click", function (ev) {
-  if (!ev.target.closest("#tiendaDlg")) return;
-  if (ev.target.closest("#vmCerrar")) { $("tiendaDlg").close(); return; }
+  if (!ev.target.closest(".vm-sala")) return;
   var s = ev.target.closest(".vm-slot[data-i]"); if (s) { vmElige(Number(s.dataset.i)); return; }
   var k = ev.target.closest("#vmTeclado [data-k]"); if (k) vmTecla(k.dataset.k);
 });
@@ -223,7 +229,3 @@ document.addEventListener("keyup", function (ev) {
   if (ev.target.closest && ev.target.closest("#vmComprar") && (ev.key === " " || ev.key === "Enter")) vmSuelta(true);
 });
 document.addEventListener("contextmenu", function (ev) { if (ev.target.closest && ev.target.closest("#vmComprar")) ev.preventDefault(); });
-$("tiendaDlg").addEventListener("close", function () {
-  vmSuelta(false);
-  if (VM.volverPerfil && U && typeof shibuPerfil === "function") { VM.volverPerfil = false; shibuPerfil(); }
-});
