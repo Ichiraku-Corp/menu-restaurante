@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-B1RMNg9xv704Lg3Yok4K3Ty6xHRmwpcKCRnqYmKGC4E='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-UNOKopdVjWty0+qiWQaR7kVsQjh7cAJ8AGw3jUUTx20='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://krjryvtnzgwwhanmbdrn.supabase.co; connect-src 'self' https://krjryvtnzgwwhanmbdrn.supabase.co wss://krjryvtnzgwwhanmbdrn.supabase.co https://o4512402789433344.ingest.us.sentry.io; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ichiraku Ramen · Carta</title>
 <meta name="description" content="Carta de Ichiraku Ramen: ramen, sushi, entradas, postres japoneses y bebidas, con fotos y precios actualizados.">
@@ -110,6 +110,7 @@
   .bienvenida .nombres a { display: grid; gap: 2px; align-content: start; text-decoration: none; color: var(--ink); font-size: 15px; font-weight: 900; border-radius: 14px; padding: 2px 0 4px; }
   .bienvenida .nombres a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .bienvenida .nombres small { font-size: 11.5px; font-weight: 700; line-height: 1.25; color: var(--muted); }
+  .bienvenida .nombres small[lang="ja"] { font-size: 15px; font-weight: 900; letter-spacing: .18em; margin-left: .18em; line-height: 1.3; }
   .bienvenida .nombres a::before { content: ""; display: block; height: 6px; border-radius: 9px; margin: 0 18px 6px; background: var(--c); }
   .dish { display: flex; gap: 14px; padding: 16px; border-top: 2px dashed var(--line); }
   .dish:first-of-type { border-top: 0; }
@@ -448,19 +449,22 @@
     return /ramen/.test(n) ? "miso" : /bebida|postre|dulce|drink|jugo|batido|cafe/.test(n) ? "dango" : "imo";
   }
   function platoBlanco(name) { return /postre|bebida/.test(norm(name)); } // postres y bebidas: platito blanco
-  // Bienvenida con las maids: cada una lleva a la primera sección de su color (Miso el ramen; Dango postres y bebidas; Imo lo demás)
+  // Bienvenida con las maids: debajo, su nombre y su kanji; cada una lleva a la primera sección de su color
+  // (Miso el ramen; Dango postres y bebidas; Imo lo demás). Lo que lleva cada una queda para los lectores de pantalla.
   function bienvenida(firstOf) {
     if (!firstOf.miso && !firstOf.dango && !firstOf.imo) return "";
-    var link = function (maid, nombre, que, color) {
-      return firstOf[maid] ? '<a href="#' + firstOf[maid] + '" style="--c:' + color + '">' + nombre + "<small>" + que + "</small></a>" : '<span style="--c:' + color + '">' + nombre + "<small>" + que + "</small></span>";
+    var link = function (maid, nombre, kanji, que, color) {
+      var dentro = nombre + '<small lang="ja">' + kanji + "</small>", etiqueta = ' aria-label="' + nombre + ": " + que + '"';
+      return firstOf[maid] ? '<a href="#' + firstOf[maid] + '"' + etiqueta + ' style="--c:' + color + '">' + dentro + "</a>"
+                           : '<span' + etiqueta + ' style="--c:' + color + '">' + dentro + "</span>";
     };
     return '<div class="bienvenida" aria-label="Las maids de Ichiraku"><div class="fondo">' +
       '<img class="m1" src="assets/maids/miso.webp" alt="" width="396" height="800" decoding="async">' +
       '<img class="m3" src="assets/maids/imo.webp" alt="" width="390" height="800" decoding="async">' +
       '<img class="m2" src="assets/maids/dango-moto.webp" alt="" width="454" height="800" decoding="async">' +
       '<p class="burbuja" lang="ja">¡Okaerinasai! <small lang="es">Bienvenido a casa</small></p></div>' +
-      '<div class="nombres">' + link("miso", "Miso", "Ramen", "var(--miso)") + link("dango", "Dango", "Postres y bebidas", "var(--dango)") +
-      link("imo", "Imo", "Entradas, sushi y especiales", "var(--imo)") + "</div></div>";
+      '<div class="nombres">' + link("miso", "Miso", "味噌", "ramen", "var(--miso)") + link("dango", "Dango", "団子", "postres y bebidas", "var(--dango)") +
+      link("imo", "Imo", "芋", "entradas, sushi y especiales", "var(--imo)") + "</div></div>";
   }
   // El dibujo de cada sección (assets/secciones/<nombre>.svg); las secciones nuevas salen sin dibujo
   var DIBUJO = { entradas: "gyoza", ramen: "ramen", sushi: "sushi", especiales: "especial", postres: "dorayaki", bebidas: "boba" };
