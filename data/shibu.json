@@ -1,5 +1,5 @@
 {
-  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas. «imagen» es la cara de Shibu en los círculos y «poses» el dibujo de cuerpo entero de cada momento (de las 22 poses aprobadas del pack de Shibu, 24/11). «poses_frases» es la pose de cada frase, en el mismo orden que la lista de frases (Edgar las eligió el 25/11 en la página «Poses de Shibu»; «cara» = solo el círculo con su cara; las demás son archivos de assets/shibu/).",
+  "_nota": "Frases de Shibu, el jefe, para las tablets de las maids. Las de la mañana son las oficiales de su ficha; las demás las aprobó Edgar en el documento «100 misiones de Shibu» (24/11), con sus cambios. Las tablets las leen de aquí: no se escriben dentro de las pantallas. «imagen» es la cara de Shibu en los círculos y «poses» el dibujo de cuerpo entero de cada momento (de las 22 poses aprobadas del pack de Shibu, 24/11). «poses_frases» es la pose de cada frase, en el mismo orden que la lista de frases (Edgar las eligió el 25/11 en la página «Poses de Shibu»; «cara» = solo el círculo con su cara; las demás son archivos de assets/shibu/). En Mi perfil, solo la cara (Edgar, 25/11).",
   "nombre": "Shibu",
   "titulo": "el jefe",
   "imagen": "assets/shibu/cara.webp",
@@ -8,7 +8,7 @@
     "mision": "assets/shibu/pequeno-06-pulgar-arriba.webp",
     "dia_completo": "assets/shibu/grandote-03-gafas-riendo.webp",
     "top_maid": "assets/shibu/pequeno-09-gafas-confiado.webp",
-    "perfil": "assets/shibu/pequeno-09-gafas-confiado.webp"
+    "perfil": "cara"
   },
   "poses_frases": {
     "manana": [
